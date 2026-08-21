@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ai4sbench Control Panel · 生产实施方案</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({startOnLoad:true,theme:"neutral",securityLevel:"strict",flowchart:{curve:"basis"}});
+  </script>
+  <style>
+    :root{--ink:#142b3a;--muted:#58707d;--paper:#f5f2e9;--line:#c9d3d0;--accent:#bd4f2d;--blue:#dcebf1;--green:#e2eee7;--amber:#f5e8c8}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.65 system-ui,"Microsoft YaHei",sans-serif}
+    main{width:min(1180px,calc(100% - 32px));margin:auto;padding-bottom:70px}header{padding:48px 0 34px;border-bottom:2px solid var(--ink)}
+    .eyebrow{color:var(--accent);font:600 11px/1.2 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}h1{margin:10px 0 12px;font-size:clamp(34px,5vw,64px);line-height:1.05;letter-spacing:-.05em}h2{margin:0 0 18px;font-size:28px;letter-spacing:-.03em}h3{margin:0 0 8px;font-size:16px}p{margin:0 0 12px}.lead{max-width:850px;color:#304b5a;font-size:18px}
+    nav{position:sticky;top:0;z-index:2;display:flex;gap:18px;overflow:auto;padding:13px 0;background:color-mix(in srgb,var(--paper) 95%,transparent);border-bottom:1px solid var(--line);white-space:nowrap}nav a{color:var(--muted);font:12px ui-monospace,monospace;text-decoration:none}
+    section{padding:42px 0;border-bottom:1px solid var(--line)}.grid{display:grid;gap:16px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .card{padding:19px;border:1px solid var(--line);background:#fff7}.ok{background:var(--green)}.warn{background:var(--amber)}.info{background:var(--blue)}
+    .status{display:inline-block;margin-bottom:10px;padding:3px 7px;border:1px solid currentColor;color:#247052;font:600 10px ui-monospace,monospace}.status.blocked{color:#9b541e}
+    .diagram{overflow:auto;padding:16px;background:#fff9;border:1px solid var(--line)}.mermaid{min-width:720px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{color:var(--muted);font:600 10px ui-monospace,monospace;text-transform:uppercase}code{padding:2px 5px;background:#e4e9e8;font:12px ui-monospace,monospace}ul{margin:8px 0 0;padding-left:20px}li+li{margin-top:5px}.callout{padding:17px;border-left:5px solid var(--accent);background:#fff7}a{color:#276781}@media(max-width:760px){.grid.two,.grid.three{grid-template-columns:1fr}section{padding:32px 0}}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="eyebrow">ai4sbench / implementation record / 2026-08-21</div>
+    <h1>Harbor Benchmark Control Panel</h1>
+    <p class="lead">FastAPI + SQLAlchemy + SQLite WAL 的单控制节点生产方案。控制面不运行 Agent；独立数据库 Job Runner 创建短命 EC2，Worker 在 Docker 中执行 Harbor，并在终态自动回收。</p>
+  </header>
+  <nav><a href="#status">状态</a><a href="#architecture">架构</a><a href="#repository">仓库</a><a href="#queue">作业队列</a><a href="#api">API</a><a href="#cloud">Cloud</a><a href="#permissions">权限</a><a href="#e2e">E2E</a></nav>
+
+  <section id="status">
+    <div class="eyebrow">01 / current status</div><h2>实现状态与证据</h2>
+    <div class="grid three">
+      <article class="card ok"><span class="status">PASSED</span><h3>FastAPI 控制面</h3><p>Bearer 管理员鉴权、TaskRevision、Plan、审批、幂等 Run、Worker claim/event/complete 和 Dashboard API 已实现。</p></article>
+      <article class="card ok"><span class="status">PASSED</span><h3>SQLite 持久作业</h3><p>WAL、外键、busy timeout、Alembic、pending/leased/retry/failed 状态、租约恢复和独立 runner 已实现。</p></article>
+      <article class="card warn"><span class="status blocked">PUBLIC PASS / SECURE BLOCKED</span><h3>真实 Harbor E2E</h3><p>WSL2 + Docker 29.4.3 + 预构建 Harbor 0.20.0 的 public 诊断为 oracle 1/1、reward 1.0，verifier 12/12 通过；正式 <code>no-network</code> 模式仍被缺少 <code>CONFIG_NFT_FIB_INET</code> 阻塞。</p></article>
+    </div>
+    <p class="callout" style="margin-top:16px"><strong>自动验证：</strong>8 个控制面集成测试 + 3 个 runner 硬化测试、Ruff、Alembic 和 Uvicorn 进程检查通过。Harbor 真实构建了 agent/verifier 镜像并执行 oracle；失败证据明确定位到 nftables <code>fib daddr type local</code>。runner 现会在启动矩阵前 fail closed。</p>
+  </section>
+
+  <p class="callout" style="margin-top:16px"><strong>2026-08-21 真实 EC2 复核：</strong>已验证 RunInstances、Amazon Linux cloud-init、Docker、Harbor 启动、Cloudflare named tunnel worker claim、事件回传和 TerminateInstances 自动回收。发现并修复三项运行时缺陷：Amazon Linux 缺少 Compose plugin、Harbor 进程退出码为 0 但 trial 有 error 时的误报成功、以及 Cloudflare 短暂 5xx 时实时日志中断任务的问题。最新 worker 改为日志尽力上报、最终 complete 有界重试、保留 trial exception 摘录。当前本地隧道适合作为调试控制面；要把整轮 benchmark 作为稳定验收，控制面应部署到持久公网 origin，或为 worker 增加可恢复结果投递。</p>
+
+  <section id="architecture">
+    <div class="eyebrow">02 / architecture</div><h2>单节点控制面，短命数据面</h2>
+    <div class="diagram"><pre class="mermaid">flowchart LR
+      A["管理员 / Vue Console"] -->|"Bearer + Idempotency-Key"| API["FastAPI API"]
+      API --> DB[("SQLite WAL\nlocal disk")]
+      JR["Database Job Runner"] -->|"atomic lease"| DB
+      JR -->|"RunInstances / TerminateInstances"| EC2["AWS EC2 API"]
+      EC2 --> W["Short-lived Worker AMI"]
+      W -->|"one-time claim"| API
+      W --> H["Harbor"]
+      H --> D["Docker task + separate verifier"]
+      W -. "outbound Quick Tunnel\ndebug only" .-> CF["random trycloudflare.com"]
+      W -->|"events + result"| API</pre></div>
+    <div class="grid two" style="margin-top:16px">
+      <article class="card"><h3>SQLite 使用边界</h3><ul><li>API 与 Job Runner 位于同一主机、同一本地磁盘。</li><li>允许多个进程；写入由 WAL、短事务与 <code>BEGIN IMMEDIATE</code> 串行化。</li><li>不放在 NFS/EFS，不跨主机共享，不做多副本 API。</li></ul></article>
+      <article class="card"><h3>安全边界</h3><ul><li>管理员 token、HMAC job secret 和 GitHub token 不进入 API 响应。</li><li>Worker bootstrap token 由 HMAC 可重试派生，数据库只保存 SHA-256。</li><li>EC2 <code>ClientToken=run_id</code> 防止重试产生重复实例。</li><li>Quick Tunnel 仅暴露随机 token 路径，任务结束即终止。</li></ul></article>
+    </div>
+  </section>
+
+  <section id="repository">
+    <div class="eyebrow">03 / repository design</div><h2>ai4sbench 作为 catalog + control plane</h2>
+    <table><thead><tr><th>路径</th><th>职责</th></tr></thead><tbody>
+      <tr><td><code>bench/ai4sbench.toml</code></td><td>预构建 Harbor 版本、任务 commit、资源 profile 和正式回归矩阵。</td></tr>
+      <tr><td><code>bench/run_matrix.py</code></td><td>fail-closed 预检；执行 oracle×5、nop×1、codex×3。</td></tr>
+      <tr><td><code>control_panel/</code></td><td>FastAPI、SQLAlchemy models/services、数据库队列、EC2 provider 与 Worker。</td></tr>
+      <tr><td><code>migrations/</code></td><td>不可变 Alembic schema 版本。</td></tr>
+      <tr><td><code>infra/aws/</code></td><td>控制面 IAM、Worker trust/可选观测权限与 sandbox 说明。</td></tr>
+      <tr><td><code>references/</code></td><td>忽略提交的浅克隆上游参考目录。</td></tr>
+    </tbody></table>
+    <p style="margin-top:14px">运行时固定为 PyPI 预构建包 <code>harbor==0.20.0</code>，安装时使用 <code>--no-build --no-cache</code>，禁止源码回退；Terminal-Bench Science 固定为 <code>1fafc470bdc6c84820219d282fe6b154120596ad</code>。</p>
+  </section>
+
+  <section id="queue">
+    <div class="eyebrow">04 / durable queue</div><h2>不依赖 Redis 的可恢复作业状态机</h2>
+    <div class="diagram"><pre class="mermaid">stateDiagram-v2
+      [*] --> pending
+      pending --> leased: atomic UPDATE RETURNING
+      leased --> completed: handler success
+      leased --> pending: error + exponential backoff
+      leased --> pending: lease expired / runner crashed
+      leased --> failed: attempts exhausted
+      completed --> [*]
+      failed --> [*]</pre></div>
+    <p style="margin-top:12px">数据库事务先提交业务状态和 outbox job，runner 再调用 AWS。EC2 launch 使用 API 幂等 token；terminate 本身可重复。API 重启不会丢任务，runner 崩溃后租约到期可被重新领取。</p>
+  </section>
+
+  <section id="api">
+    <div class="eyebrow">05 / API contract</div><h2>需要的控制面与外部 API</h2>
+    <table><thead><tr><th>Endpoint / API</th><th>用途</th><th>认证</th></tr></thead><tbody>
+      <tr><td><code>GET /health/live</code>, <code>/health/ready</code></td><td>进程与 SQLite readiness。</td><td>公开</td></tr>
+      <tr><td><code>POST /api/v1/task-revisions[/sync]</code></td><td>记录固定 commit 或调用 GitHub commits/check-runs。</td><td>管理员 Bearer</td></tr>
+      <tr><td><code>POST /api/v1/plans</code>, <code>/{id}/approve</code></td><td>创建快照并用 lock_version 审批。</td><td>管理员 Bearer</td></tr>
+      <tr><td><code>POST /api/v1/runs</code></td><td>原子并发限制、幂等创建、写入 launch job。</td><td>Bearer + Idempotency-Key</td></tr>
+      <tr><td><code>POST /api/v1/runs/{id}/cancel</code></td><td>终态化并写入 terminate job。</td><td>管理员 Bearer</td></tr>
+      <tr><td><code>POST /api/v1/worker/runs/{id}/claim</code></td><td>一次性 token 换取 run-scoped session。</td><td>bootstrap token</td></tr>
+      <tr><td><code>.../events</code>, <code>.../complete</code></td><td>日志、Quick Tunnel URL、Harbor result。</td><td>worker session</td></tr>
+      <tr><td>GitHub REST commits + check-runs</td><td>解析 ref 到 SHA，并验证 CI conclusion。</td><td>公开仓库可匿名；私有仓库 fine-grained token</td></tr>
+      <tr><td>EC2 Run/Describe/Terminate</td><td>Worker 生命周期。</td><td>控制面 IAM role</td></tr>
+    </tbody></table>
+  </section>
+
+  <section id="cloud">
+    <div class="eyebrow">06 / resource estimate</div><h2>首个真实任务与云资源</h2>
+    <p><strong>任务：</strong><code>amr-poisson-optimize</code>，来自 Terminal-Bench Science 的 applied mathematics 目录。任务声明 4 CPU、4 GiB memory、10 GiB storage、0 GPU、Agent 7200 秒、Verifier 1200 秒。</p>
+    <div class="grid three" style="margin-top:16px">
+      <article class="card info"><h3>默认 Worker</h3><p><code>m7i.xlarge</code> 或 <code>c7i.xlarge</code>，40 GiB encrypted gp3，Linux Docker，IMDSv2 required，并发 1。</p></article>
+      <article class="card"><h3>正式矩阵</h3><p>oracle×5 + nop×1 + codex×3；三个 Harbor job 顺序运行，最大约 7–8 instance-hours。</p></article>
+      <article class="card"><h3>成本边界</h3><p>3–8 instance-hours、40 GiB gp3 不足一天、一个公网 IPv4 生命周期、约 2–10 GiB 下载。基础设施通常为低个位数美元；模型 token 另计并可能占主导。</p></article>
+    </div>
+    <p class="callout" style="margin-top:16px">公网 IPv4 只用于出网，Security Group 不设入站规则。若改为私有子网，需要 NAT；NAT 固定小时费通常会明显高于首轮单机成本，因此暂不采用。</p>
+  </section>
+
+  <section id="permissions">
+    <div class="eyebrow">07 / permissions & sandbox</div><h2>AWS sandbox 不是模拟器</h2>
+    <div class="grid two">
+      <article class="card"><h3>AWS sandbox account</h3><p>真实、单独计费的 AWS 账号，放在 Sandbox OU，和生产网络/角色隔离；可用 SCP 限 Region/实例族，用 Budget、低 quota 和清理器限制损失。它真实验证 AMI、cloud-init、IAM、VPC、Docker 和 EC2 回收。</p></article>
+      <article class="card"><h3>它与其他 sandbox 的差异</h3><p>LocalStack 只模拟部分 AWS API，不能证明 EC2 内核、AMI 与 Docker 路径。Cloudflare Sandbox 是容器运行环境；Quick Tunnel 是公网调试通道，二者都不等价于 AWS sandbox account。</p></article>
+    </div>
+    <table style="margin-top:16px"><thead><tr><th>主体</th><th>最小权限</th></tr></thead><tbody>
+      <tr><td>Control plane runtime role</td><td><code>ec2:RunInstances</code>、<code>ec2:TerminateInstances</code>、<code>ec2:DescribeInstances</code>、launch 时 <code>ec2:CreateTags</code>、精确 Worker role 的 <code>iam:PassRole</code>。</td></tr>
+      <tr><td>Worker role</td><td>当前 callback 设计不需要 AWS API 权限。启用 S3 artifact 或 CloudWatch 后，才增加固定 prefix 的 PutObject/PutLogEvents。</td></tr>
+      <tr><td>GitHub token</td><td>公开仓库可不配置；私有仓库只需 Contents:read 与 Checks:read，不需要写权限。</td></tr>
+      <tr><td>Cloudflare Quick Tunnel</td><td>无需账号、API token 或 DNS 权限；随机 URL、进程级生命周期，只可用于调试。</td></tr>
+    </tbody></table>
+  </section>
+
+  <section id="e2e">
+    <div class="eyebrow">08 / e2e gate</div><h2>真实 E2E 的执行顺序</h2>
+    <ol>
+      <li>在本机或 Linux Worker 上确认 Docker daemon 可用，并预留至少 15 GiB 空间。</li>
+      <li>执行 <code>python bench/run_matrix.py run --phase oracle</code>，要求 5/5 reward 1。</li>
+      <li>执行 nop 负对照，要求 Harbor 正常完成且 reward 为 0。</li>
+      <li>用 <code>codex + openai/gpt-5.6-sol</code> 执行 3 次，保存 trajectory、verifier 与成本。</li>
+      <li>在 AWS sandbox 重复一轮，并验证 RunInstances、Worker claim、Quick Tunnel、complete、TerminateInstances 的闭环。</li>
+    </ol>
+    <p class="callout"><strong>诊断结论：</strong>临时副本把 verifier 改成 <code>public</code> 并把 Windows checkout 的 shell 脚本规范为 LF 后，oracle 1/1、reward 1.0、12 项 verifier 测试全部通过，总耗时约 73 秒。这证明 WSL 的 Harbor/Docker E2E 链路可用，但 public verifier 可出网，不能替代正式安全门禁。正式矩阵仍应在具备 <code>CONFIG_NFT_FIB_INET</code> 的 EC2/Linux worker 上运行。</p>
+  </section>
+</main></body></html>

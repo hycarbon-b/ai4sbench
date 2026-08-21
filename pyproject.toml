@@ -1,0 +1,45 @@
+[project]
+name = "ai4sbench-control-panel"
+version = "0.2.0"
+description = "FastAPI control plane for Harbor benchmark workers on EC2"
+requires-python = ">=3.12"
+dependencies = [
+  "aiosqlite>=0.21,<1",
+  "fastapi>=0.116,<1",
+  "fastapi-users[oauth,sqlalchemy]>=15.0.5,<16",
+  "httpx>=0.28,<1",
+  "pydantic-settings>=2.10,<3",
+  "sqlalchemy>=2.0.43,<3",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.40,<2"]
+dev = [
+  "alembic>=1.16,<2",
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+ai4sbench-api = "control_panel.main:run"
+ai4sbench-jobs = "control_panel.job_runner:run"
+ai4sbench-worker = "control_panel.worker:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["control_panel"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+data/
+references/
+results/
+.venv/
+.uv-cache/
+.pytest_cache/
+.runtime/
+.terminal-science-latest-*/

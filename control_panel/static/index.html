@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ai4sbench · scientific task contributions</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/"><span>◇</span> ai4sbench</a>
+    <nav><a href="#how-it-works">How it works</a><a href="#examples">Examples</a><button id="login-button" class="button ghost">Continue with GitHub</button></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">OPEN SCIENTIFIC BENCHMARKS</p>
+      <h1>Turn a real research workflow into a benchmark task.</h1>
+      <p class="lede">Pitch the work first. Once it is discussed and approved, submit a Harbor-compatible task by pull request. Every proposal starts as a GitHub Discussion owned by its contributor.</p>
+      <div class="hero-actions"><button id="hero-login" class="button">Propose a task with GitHub</button><a class="button ghost" href="#examples">See a real example</a></div>
+      <p id="auth-status" class="quiet">GitHub sign-in is required before submitting a proposal.</p>
+    </section>
+    <section id="how-it-works" class="steps" aria-label="Contribution process">
+      <article><b>01</b><h2>Propose</h2><p>Describe a hard, useful scientific workflow and attach evidence for its realism.</p></article>
+      <article><b>02</b><h2>Discuss</h2><p>The form opens a GitHub Discussion in the configured Task Proposals category.</p></article>
+      <article><b>03</b><h2>Build by PR</h2><p>Use the approved proposal link in a task PR. CI validates the required Harbor task structure.</p></article>
+    </section>
+    <section class="proposal-section">
+      <div><p class="eyebrow">TASK PROPOSAL</p><h2>Start with the scientific case.</h2><p>We follow the Terminal-Bench Science pattern: domain, field, a concrete task slug, a clear difficulty claim, and evidence that the workflow is real.</p></div>
+      <form id="proposal-form" class="proposal-form">
+        <label>Working title<input name="title" required minlength="12" maxlength="160" placeholder="e.g. Reconstruct a sparse coastal sensor field"></label>
+        <div class="split"><label>Domain<input name="domain" required pattern="[a-z][a-z-]+" placeholder="earth-sciences"></label><label>Field<input name="field" required pattern="[a-z][a-z-]+" placeholder="ocean-sciences"></label></div>
+        <label>Task slug<input name="task_slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="sparse-coastal-assimilation"></label>
+        <label>Workflow and difficulty<textarea name="abstract" required minlength="80" placeholder="What must an agent do, what makes it scientifically useful, and why is it difficult?"></textarea></label>
+        <label>Evidence and provenance<textarea name="evidence" required minlength="40" placeholder="Link to a publication, dataset, maintained codebase, protocol, or independent evidence."></textarea></label>
+        <button class="button" type="submit">Open GitHub Discussion</button>
+        <p id="proposal-result" class="quiet" role="status"></p>
+      </form>
+    </section>
+    <section id="examples" class="examples">
+      <div><p class="eyebrow">REFERENCE PATTERN</p><h2>Terminal-Bench Science style, grounded in a real task.</h2></div>
+      <article><span>REFERENCE</span><h3>Terminal-Bench Science contribution flow</h3><p>Proposal Discussion → maintainer approval → task PR → static structure and rubric checks.</p><a href="https://github.com/harbor-framework/terminal-bench-science/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">Read the contribution guide →</a></article>
+      <article><span>REAL CASE</span><h3>AMR Poisson optimization</h3><p>A real applied-mathematics task with a Docker environment, oracle solution and verifier—used here as the contribution form’s structural reference.</p><a href="https://github.com/harbor-framework/terminal-bench-science/tree/main/tasks/mathematical-sciences/applied-mathematics/amr-poisson-optimize" target="_blank" rel="noreferrer">Inspect the task →</a></article>
+    </section>
+    <section id="admin-panel" class="admin hidden">
+      <div><p class="eyebrow">ADMINISTRATION</p><h2>Cloud execution allocations</h2><p>Only administrators may create or view these non-secret allocation profiles. Credentials remain environment-only.</p></div>
+      <form id="cloud-form" class="cloud-form"><label>Profile name<input name="name" required pattern="[a-z][a-z0-9-]+" placeholder="paid-us-east-1"></label><label>Allocation JSON<textarea name="allocation" required>{"max_active_runs": 3, "allowed_instance_types": ["c7i-flex.xlarge"]}</textarea></label><button class="button" type="submit">Save allocation</button><p id="cloud-result" class="quiet"></p></form>
+    </section>
+  </main>
+  <footer>ai4sbench · GitHub-authenticated scientific task proposals</footer>
+  <script defer src="/app.js"></script>
+</body>
+</html>
