@@ -66,11 +66,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
     def role_for(self, *, login: str | None, email: str) -> str:
         admin_logins = {item.lower() for item in self.settings.admin_github_logins}
         admin_emails = {item.lower() for item in self.settings.admin_github_emails}
-        return (
-            "admin"
-            if (login and login.lower() in admin_logins) or email.lower() in admin_emails
-            else "member"
-        )
+        contributor_logins = {item.lower() for item in self.settings.contributor_github_logins}
+        contributor_emails = {item.lower() for item in self.settings.contributor_github_emails}
+        is_admin = (login and login.lower() in admin_logins) or email.lower() in admin_emails
+        is_contributor = (login and login.lower() in contributor_logins) or email.lower() in contributor_emails
+        if is_admin:
+            return "admin"
+        if is_contributor:
+            return "contributor"
+        return "member"
 
     async def on_after_register(self, user: User, request: Request | None = None) -> None:
         role = self.role_for(login=None, email=user.email)

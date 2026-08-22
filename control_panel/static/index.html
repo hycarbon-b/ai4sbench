@@ -27,11 +27,11 @@
     <section class="proposal-section">
       <div><p class="eyebrow">TASK PROPOSAL</p><h2>Start with the scientific case.</h2><p>We follow the Terminal-Bench Science pattern: domain, field, a concrete task slug, a clear difficulty claim, and evidence that the workflow is real.</p></div>
       <form id="proposal-form" class="proposal-form">
-        <label>Working title<input name="title" required minlength="12" maxlength="160" placeholder="e.g. Reconstruct a sparse coastal sensor field"></label>
-        <div class="split"><label>Domain<input name="domain" required pattern="[a-z][a-z-]+" placeholder="earth-sciences"></label><label>Field<input name="field" required pattern="[a-z][a-z-]+" placeholder="ocean-sciences"></label></div>
-        <label>Task slug<input name="task_slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="sparse-coastal-assimilation"></label>
-        <label>Workflow and difficulty<textarea name="abstract" required minlength="80" placeholder="What must an agent do, what makes it scientifically useful, and why is it difficult?"></textarea></label>
-        <label>Evidence and provenance<textarea name="evidence" required minlength="40" placeholder="Link to a publication, dataset, maintained codebase, protocol, or independent evidence."></textarea></label>
+        <label>Working title<input name="title" placeholder="e.g. Reconstruct a sparse coastal sensor field"></label>
+        <div class="split"><label>Domain<input name="domain" placeholder="earth-sciences"></label><label>Field<input name="field" placeholder="ocean-sciences"></label></div>
+        <label>Task slug<input name="task_slug" placeholder="sparse-coastal-assimilation"></label>
+        <label>Workflow and difficulty<textarea name="abstract" placeholder="What must an agent do, what makes it scientifically useful, and why is it difficult?"></textarea></label>
+        <label>Evidence and provenance<textarea name="evidence" placeholder="Link to a publication, dataset, maintained codebase, protocol, or independent evidence."></textarea></label>
         <button class="button" type="submit">Open GitHub Discussion</button>
         <p id="proposal-result" class="quiet" role="status"></p>
       </form>
@@ -43,7 +43,7 @@
     </section>
     <section id="admin-panel" class="admin hidden">
       <div><p class="eyebrow">ADMINISTRATION</p><h2>Cloud execution allocations</h2><p>Only administrators may create or view these non-secret allocation profiles. Credentials remain environment-only.</p></div>
-      <form id="cloud-form" class="cloud-form"><label>Profile name<input name="name" required pattern="[a-z][a-z0-9-]+" placeholder="paid-us-east-1"></label><label>Allocation JSON<textarea name="allocation" required>{"max_active_runs": 3, "allowed_instance_types": ["c7i-flex.xlarge"]}</textarea></label><button class="button" type="submit">Save allocation</button><p id="cloud-result" class="quiet"></p></form>
+      <form id="cloud-form" class="cloud-form"><label>Profile name<input name="name" placeholder="paid-us-east-1"></label><label>Allocation JSON<textarea name="allocation">{""max_active_runs": 3, "allowed_instance_types": ["c7i-flex.xlarge"]}</textarea></label><button class="button" type="submit">Save allocation</button><p id="cloud-result" class="quiet"></p></form>
     </section>
   </main>
   <footer>ai4sbench · GitHub-authenticated scientific task proposals</footer>

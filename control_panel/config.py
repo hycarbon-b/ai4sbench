@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     github_discussion_category_id: str = ""
     admin_github_logins: tuple[str, ...] = ()
     admin_github_emails: tuple[str, ...] = ()
+    contributor_github_logins: tuple[str, ...] = ()
+    contributor_github_emails: tuple[str, ...] = ()
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
     max_active_runs: int = Field(default=1, ge=1, le=32)
