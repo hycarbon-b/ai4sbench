@@ -1,0 +1,6 @@
+[submodule "benchmark-repository"]
+	path = benchmark-repository
+	url = git@github.com:hycarbon-b/ai4sbench-benchmark.git
+[submodule "reference/tb-science-task-dashboard"]
+	path = reference/tb-science-task-dashboard
+	url = https://github.com/StevenDillmann/tb-science-task-dashboard.git

@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Code", monospace;
+}
+
+:root { color: #d8dee9; background: #0b0f14; font-synthesis: none; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: #0b0f14; font-family: var(--font-mono); font-size: 13px; }
+button, input, textarea { font: inherit; }
+table { border-collapse: collapse; }
+table th { height: 2.25rem; padding: 0 .75rem; font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+table td { padding: .625rem .75rem; vertical-align: top; color: #cbd5e1; }
+table td > p { margin: .2rem 0 0; font-size: 11px; color: #64748b; }
+input, textarea { border-radius: 2px !important; font-size: 12px !important; }
+::selection { background: rgba(56, 189, 248, .3); }

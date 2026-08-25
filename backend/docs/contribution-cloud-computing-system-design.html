@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ai4sbench Contribution & Cloud Computing System Design</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "neutral",
+      securityLevel: "strict",
+      flowchart: { curve: "linear", htmlLabels: true }
+    });
+  </script>
+  <style>
+    :root { --ink:#111; --muted:#666; --line:#d6d6d6; --soft:#f5f5f5; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#fff; color:var(--ink); font:15px/1.7 Arial,"Microsoft YaHei",sans-serif; }
+    main { width:min(1040px,calc(100% - 40px)); margin:auto; padding:48px 0 80px; }
+    header,section { padding:32px 0; border-bottom:1px solid var(--line); }
+    header { padding-top:0; }
+    h1,h2,h3 { margin:0 0 14px; line-height:1.25; font-weight:650; }
+    h1 { font-size:36px; }
+    h2 { font-size:25px; }
+    h3 { margin-top:24px; font-size:17px; }
+    p { max-width:900px; margin:0 0 14px; }
+    .section-label { margin-bottom:8px; color:var(--muted); font:12px/1.4 ui-monospace,Consolas,monospace; }
+    .lead { color:#444; font-size:17px; }
+    .diagram { margin:20px 0; padding:18px; overflow:auto; border:1px solid var(--line); background:#fff; }
+    .mermaid { display:flex; justify-content:center; min-width:680px; }
+    code,pre { font-family:ui-monospace,Consolas,monospace; }
+    code { padding:1px 4px; background:var(--soft); }
+    pre.contract { overflow:auto; padding:14px; border:1px solid var(--line); background:var(--soft); font-size:12px; line-height:1.6; }
+    table { width:100%; margin:16px 0; border-collapse:collapse; font-size:13px; }
+    th,td { padding:10px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:var(--soft); font-weight:600; }
+    ul { margin:8px 0 14px; padding-left:22px; }
+    a { color:#111; text-decoration:underline; }
+    @media (max-width:720px) { main { width:calc(100% - 24px); } .mermaid { min-width:620px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="section-label">ai4sbench / system design</div>
+    <h1>Contribution & Cloud Computing System Design</h1>
+    <p class="lead">本文定义 ai4sbench 的任务贡献协议与云端执行架构：科学任务从 Proposal 进入 Pull Request，经持续集成与双轨评审后形成不可变任务版本，并由临时 EC2 worker 通过 Harbor 执行。FastAPI 提供控制面接口，SQLite 持久化工作流状态与运行记录。</p>
+  </header>
+
+  <section id="overview">
+    <div class="section-label">01 / END-TO-END FLOW</div>
+    <h2>任务贡献与执行生命周期</h2>
+    <p>生命周期由 Proposal 审批、PR 验证、任务版本登记和云端执行四个阶段组成。科学价值与实现可行性在资源投入前完成审查；所有退回路径均保留原始上下文，并允许贡献者在同一工作项中修订。</p>
+    <div class="diagram"><pre class="mermaid">flowchart TB
+      A["1. 提交任务 Proposal"] --> B["2. 创建 GitHub Discussion"]
+      B --> C["3. 领域评审与技术可行性评审"]
+      C --> D{"Proposal 决策"}
+      D -- "请求修订" --> E["补充科学依据或调整任务边界"]
+      E --> C
+      D -- "拒绝" --> F["Proposal 关闭"]
+      D -- "批准" --> G["4. 分配任务标识、分支与 PR 标题"]
+      G --> H["5. 实现 Harbor task 并创建 PR"]
+      H --> I["6. 执行结构、构建与行为验证"]
+      I --> J{"CI 质量门禁"}
+      J -- "失败" --> K["发布检查结论并请求修订"]
+      K --> H
+      J -- "通过" --> L["7. 领域评审与技术评审并行执行"]
+      L --> M["8. 最终复核与合并"]
+      M --> N["9. 登记不可变 TaskRevision"]
+      N --> O["10. EC2 worker 执行 Harbor run"]
+      O --> P["11. 持久化结果并回收实例"]</pre></div>
+  </section>
+
+  <section id="proposal">
+    <div class="section-label">02 / PROPOSAL</div>
+    <h2>Proposal 接入与评审状态模型</h2>
+    <p>Proposal 接口仅接受已完成 GitHub OAuth 的贡献者请求。结构化表单记录任务目标、学科分类、预期难度与证据来源。SQLite 是审批状态的 system of record；GitHub Discussion 承载公开讨论。Discussion 发布通过持久化后台任务执行，外部 API 短暂故障不会丢失已提交的 Proposal。</p>
+    <div class="diagram"><pre class="mermaid">flowchart TB
+      A["完成 GitHub OAuth"] --> B["提交 Proposal 表单"]
+      B --> C["校验字段、命名约束与 slug 唯一性"]
+      C --> D{"请求校验"}
+      D -- "失败" --> E["返回字段级校验错误"]
+      E --> B
+      D -- "通过" --> F["写入 Proposal，状态为 submitted"]
+      F --> G["后台作业创建 GitHub Discussion"]
+      G --> H{"Discussion 发布结果"}
+      H -- "可重试失败" --> I["记录尝试次数并按退避策略重试"]
+      I --> G
+      H -- "成功" --> J["保存 discussion_url，进入 discussion_open"]
+      J --> K["分配 domain 与 technical reviewer slot"]
+      K --> L["评估科学有效性、可复现性与实现成本"]
+      L --> M{"双轨评审决策"}
+      M -- "请求修订" --> N["更新 Proposal 内容或证据"]
+      N --> L
+      M -- "拒绝" --> O["记录决策依据并关闭 Proposal"]
+      M -- "批准" --> P["创建 PR reservation"]</pre></div>
+
+    <h3>Proposal 数据契约</h3>
+    <table>
+      <thead><tr><th>阶段</th><th>持久化字段</th><th>语义</th></tr></thead>
+      <tbody>
+        <tr><td>提交</td><td><code>title, abstract, domain, field, task_slug, evidence</code></td><td>定义任务范围、学科分类与证据基础。</td></tr>
+        <tr><td>评审</td><td><code>discussion_url, reviewer_slot, review_state</code></td><td>关联公开讨论并分别记录领域与技术评审结论。</td></tr>
+        <tr><td>批准</td><td><code>branch_name, task_path, pr_title</code></td><td>为后续实现分配稳定且无冲突的代码标识。</td></tr>
+      </tbody>
+    </table>
+    <pre class="contract">POST /api/v1/proposals
+{
+  "title": "任务标题",
+  "abstract": "目标、工作流和难点",
+  "domain": "科学领域",
+  "field": "细分方向",
+  "task_slug": "稳定的任务标识",
+  "evidence": "论文、数据集或实验协议"
+}
+
+批准后：
+{
+  "status": "approved",
+  "branch_name": "task/{domain}-{field}-{task_slug}",
+  "task_path": "tasks/{domain}/{field}/{task_slug}",
+  "pr_title": "[TASK: {field}] {title}"
+}</pre>
+  </section>
+
+  <section id="pull-request">
+    <div class="section-label">03 / PULL REQUEST AND CI</div>
+    <h2>Pull Request 验证与合并门禁</h2>
+    <p>CI 验证任务包的完整性、可构建性、可解性与抗投机性；人工评审判断科学有效性、公平性和维护成本。针对 fork PR 的工作流固定取自主分支，只将 PR head 中的任务目录覆盖到隔离工作区，避免执行贡献者可修改的自动化代码。</p>
+    <div class="diagram"><pre class="mermaid">flowchart TB
+      A["创建任务 Pull Request"] --> B["验证已批准的 Proposal 关联"]
+      B --> C{"Proposal gate"}
+      C -- "失败" --> D["阻止验证并返回关联要求"]
+      C -- "通过" --> E["使用 base workflow 隔离检出 task path"]
+      E --> F["静态验证：目录、元数据与 canary"]
+      E --> G["相似性检查：识别重复或近似任务"]
+      E --> H["构建验证：agent 与 verifier image"]
+      F --> I{"静态与构建门禁"}
+      G --> I
+      H --> I
+      I -- "失败" --> J["发布结构化检查结果并请求修订"]
+      J --> A
+      I -- "通过" --> K["Oracle trial：标准解法验证"]
+      K --> L{"Oracle reward = 1.0"}
+      L -- "否" --> J
+      L -- "是" --> M["Nop trial：空解法验证"]
+      M --> N{"Nop reward = 0"}
+      N -- "否" --> J
+      N -- "是" --> O["并行分配 domain 与 technical review"]
+      O --> P{"Review gate"}
+      P -- "请求修订" --> J
+      P -- "批准" --> Q["最终复核并合并至 main"]</pre></div>
+
+    <table>
+      <thead><tr><th>验证项</th><th>接受标准</th><th>失败输出</th></tr></thead>
+      <tbody>
+        <tr><td>任务结构</td><td>说明、配置、环境、标准解法和验证器齐全。</td><td>缺失文件或无效配置的具体位置。</td></tr>
+        <tr><td>相似性</td><td>不是对已有任务的轻微改写。</td><td>可能重复的任务和相似依据。</td></tr>
+        <tr><td>构建</td><td>agent 与 verifier 容器可重复构建。</td><td>失败阶段与构建日志。</td></tr>
+        <tr><td>Oracle</td><td>标准解法的最终 reward 为 <code>1.0</code>。</td><td>未通过的验证项与运行日志。</td></tr>
+        <tr><td>Nop</td><td>空解法的最终 reward 为 <code>0</code>。</td><td>是否存在泄漏、默认答案或验证过宽。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="cloud">
+    <div class="section-label">04 / CLOUD EXECUTION</div>
+    <h2>EC2 执行生命周期与运行状态持久化</h2>
+    <p>控制面将运行请求持久化为可恢复的数据库作业，不在 HTTP 请求周期内执行 benchmark。每个 Run 固定引用一个不可变 TaskRevision 与配置快照。worker 无论成功、失败或超时，均应提交终态并触发实例回收；独立回收作业处理 worker 失联场景。</p>
+    <div class="diagram"><pre class="mermaid">flowchart TB
+      A["选择 TaskRevision 与 RunConfig"] --> B["创建 Run 与 launch_run 作业"]
+      B --> C["调度器以数据库租约领取作业"]
+      C --> D["依据 ResourceRequirements 解析实例规格"]
+      D --> E["调用 RunInstances 启动临时 worker"]
+      E --> F["以 bootstrap token 领取 run-scoped session"]
+      F --> G["检出固定 commit_sha 与 task_path"]
+      G --> H["Harbor 构建 agent 和 verifier image"]
+      H --> I["执行 Harbor trials"]
+      I --> J{"Run 终态"}
+      J -- "succeeded" --> K["提交 reward、summary 与日志引用"]
+      J -- "failed / timed_out" --> L["提交失败阶段与诊断信息"]
+      K --> M["原子更新 Run 与 RunEvent"]
+      L --> M
+      M --> N["创建 terminate_run 作业并终止实例"]
+      N --> O["Dashboard 展示可审计运行记录"]</pre></div>
+
+    <h3>运行不变量与审计字段</h3>
+    <table>
+      <thead><tr><th>对象</th><th>必须锁定的内容</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td>任务版本</td><td><code>repo_url + commit_sha + task_path</code></td><td>保证以后能够重放完全相同的任务。</td></tr>
+        <tr><td>运行配置</td><td>agent、model、并发数、尝试次数、超时和实例规格</td><td>解释结果如何产生，并估算资源消耗。</td></tr>
+        <tr><td>worker 会话</td><td>一次性 bootstrap token 换取 run-scoped session</td><td>限制临时实例只能访问自己的运行。</td></tr>
+        <tr><td>结果</td><td>状态、reward、异常摘要、开始/结束时间和日志位置</td><td>供评审、复现和成本分析使用。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="data-flow">
+    <div class="section-label">05 / SYSTEM OF RECORD</div>
+    <h2>System of Record 与数据流边界</h2>
+    <p>SQLite 持有工作流状态、幂等键和运行审计记录；GitHub 持有公开协作历史与版本化任务代码；EC2 worker 是无持久状态的执行节点。任何仅存在于 worker 本地的数据均不构成系统事实，终态必须回写控制面。</p>
+    <div class="diagram"><pre class="mermaid">flowchart TB
+      A["GitHub Identity / OAuth"] --> B["FastAPI Control Plane"]
+      B --> C["SQLite：Proposal、Review、TaskRevision、Run、Job"]
+      B --> D["GitHub：Discussion、PR、Review 与 merged commit"]
+      C --> E["EC2 Worker：无状态临时执行节点"]
+      D --> E
+      E --> F["Harbor：容器化 trial 与 verifier 评分"]
+      F --> C
+      C --> G["Dashboard：贡献、评审与运行状态投影"]</pre></div>
+  </section>
+
+  <section id="interfaces">
+    <div class="section-label">06 / API CONTRACTS</div>
+    <h2>控制面 API 契约</h2>
+    <table>
+      <thead><tr><th>接口</th><th>调用者</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /api/v1/proposals</code></td><td>已登录贡献者</td><td>保存提案并安排 Discussion 发布。</td></tr>
+        <tr><td><code>POST /api/v1/proposals/{id}/reviews</code></td><td>被分配的评审者</td><td>记录领域或技术评审结论。</td></tr>
+        <tr><td><code>GET /api/v1/proposals/{id}/pull-request</code></td><td>提案作者</td><td>取得批准后保留的分支、目录和 PR 名称。</td></tr>
+        <tr><td><code>POST /api/v1/task-revisions/sync</code></td><td>管理员</td><td>把合并 commit 中的任务登记为不可变版本。</td></tr>
+        <tr><td><code>POST /api/v1/runs/manual</code></td><td>管理员</td><td>以幂等键创建一次云端运行。</td></tr>
+        <tr><td><code>POST /api/v1/worker/runs/{id}/claim</code></td><td>临时 worker</td><td>用一次性凭证领取自己的任务与配置。</td></tr>
+        <tr><td><code>POST .../events</code> / <code>.../complete</code></td><td>已领取任务的 worker</td><td>回传进度、日志摘要和最终结果。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sources">
+    <div class="section-label">07 / SOURCE ALIGNMENT</div>
+    <h2>上游贡献协议兼容性</h2>
+    <ul>
+      <li>沿用“Proposal 先行、批准后实现”的贡献顺序。</li>
+      <li>沿用 Harbor task 格式、Oracle/Nop 验证以及领域与技术双重评审。</li>
+      <li>CI 固定使用主分支的可信工作流，仅检出 PR 中的任务内容。</li>
+      <li>ai4sbench 增加 SQLite 持久化、GitHub Discussion 同步、PR 名称保留与 EC2 worker 调度。</li>
+    </ul>
+    <p>参考：<a href="https://github.com/harbor-framework/terminal-bench-science/blob/main/CONTRIBUTING.md">Terminal-Bench-Science CONTRIBUTING.md</a>。</p>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,55 @@
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    env_file: .env
+    volumes:
+      - control-data:/var/lib/ai4sbench
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    command:
+      - uvicorn
+      - control_panel.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - 127.0.0.1
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - control-data:/var/lib/ai4sbench
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  jobs:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    command: ["ai4sbench-jobs"]
+    volumes:
+      - control-data:/var/lib/ai4sbench
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  control-data:

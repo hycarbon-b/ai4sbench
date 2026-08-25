@@ -1,5 +1,18 @@
 .git
+cache
 .venv
+.runtime
+.pytest_cache
+backend/.env
+backend/data
+backend/.venv
+backend/.runtime
+backend/docs
+backend/tests
+dashboard-frontend/frontend/node_modules
+benchmark-repository
+benchmark-repository/references
+benchmark-repository/results
 .uv-cache
 .pytest_cache
 __pycache__
@@ -10,4 +23,5 @@ references
 results
 plan
 tests
-
+frontend/node_modules
+frontend/dist
