@@ -20,15 +20,34 @@ from .database import get_session
 from .github_source import GitHubTaskSource
 from .models import DatabaseJob, ExecutionPlan, Run, RunEvent, TaskRevision
 from .schemas import (
+    CreatedRunResponse,
+    DashboardResponse,
+    DatabaseJobListResponse,
+    DatabaseSnapshotListResponse,
+    DatabaseSnapshotResponse,
+    LiveHealthResponse,
     ManualBatchRunCreate,
+    ManualBatchRunResponse,
     ManualRunCreate,
     PlanApprove,
     PlanCreate,
+    PlanListResponse,
+    PlanResponse,
+    ReadyHealthResponse,
     RunCreate,
+    RunEventListResponse,
+    RunEventResponse,
+    RunListResponse,
+    RunResponse,
+    SettingsResponse,
     TaskRepositorySync,
+    TaskRepositorySyncResponse,
     TaskRevisionCreate,
+    TaskRevisionListResponse,
+    TaskRevisionResponse,
     TaskRevisionSync,
     WorkerClaim,
+    WorkerClaimResponse,
     WorkerComplete,
     WorkerEventCreate,
 )
@@ -62,24 +81,24 @@ worker_router = APIRouter(prefix="/api/v1/worker", tags=["worker"])
 SNAPSHOT_NAME_RE = re.compile(r"^ai4sbench-control-panel-\d{8}T\d{6}\.\d{6}Z\.sqlite3$")
 
 
-@public_router.get("/health/live")
-def live() -> dict[str, str]:
-    return {"status": "ok", "time": datetime.now().astimezone().isoformat()}
+@public_router.get("/health/live", response_model=LiveHealthResponse)
+def live() -> LiveHealthResponse:
+    return LiveHealthResponse(status="ok", time=datetime.now().astimezone())
 
 
-@public_router.get("/health/ready")
-def ready(session: SessionDep) -> dict[str, str]:
+@public_router.get("/health/ready", response_model=ReadyHealthResponse)
+def ready(session: SessionDep) -> ReadyHealthResponse:
     session.execute(text("SELECT 1"))
-    return {"status": "ready"}
+    return ReadyHealthResponse(status="ready")
 
 
-@admin_router.get("/settings", tags=["settings"])
-def settings_view(request: Request) -> dict[str, object]:
+@admin_router.get("/settings", tags=["settings"], response_model=SettingsResponse)
+def settings_view(request: Request) -> SettingsResponse:
     return request.app.state.settings.public()
 
 
-@admin_router.get("/dashboard", tags=["dashboard"])
-def dashboard(session: SessionDep) -> dict:
+@admin_router.get("/dashboard", tags=["dashboard"], response_model=DashboardResponse)
+def dashboard(session: SessionDep) -> DashboardResponse:
     runs = list(session.scalars(select(Run).order_by(Run.created_at.desc()).limit(8)))
     plans = list(session.scalars(select(ExecutionPlan).order_by(ExecutionPlan.created_at.desc())))
     revisions = list(session.scalars(select(TaskRevision).order_by(TaskRevision.created_at.desc())))
@@ -127,8 +146,8 @@ def snapshot_path(snapshot_dir: Path, name: str) -> Path:
     return candidate
 
 
-@admin_router.get("/database-snapshots", tags=["database"])
-def list_database_snapshots(request: Request, principal: AdminDep) -> dict[str, list[dict[str, object]]]:
+@admin_router.get("/database-snapshots", tags=["database"], response_model=DatabaseSnapshotListResponse)
+def list_database_snapshots(request: Request, principal: AdminDep) -> DatabaseSnapshotListResponse:
     _database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
     if not snapshot_dir.is_dir():
         return {"items": []}
@@ -140,8 +159,13 @@ def list_database_snapshots(request: Request, principal: AdminDep) -> dict[str, 
     return {"items": sorted(items, key=lambda item: str(item["created_at"]), reverse=True)}
 
 
-@admin_router.post("/database-snapshots", status_code=status.HTTP_201_CREATED, tags=["database"])
-def create_database_snapshot(request: Request, principal: AdminDep) -> dict[str, object]:
+@admin_router.post(
+    "/database-snapshots",
+    status_code=status.HTTP_201_CREATED,
+    tags=["database"],
+    response_model=DatabaseSnapshotResponse,
+)
+def create_database_snapshot(request: Request, principal: AdminDep) -> DatabaseSnapshotResponse:
     database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
     if not database_path.is_file():
         raise HTTPException(status_code=503, detail="SQLite database file is unavailable")
@@ -174,35 +198,50 @@ def create_database_snapshot(request: Request, principal: AdminDep) -> dict[str,
     return snapshot_dict(destination)
 
 
-@admin_router.get("/database-snapshots/{name}/download", tags=["database"])
+@admin_router.get(
+    "/database-snapshots/{name}/download",
+    tags=["database"],
+    response_class=FileResponse,
+    responses={200: {"content": {"application/vnd.sqlite3": {}}}},
+)
 def download_database_snapshot(name: str, request: Request, principal: AdminDep) -> FileResponse:
     _database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
     path = snapshot_path(snapshot_dir, name)
     return FileResponse(path, media_type="application/vnd.sqlite3", filename=path.name)
 
 
-@admin_router.get("/task-revisions", tags=["tasks"])
-def list_task_revisions(session: SessionDep) -> dict:
+@admin_router.get("/task-revisions", tags=["tasks"], response_model=TaskRevisionListResponse)
+def list_task_revisions(session: SessionDep) -> TaskRevisionListResponse:
     items = session.scalars(select(TaskRevision).order_by(TaskRevision.created_at.desc()))
     return {"items": [task_dict(item) for item in items]}
 
 
-@admin_router.post("/task-revisions", status_code=status.HTTP_201_CREATED, tags=["tasks"])
+@admin_router.post(
+    "/task-revisions",
+    status_code=status.HTTP_201_CREATED,
+    tags=["tasks"],
+    response_model=TaskRevisionResponse,
+)
 def create_task_revision(
     body: TaskRevisionCreate,
     session: SessionDep,
     principal: AdminDep,
-) -> dict:
+) -> TaskRevisionResponse:
     return task_dict(upsert_task_revision(session, body.model_dump(), principal))
 
 
-@admin_router.post("/task-revisions/sync", status_code=status.HTTP_201_CREATED, tags=["tasks"])
+@admin_router.post(
+    "/task-revisions/sync",
+    status_code=status.HTTP_201_CREATED,
+    tags=["tasks"],
+    response_model=TaskRevisionResponse,
+)
 async def sync_task_revision(
     body: TaskRevisionSync,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
-) -> dict:
+) -> TaskRevisionResponse:
     settings: Settings = request.app.state.settings
     token = settings.github_token.get_secret_value() if settings.github_token else None
     source = GitHubTaskSource(token, git_https_proxy=settings.git_https_proxy)
@@ -213,13 +252,18 @@ async def sync_task_revision(
     return task_dict(upsert_task_revision(session, values, principal))
 
 
-@admin_router.post("/task-revisions/sync-repository", status_code=status.HTTP_201_CREATED, tags=["tasks"])
+@admin_router.post(
+    "/task-revisions/sync-repository",
+    status_code=status.HTTP_201_CREATED,
+    tags=["tasks"],
+    response_model=TaskRepositorySyncResponse,
+)
 async def sync_task_repository(
     body: TaskRepositorySync,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
-) -> dict[str, object]:
+) -> TaskRepositorySyncResponse:
     settings: Settings = request.app.state.settings
     token = settings.github_token.get_secret_value() if settings.github_token else None
     source = GitHubTaskSource(token, git_https_proxy=settings.git_https_proxy)
@@ -236,19 +280,19 @@ async def sync_task_repository(
     }
 
 
-@admin_router.get("/plans", tags=["plans"])
-def list_plans(session: SessionDep) -> dict:
+@admin_router.get("/plans", tags=["plans"], response_model=PlanListResponse)
+def list_plans(session: SessionDep) -> PlanListResponse:
     items = session.scalars(select(ExecutionPlan).order_by(ExecutionPlan.created_at.desc()))
     return {"items": [plan_dict(item) for item in items]}
 
 
-@admin_router.post("/plans", status_code=status.HTTP_201_CREATED, tags=["plans"])
+@admin_router.post("/plans", status_code=status.HTTP_201_CREATED, tags=["plans"], response_model=PlanResponse)
 def post_plan(
     body: PlanCreate,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
-) -> dict:
+) -> PlanResponse:
     try:
         item = create_plan(session, body.task_revision_id, body.config, principal, request.app.state.settings)
     except NotFoundError as exc:
@@ -258,8 +302,8 @@ def post_plan(
     return plan_dict(item)
 
 
-@admin_router.post("/plans/{plan_id}/approve", tags=["plans"])
-def post_approve(plan_id: str, body: PlanApprove, session: SessionDep, principal: AdminDep) -> dict:
+@admin_router.post("/plans/{plan_id}/approve", tags=["plans"], response_model=PlanResponse)
+def post_approve(plan_id: str, body: PlanApprove, session: SessionDep, principal: AdminDep) -> PlanResponse:
     try:
         return plan_dict(approve_plan(session, plan_id, body.lock_version, principal))
     except NotFoundError as exc:
@@ -268,20 +312,20 @@ def post_approve(plan_id: str, body: PlanApprove, session: SessionDep, principal
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@admin_router.get("/runs", tags=["runs"])
-def list_runs(session: SessionDep) -> dict:
+@admin_router.get("/runs", tags=["runs"], response_model=RunListResponse)
+def list_runs(session: SessionDep) -> RunListResponse:
     items = session.scalars(select(Run).order_by(Run.created_at.desc()))
     return {"items": [run_dict(item) for item in items]}
 
 
-@admin_router.post("/runs", tags=["runs"])
+@admin_router.post("/runs", tags=["runs"], response_model=CreatedRunResponse)
 def post_run(
     body: RunCreate,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
-) -> dict:
+) -> CreatedRunResponse:
     try:
         item, created = create_run(
             session,
@@ -300,14 +344,14 @@ def post_run(
     return response
 
 
-@admin_router.post("/runs/manual", tags=["runs"])
+@admin_router.post("/runs/manual", tags=["runs"], response_model=CreatedRunResponse)
 def post_manual_run(
     body: ManualRunCreate,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
-) -> dict:
+) -> CreatedRunResponse:
     try:
         item, created = create_manual_run(
             session,
@@ -327,14 +371,14 @@ def post_manual_run(
     return response
 
 
-@admin_router.post("/runs/manual-batch", tags=["runs"])
+@admin_router.post("/runs/manual-batch", tags=["runs"], response_model=ManualBatchRunResponse)
 def post_manual_batch(
     body: ManualBatchRunCreate,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
-) -> dict:
+) -> ManualBatchRunResponse:
     try:
         runs, created = create_manual_batch(
             session,
@@ -352,24 +396,24 @@ def post_manual_batch(
     return {"created_count": created, "items": [run_dict(item) for item in runs]}
 
 
-@admin_router.post("/runs/{run_id}/cancel", tags=["runs"])
-def post_cancel(run_id: str, session: SessionDep, principal: AdminDep) -> dict:
+@admin_router.post("/runs/{run_id}/cancel", tags=["runs"], response_model=RunResponse)
+def post_cancel(run_id: str, session: SessionDep, principal: AdminDep) -> RunResponse:
     try:
         return run_dict(cancel_run(session, run_id, principal))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@admin_router.get("/runs/{run_id}/events", tags=["runs"])
-def get_events(run_id: str, session: SessionDep) -> dict:
+@admin_router.get("/runs/{run_id}/events", tags=["runs"], response_model=RunEventListResponse)
+def get_events(run_id: str, session: SessionDep) -> RunEventListResponse:
     if session.get(Run, run_id) is None:
         raise HTTPException(status_code=404, detail="Run not found")
     items = session.scalars(select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.created_at))
     return {"items": [event_dict(item) for item in items]}
 
 
-@admin_router.get("/jobs", tags=["operations"])
-def list_jobs(session: SessionDep) -> dict:
+@admin_router.get("/jobs", tags=["operations"], response_model=DatabaseJobListResponse)
+def list_jobs(session: SessionDep) -> DatabaseJobListResponse:
     items = session.scalars(select(DatabaseJob).order_by(DatabaseJob.created_at.desc()).limit(100))
     return {
         "items": [
@@ -389,16 +433,20 @@ def list_jobs(session: SessionDep) -> dict:
     }
 
 
-@worker_router.post("/runs/{run_id}/claim")
-def worker_claim(run_id: str, body: WorkerClaim, session: SessionDep) -> dict:
+@worker_router.post("/runs/{run_id}/claim", response_model=WorkerClaimResponse)
+def worker_claim(run_id: str, body: WorkerClaim, session: SessionDep) -> WorkerClaimResponse:
     try:
         return claim_worker(session, run_id, body.token)
     except WorkerAuthError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
-@worker_router.post("/runs/{run_id}/events", status_code=status.HTTP_201_CREATED)
-def worker_event(run_id: str, body: WorkerEventCreate, session: SessionDep) -> dict:
+@worker_router.post(
+    "/runs/{run_id}/events",
+    status_code=status.HTTP_201_CREATED,
+    response_model=RunEventResponse,
+)
+def worker_event(run_id: str, body: WorkerEventCreate, session: SessionDep) -> RunEventResponse:
     try:
         item = create_worker_event(
             session, run_id, body.session_token, body.event_type, body.message, body.payload
@@ -408,8 +456,8 @@ def worker_event(run_id: str, body: WorkerEventCreate, session: SessionDep) -> d
     return event_dict(item)
 
 
-@worker_router.post("/runs/{run_id}/complete")
-def worker_complete(run_id: str, body: WorkerComplete, session: SessionDep) -> dict:
+@worker_router.post("/runs/{run_id}/complete", response_model=RunResponse)
+def worker_complete(run_id: str, body: WorkerComplete, session: SessionDep) -> RunResponse:
     try:
         return run_dict(complete_worker(session, run_id, body.session_token, body.state, body.result))
     except WorkerAuthError as exc:

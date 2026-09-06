@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -130,6 +131,30 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             payload = schema.json()
             self.assertEqual(payload["info"]["title"], "AI4S-Bench Control Plane API")
             self.assertIn("community", {tag["name"] for tag in payload["tags"]})
+
+    def test_every_json_api_route_declares_a_response_schema(self) -> None:
+        excluded_binary_route = "/api/v1/database-snapshots/{name}/download"
+        undocumented = [
+            route.path
+            for route in self.app.routes
+            if isinstance(route, APIRoute)
+            and route.path.startswith("/api/")
+            and route.path != excluded_binary_route
+            and route.response_model is None
+        ]
+        self.assertEqual(undocumented, [])
+
+        openapi = self.client.get("/openapi.json").json()
+        proposal_preview = openapi["paths"]["/api/v1/proposals/preview"]["post"]
+        self.assertEqual(
+            proposal_preview["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalPreviewResponse",
+        )
+        task_revisions = openapi["paths"]["/api/v1/task-revisions"]["get"]
+        self.assertEqual(
+            task_revisions["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/TaskRevisionListResponse",
+        )
 
     def test_admin_can_create_list_and_download_a_sqlite_snapshot(self) -> None:
         created = self.client.post("/api/v1/database-snapshots")

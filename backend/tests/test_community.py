@@ -188,6 +188,7 @@ def test_empty_proposal_preview_lists_required_input_fields() -> None:
                 "input": None,
                 "derived": None,
                 "discussion": None,
+                "github_identity_source": None,
                 "missing_fields": [
                     "title",
                     "domain",

@@ -16,7 +16,19 @@ from sqlalchemy.orm import Session
 from .database import get_session
 from .identity import OAuthAccount, User, current_active_user, current_optional_user
 from .models import CloudProfile, Proposal
-from .schemas import CloudProfileCreate, ProposalSubmission
+from .schemas import (
+    AuthConfigResponse,
+    AuthenticatedUserResponse,
+    CloudProfileCreate,
+    CloudProfileListResponse,
+    CloudProfileResponse,
+    ProposalListResponse,
+    ProposalPreviewResponse,
+    ProposalPublishedResponse,
+    ProposalSubmission,
+    ProposalSyncResponse,
+    PullRequestInstructionsResponse,
+)
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -49,7 +61,7 @@ AdminDep = Annotated[User, Depends(require_admin)]
         "Returns the current Dashboard cookie session. A 401 means the visitor must sign in with GitHub."
     ),
 )
-async def me(user: UserDep) -> dict[str, str]:
+async def me(user: UserDep) -> AuthenticatedUserResponse:
     return user_dict(user)
 
 
@@ -58,7 +70,7 @@ async def me(user: UserDep) -> dict[str, str]:
     summary="Read public GitHub-login availability",
     description="Returns only whether GitHub OAuth is configured; no credential values are exposed.",
 )
-def auth_config(request: Request) -> dict[str, bool]:
+def auth_config(request: Request) -> AuthConfigResponse:
     settings = request.app.state.settings
     return {
         "github_login_enabled": bool(settings.github_oauth_client_id and settings.github_oauth_client_secret)
@@ -93,7 +105,7 @@ def logout(request: Request) -> Response:
         "Publicly lists the 50 newest locally tracked proposal Discussions without their full form content."
     ),
 )
-def list_proposals(session: SessionDep) -> dict[str, list[dict[str, object]]]:
+def list_proposals(session: SessionDep) -> ProposalListResponse:
     items = session.scalars(select(Proposal).order_by(Proposal.created_at.desc()).limit(50))
     return {
         "items": [
@@ -340,10 +352,11 @@ def proposal_preview(submission: ProposalSubmission) -> dict[str, object]:
         "Without a body it returns the required fields; with an authenticated session it uses that "
         "GitHub identity exactly as publishing does."
     ),
+    response_model=ProposalPreviewResponse,
 )
 async def preview_proposal(
     user: OptionalUserDep, body: ProposalSubmission | None = None
-) -> dict[str, object]:
+) -> ProposalPreviewResponse:
     """Render a proposal exactly as publishing would, without side effects.
 
     Publishing replaces the form's GitHub field with the authenticated
@@ -356,6 +369,7 @@ async def preview_proposal(
             "input": None,
             "derived": None,
             "discussion": None,
+            "github_identity_source": None,
             "missing_fields": [
                 name for name, field in ProposalSubmission.model_fields.items() if field.is_required()
             ],
@@ -380,10 +394,12 @@ async def preview_proposal(
         502: {"description": "GitHub did not accept the Discussion creation request."},
         503: {"description": "The GitHub Discussion destination is not configured."},
     },
+    response_model=ProposalPublishedResponse,
+    response_model_exclude_none=True,
 )
 async def create_proposal(
     body: ProposalSubmission, request: Request, session: SessionDep, user: UserDep
-) -> dict[str, object]:
+) -> ProposalPublishedResponse:
     submission = body.with_github_identity(user.github_login)
     discussion = await create_github_discussion(request, user, submission)
     item = Proposal(
@@ -452,7 +468,7 @@ async def fetch_all_discussions(settings: object, token: str) -> list[dict[str, 
 )
 async def sync_proposal_discussions(
     request: Request, session: SessionDep, user: AdminDep
-) -> dict[str, int]:
+) -> ProposalSyncResponse:
     """Rebuild proposal records from Discussions and mark legacy layouts invalid."""
 
     nodes = await fetch_all_discussions(request.app.state.settings, await github_access_token(request, user))
@@ -534,10 +550,10 @@ async def sync_proposal_discussions(
     }
 
 
-@community_router.get("/proposals/{proposal_id}/pull-request")
+@community_router.get("/proposals/{proposal_id}/pull-request", response_model=PullRequestInstructionsResponse)
 def pull_request_instructions(
     proposal_id: str, request: Request, session: SessionDep, user: UserDep
-) -> dict[str, str]:
+) -> PullRequestInstructionsResponse:
     proposal = session.get(Proposal, proposal_id)
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -554,8 +570,8 @@ def pull_request_instructions(
     }
 
 
-@community_router.get("/cloud-profiles")
-def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> dict[str, list[dict[str, object]]]:
+@community_router.get("/cloud-profiles", response_model=CloudProfileListResponse)
+def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> CloudProfileListResponse:
     items = session.scalars(select(CloudProfile).order_by(CloudProfile.name))
     return {
         "items": [
@@ -571,8 +587,12 @@ def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> dict[str, list[
     }
 
 
-@community_router.post("/cloud-profiles", status_code=status.HTTP_201_CREATED)
-def create_cloud_profile(body: CloudProfileCreate, session: SessionDep, user: AdminDep) -> dict[str, object]:
+@community_router.post(
+    "/cloud-profiles", status_code=status.HTTP_201_CREATED, response_model=CloudProfileResponse
+)
+def create_cloud_profile(
+    body: CloudProfileCreate, session: SessionDep, user: AdminDep
+) -> CloudProfileResponse:
     if session.scalar(select(CloudProfile).where(CloudProfile.name == body.name)):
         raise HTTPException(status_code=409, detail="Cloud profile name already exists")
     item = CloudProfile(

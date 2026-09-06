@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -259,3 +260,239 @@ class CloudProfileCreate(BaseModel):
     provider: Literal["aws"] = "aws"
     allocation: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
+
+
+# ---- HTTP response contracts -------------------------------------------------
+# Keep every public API response here so OpenAPI is a stable, readable contract
+# rather than a collection of anonymous ``dict`` schemas.
+
+
+class LiveHealthResponse(BaseModel):
+    status: Literal["ok"]
+    time: datetime
+
+
+class ReadyHealthResponse(BaseModel):
+    status: Literal["ready"]
+
+
+class SettingsResponse(BaseModel):
+    environment: Literal["development", "test", "production"]
+    execution_mode: Literal["fake", "ec2"]
+    aws_region: str
+    ec2_ami_id: str
+    ec2_instance_type: str
+    ec2_allowed_instance_types: list[str]
+    ec2_instance_resources: dict[str, dict[str, int]]
+    ec2_root_volume_gb: int
+    ec2_subnet_id: str | None
+    ec2_associate_public_ip: bool
+    quick_tunnel_enabled: bool
+    max_active_runs: int
+    github_login_enabled: bool
+    github_repository: str
+
+
+class TaskRevisionResponse(BaseModel):
+    id: str
+    repo_url: str
+    commit_sha: str
+    task_path: str
+    resource_requirements: dict[str, int]
+    created_at: datetime
+
+
+class TaskRevisionListResponse(BaseModel):
+    items: list[TaskRevisionResponse]
+
+
+class TaskRepositorySyncResponse(BaseModel):
+    commit_sha: str
+    task_count: int
+    created_count: int
+    updated_count: int
+    items: list[TaskRevisionResponse]
+
+
+class PlanResponse(BaseModel):
+    id: str
+    task_revision_id: str
+    state: str
+    config: dict[str, Any]
+    lock_version: int
+    approved_by: str | None
+    approved_at: datetime | None
+    created_at: datetime
+    repo_url: str
+    commit_sha: str
+    task_path: str
+
+
+class PlanListResponse(BaseModel):
+    items: list[PlanResponse]
+
+
+class RunResponse(BaseModel):
+    id: str
+    plan_id: str
+    state: str
+    config: dict[str, Any]
+    deadline_at: datetime
+    instance_id: str | None
+    instance_state: str | None
+    result: dict[str, Any] | None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    repo_url: str
+    commit_sha: str
+    task_path: str
+
+
+class CreatedRunResponse(RunResponse):
+    created: bool
+
+
+class RunListResponse(BaseModel):
+    items: list[RunResponse]
+
+
+class ManualBatchRunResponse(BaseModel):
+    created_count: int
+    items: list[RunResponse]
+
+
+class RunEventResponse(BaseModel):
+    id: str
+    run_id: str
+    event_type: str
+    message: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+class RunEventListResponse(BaseModel):
+    items: list[RunEventResponse]
+
+
+class DashboardResponse(BaseModel):
+    runs: list[RunResponse]
+    plans: list[PlanResponse]
+    task_revisions: list[TaskRevisionResponse]
+    counts: dict[str, int]
+
+
+class DatabaseSnapshotResponse(BaseModel):
+    name: str
+    size_bytes: int
+    created_at: datetime
+
+
+class DatabaseSnapshotListResponse(BaseModel):
+    items: list[DatabaseSnapshotResponse]
+
+
+class DatabaseJobResponse(BaseModel):
+    id: str
+    kind: str
+    state: str
+    attempts: int
+    max_attempts: int
+    available_at: datetime
+    lease_owner: str | None
+    lease_expires_at: datetime | None
+    last_error: str | None
+
+
+class DatabaseJobListResponse(BaseModel):
+    items: list[DatabaseJobResponse]
+
+
+class WorkerRunReference(BaseModel):
+    id: str
+    config: dict[str, Any]
+
+
+class WorkerClaimResponse(BaseModel):
+    run: WorkerRunReference
+    task_revision: TaskRevisionResponse
+    session_token: str
+
+
+class AuthenticatedUserResponse(BaseModel):
+    id: str
+    email: str
+    github_login: str
+    role: str
+
+
+class AuthConfigResponse(BaseModel):
+    github_login_enabled: bool
+
+
+class ProposalListItemResponse(BaseModel):
+    id: str
+    title: str
+    domain: str
+    field: str
+    task_slug: str
+    status: str
+    discussion_url: str | None
+    discussion_number: int | None
+    author_login: str | None
+    input_valid: bool
+
+
+class ProposalListResponse(BaseModel):
+    items: list[ProposalListItemResponse]
+
+
+class ProposalDerivedResponse(BaseModel):
+    domain: str
+    field: str
+    task_slug: str
+
+
+class DiscussionPreviewResponse(BaseModel):
+    title: str
+    body: str
+
+
+class ProposalPreviewResponse(BaseModel):
+    input: ProposalSubmission | None
+    derived: ProposalDerivedResponse | None
+    discussion: DiscussionPreviewResponse | None
+    missing_fields: list[str] | None = None
+    github_identity_source: Literal["form", "authenticated"] | None = None
+
+
+class ProposalPublishedResponse(ProposalPreviewResponse):
+    id: str
+    status: str
+    discussion_url: str
+
+
+class ProposalSyncResponse(BaseModel):
+    scanned_count: int
+    created_count: int
+    updated_count: int
+    invalid_count: int
+
+
+class PullRequestInstructionsResponse(BaseModel):
+    branch: str
+    task_path: str
+    proposal_url: str
+    compare_url: str
+
+
+class CloudProfileResponse(BaseModel):
+    id: str
+    name: str
+    provider: Literal["aws"]
+    allocation: dict[str, Any]
+    enabled: bool
+
+
+class CloudProfileListResponse(BaseModel):
+    items: list[CloudProfileResponse]
