@@ -4,3 +4,6 @@
 [submodule "reference/tb-science-task-dashboard"]
 	path = reference/tb-science-task-dashboard
 	url = https://github.com/StevenDillmann/tb-science-task-dashboard.git
+[submodule "ai4s-bench-website"]
+	path = ai4s-bench-website
+	url = https://github.com/hycarbon-b/ai4s-bench-website.git
