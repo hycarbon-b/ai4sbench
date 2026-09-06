@@ -8,17 +8,19 @@ export type User = {
 export type ProposalInput = {
   title: string;
   domain: string;
-  field: string;
-  subfield: string;
-  task_slug: string;
-  scientific_problem: string;
-  workflow_details: string;
-  dependencies_and_system_requirements: string;
+  field_name: string;
+  problem: string;
+  solvability: string;
+  references: string;
+  software: string;
   dataset: string;
-  evaluation_strategy: string;
-  complexity: string;
-  references_and_resources: string;
-  additional_information: string;
+  compute: string;
+  workflow: string;
+  evaluation: string;
+  leakage: string;
+  name: string;
+  affiliation: string;
+  github: string;
 };
 
 export type Proposal = {
@@ -31,6 +33,7 @@ export type Proposal = {
   discussion_url: string;
   author_login: string;
   discussion_number?: number | null;
+  input_valid: boolean;
 };
 
 export type TaskRevision = {
@@ -93,6 +96,12 @@ export type CloudProfile = {
   enabled: boolean;
 };
 
+export type DatabaseSnapshot = {
+  name: string;
+  size_bytes: number;
+  created_at: string;
+};
+
 export type Dashboard = {
   counts: Record<string, number>;
   runs: Run[];
@@ -100,7 +109,10 @@ export type Dashboard = {
   task_revisions: TaskRevision[];
 };
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
     ...options,
@@ -108,13 +120,37 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${response.status})`);
+    throw new Error(
+      typeof body.detail === "string"
+        ? body.detail
+        : `Request failed (${response.status})`,
+    );
   }
-  return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
+  return response.status === 204
+    ? (undefined as T)
+    : (response.json() as Promise<T>);
 }
 
 export const getCurrentUser = () => api<User>("/api/v1/auth/me");
-export const getGithubAuthorizeUrl = () => api<{ authorization_url: string }>("/auth/github/authorize");
-export const createProposal = (input: ProposalInput) => api<Proposal>("/api/v1/proposals", { method: "POST", body: JSON.stringify(input) });
-export const syncProposalDiscussions = () => api<{ scanned_count: number; created_count: number; updated_count: number }>("/api/v1/proposals/sync-discussions", { method: "POST" });
-export const signOut = () => api<void>("/api/v1/auth/logout", { method: "POST" });
+export const getGithubAuthorizeUrl = () =>
+  api<{ authorization_url: string }>("/auth/github/authorize");
+export const createProposal = (input: ProposalInput) =>
+  api<Proposal>("/api/v1/proposals", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+export const syncProposalDiscussions = () =>
+  api<{
+    scanned_count: number;
+    created_count: number;
+    updated_count: number;
+    invalid_count: number;
+  }>("/api/v1/proposals/sync-discussions", { method: "POST" });
+export const signOut = () =>
+  api<void>("/api/v1/auth/logout", { method: "POST" });
+export const listDatabaseSnapshots = () =>
+  api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots");
+export const createDatabaseSnapshot = () =>
+  api<DatabaseSnapshot>("/api/v1/database-snapshots", { method: "POST" });
+export const databaseSnapshotDownloadUrl = (name: string) =>
+  `/api/v1/database-snapshots/${encodeURIComponent(name)}/download`;

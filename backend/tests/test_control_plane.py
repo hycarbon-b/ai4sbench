@@ -106,6 +106,51 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             github_login="test-admin",
         )
 
+    def test_swagger_and_openapi_are_available_in_production(self) -> None:
+        production = create_app(
+            Settings(
+                environment="production",
+                allowed_hosts=("testserver",),
+                database_url="sqlite:///:memory:",
+                auto_create_schema=False,
+                auth_jwt_secret="production-auth-jwt-secret-that-is-long-enough",
+                job_token_secret="production-job-token-secret-that-is-long-enough",
+                github_oauth_client_id="test-client-id",
+                github_oauth_client_secret="test-client-secret",
+                execution_mode="ec2",
+                ec2_ami_id="ami-0123456789abcdef0",
+                ec2_security_group_ids=("sg-0123456789abcdef0",),
+            ),
+            FakeEC2Provider(),
+        )
+        with TestClient(production) as client:
+            self.assertEqual(client.get("/docs").status_code, 200)
+            schema = client.get("/openapi.json")
+            self.assertEqual(schema.status_code, 200)
+            payload = schema.json()
+            self.assertEqual(payload["info"]["title"], "AI4S-Bench Control Plane API")
+            self.assertIn("community", {tag["name"] for tag in payload["tags"]})
+
+    def test_admin_can_create_list_and_download_a_sqlite_snapshot(self) -> None:
+        created = self.client.post("/api/v1/database-snapshots")
+        self.assertEqual(created.status_code, 201, created.text)
+        snapshot = created.json()
+        self.assertRegex(snapshot["name"], r"^ai4sbench-control-panel-.*\.sqlite3$")
+        self.assertGreater(snapshot["size_bytes"], 0)
+
+        listed = self.client.get("/api/v1/database-snapshots")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual([item["name"] for item in listed.json()["items"]], [snapshot["name"]])
+
+        downloaded = self.client.get(f"/api/v1/database-snapshots/{snapshot['name']}/download")
+        self.assertEqual(downloaded.status_code, 200, downloaded.text)
+        self.assertEqual(downloaded.headers["content-type"], "application/vnd.sqlite3")
+        self.assertTrue(downloaded.content.startswith(b"SQLite format 3\x00"))
+        self.assertEqual(
+            self.client.get("/api/v1/database-snapshots/../../control.sqlite3/download").status_code,
+            404,
+        )
+
     def test_full_database_queue_worker_and_termination_flow(self) -> None:
         plan = self.create_approved_plan()
         idempotency_key = str(uuid.uuid4())

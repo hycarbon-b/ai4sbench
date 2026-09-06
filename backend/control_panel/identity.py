@@ -109,9 +109,11 @@ async def get_user_manager(
 def build_auth(settings: Settings) -> tuple[AuthenticationBackend[User, UUID], FastAPIUsers[User, UUID]]:
     transport = CookieTransport(
         cookie_name="ai4sbench_session",
-        cookie_secure=settings.environment == "production",
+        cookie_secure=settings.environment == "production" or bool(settings.cors_origins),
         cookie_httponly=True,
-        cookie_samesite="lax",
+        # The public site can live on a different origin from the control plane.
+        # Cross-origin authenticated API requests require a secure SameSite=None cookie.
+        cookie_samesite="none" if settings.cors_origins else "lax",
     )
 
     def get_jwt_strategy() -> JWTStrategy:

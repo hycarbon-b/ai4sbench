@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8080
     allowed_hosts: tuple[str, ...] = ("127.0.0.1", "localhost", "testserver")
+    cors_origins: tuple[str, ...] = ()
     database_url: str = "sqlite:///./data/control-panel.sqlite3"
     auto_create_schema: bool = False
     auth_jwt_secret: SecretStr = SecretStr("development-auth-secret-change-me-32chars")
@@ -93,6 +94,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "allowed_hosts",
+        "cors_origins",
         "ec2_allowed_instance_types",
         "ec2_security_group_ids",
         "admin_github_logins",

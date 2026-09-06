@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime
+import os
+import re
+import sqlite3
+from contextlib import suppress
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from .auth import Principal, get_principal
@@ -52,6 +59,7 @@ AdminDep = Annotated[Principal, Depends(get_principal)]
 public_router = APIRouter(tags=["health"])
 admin_router = APIRouter(prefix="/api/v1", dependencies=[Depends(get_principal)])
 worker_router = APIRouter(prefix="/api/v1/worker", tags=["worker"])
+SNAPSHOT_NAME_RE = re.compile(r"^ai4sbench-control-panel-\d{8}T\d{6}\.\d{6}Z\.sqlite3$")
 
 
 @public_router.get("/health/live")
@@ -86,6 +94,91 @@ def dashboard(session: SessionDep) -> dict:
         "task_revisions": [task_dict(item) for item in revisions],
         "counts": counts,
     }
+
+
+def sqlite_snapshot_paths(settings: Settings) -> tuple[Path, Path]:
+    database_url = make_url(settings.database_url)
+    if (
+        database_url.drivername != "sqlite"
+        or not database_url.database
+        or database_url.database == ":memory:"
+    ):
+        raise HTTPException(status_code=503, detail="SQLite snapshots are unavailable for this database")
+    database_path = Path(database_url.database).expanduser().resolve()
+    snapshot_dir = database_path.parent / "cache" / "sqlite-snapshots"
+    return database_path, snapshot_dir
+
+
+def snapshot_dict(path: Path) -> dict[str, object]:
+    stat = path.stat()
+    return {
+        "name": path.name,
+        "size_bytes": stat.st_size,
+        "created_at": datetime.fromtimestamp(stat.st_mtime, UTC).isoformat(),
+    }
+
+
+def snapshot_path(snapshot_dir: Path, name: str) -> Path:
+    if not SNAPSHOT_NAME_RE.fullmatch(name):
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    candidate = (snapshot_dir / name).resolve()
+    if candidate.parent != snapshot_dir.resolve() or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return candidate
+
+
+@admin_router.get("/database-snapshots", tags=["database"])
+def list_database_snapshots(request: Request, principal: AdminDep) -> dict[str, list[dict[str, object]]]:
+    _database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
+    if not snapshot_dir.is_dir():
+        return {"items": []}
+    items = [
+        snapshot_dict(path)
+        for path in snapshot_dir.iterdir()
+        if path.is_file() and SNAPSHOT_NAME_RE.fullmatch(path.name)
+    ]
+    return {"items": sorted(items, key=lambda item: str(item["created_at"]), reverse=True)}
+
+
+@admin_router.post("/database-snapshots", status_code=status.HTTP_201_CREATED, tags=["database"])
+def create_database_snapshot(request: Request, principal: AdminDep) -> dict[str, object]:
+    database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
+    if not database_path.is_file():
+        raise HTTPException(status_code=503, detail="SQLite database file is unavailable")
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    with suppress(OSError):
+        snapshot_dir.chmod(0o700)
+    created = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+    destination = snapshot_dir / f"ai4sbench-control-panel-{created}.sqlite3"
+    temporary = snapshot_dir / f".{destination.name}.tmp"
+    source: sqlite3.Connection | None = None
+    target: sqlite3.Connection | None = None
+    try:
+        source = sqlite3.connect(database_path)
+        target = sqlite3.connect(temporary)
+        source.backup(target)
+        target.close()
+        target = None
+        os.replace(temporary, destination)
+        with suppress(OSError):
+            destination.chmod(0o600)
+    except sqlite3.Error as exc:
+        raise HTTPException(status_code=503, detail="Could not create SQLite snapshot") from exc
+    finally:
+        if target is not None:
+            target.close()
+        if source is not None:
+            source.close()
+        if temporary.exists():
+            temporary.unlink(missing_ok=True)
+    return snapshot_dict(destination)
+
+
+@admin_router.get("/database-snapshots/{name}/download", tags=["database"])
+def download_database_snapshot(name: str, request: Request, principal: AdminDep) -> FileResponse:
+    _database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
+    path = snapshot_path(snapshot_dir, name)
+    return FileResponse(path, media_type="application/vnd.sqlite3", filename=path.name)
 
 
 @admin_router.get("/task-revisions", tags=["tasks"])

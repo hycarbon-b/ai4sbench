@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TaskRevisionCreate(BaseModel):
@@ -118,145 +118,140 @@ class WorkerComplete(BaseModel):
     result: dict[str, Any] = Field(default_factory=dict)
 
 
-class ProposalAuthorInformation(BaseModel):
-    """Author data embedded in the published Discussion, never trusted from the browser."""
+class ProposalSubmission(BaseModel):
+    """The sole task-proposal request contract, matching the Website wizard."""
 
-    author: str | None = Field(default=None, max_length=200)
-    email: str | None = Field(default=None, max_length=320)
-    role: str | None = Field(default=None, max_length=300)
-    professional_profile: str | None = Field(default=None, max_length=1000)
-    academic_profile: str | None = Field(default=None, max_length=1000)
-    github: str | None = Field(default=None, max_length=100)
-    discord: str | None = Field(default=None, max_length=100)
-    recommended_reviewers: str | None = Field(default=None, max_length=1000)
-    relevant_experience: str | None = Field(default=None, max_length=6000)
-    conflicts_of_interest: str = Field(default="None", max_length=6000)
+    model_config = ConfigDict(extra="forbid")
 
-
-class ProposalDocument(BaseModel):
-    """Canonical proposal payload shared by the form, SQLite, and GitHub Discussion renderer."""
-
-    schema_version: str = "tb-science-proposal/v1"
     title: str = Field(min_length=12, max_length=160)
-    domain: str = Field(pattern=r"^[a-z][a-z-]{1,78}$")
-    field: str = Field(pattern=r"^[a-z][a-z-]{1,78}$")
-    subfield: str = Field(min_length=2, max_length=160)
-    task_slug: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-    scientific_problem: str = Field(
-        min_length=80,
-        max_length=12000,
-        validation_alias=AliasChoices("scientific_problem", "abstract"),
-    )
-    workflow_details: str = Field(min_length=20, max_length=12000)
-    dependencies_and_system_requirements: str = Field(min_length=10, max_length=6000)
+    domain: str = Field(min_length=2, max_length=160)
+    field_name: str = Field(min_length=2, max_length=160)
+    problem: str = Field(min_length=80, max_length=12000)
+    solvability: str = Field(min_length=20, max_length=12000)
+    references: str = Field(min_length=40, max_length=12000)
+    software: str = Field(min_length=10, max_length=5000)
     dataset: str = Field(min_length=10, max_length=12000)
-    evaluation_strategy: str = Field(min_length=20, max_length=12000)
-    complexity: str = Field(min_length=20, max_length=12000)
-    references_and_resources: str = Field(
-        min_length=40,
-        max_length=12000,
-        validation_alias=AliasChoices("references_and_resources", "evidence"),
-    )
-    additional_information: str = Field(default="None provided", max_length=6000)
-    author_information: ProposalAuthorInformation = Field(default_factory=ProposalAuthorInformation)
+    compute: str = Field(min_length=5, max_length=900)
+    workflow: str = Field(min_length=20, max_length=12000)
+    evaluation: str = Field(min_length=20, max_length=11000)
+    leakage: str = Field(min_length=10, max_length=900)
+    name: str = Field(min_length=2, max_length=200)
+    affiliation: str = Field(default="", max_length=300)
+    github: str = Field(min_length=1, max_length=100)
 
     @field_validator(
-        "scientific_problem",
-        "workflow_details",
-        "dependencies_and_system_requirements",
+        "title",
+        "domain",
+        "field_name",
+        "problem",
+        "solvability",
+        "references",
+        "software",
         "dataset",
-        "evaluation_strategy",
-        "complexity",
-        "references_and_resources",
-        "additional_information",
+        "compute",
+        "workflow",
+        "evaluation",
+        "leakage",
+        "name",
+        "affiliation",
+        "github",
         mode="before",
     )
     @classmethod
     def strip_content(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("github")
+    @classmethod
+    def valid_github_login(cls, value: str) -> str:
+        if not re.fullmatch(r"[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", value, re.IGNORECASE):
+            raise ValueError("github must be a GitHub username without @")
+        return value
+
+    @model_validator(mode="after")
+    def valid_derived_identifiers(self) -> ProposalSubmission:
+        if len(self.domain_slug) < 2:
+            raise ValueError("domain must contain at least two ASCII letters")
+        if len(self.field_slug) < 2:
+            raise ValueError("field_name must contain at least two ASCII letters")
+        if len(self.task_slug) < 3:
+            raise ValueError("title must produce a task identifier of at least three characters")
+        return self
+
     @staticmethod
-    def display_name(value: str) -> str:
-        return " ".join(part.capitalize() for part in value.split("-"))
+    def slug_alpha(value: str) -> str:
+        return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z]+", "-", value.lower())))[:79]
 
-    def with_author(self, *, github_login: str | None, email: str) -> ProposalDocument:
-        """Bind identity from GitHub OAuth instead of accepting a browser-supplied identity."""
+    @staticmethod
+    def slugify(value: str) -> str:
+        return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9]+", "-", value.lower())))[:80]
 
-        login = github_login or email
-        return self.model_copy(
-            update={
-                "author_information": self.author_information.model_copy(
-                    update={
-                        "author": self.author_information.author or login,
-                        "email": self.author_information.email or email,
-                        "github": login,
-                    }
-                )
-            }
-        )
+    @property
+    def domain_slug(self) -> str:
+        return self.slug_alpha(self.domain)
+
+    @property
+    def field_slug(self) -> str:
+        return self.slug_alpha(self.field_name)
+
+    @property
+    def task_slug(self) -> str:
+        return self.slugify(self.title)
+
+    def with_github_identity(self, github_login: str | None) -> ProposalSubmission:
+        return self.model_copy(update={"github": github_login or self.github})
 
     def render_discussion(self) -> str:
-        """Render the public, Dashboard-compatible Task Proposal Discussion body."""
-
-        author = self.author_information
-
-        def line(label: str, value: str | None) -> str:
-            return f"{label}: {value or 'None provided'}"
-
         return "\n".join(
             (
                 "## Scientific Domain",
                 "",
-                f"{self.display_name(self.domain)} > {self.display_name(self.field)} > {self.subfield}",
+                f"{self.domain} > {self.field_name}",
                 "",
                 "## Scientific Problem",
-                self.scientific_problem,
+                self.problem,
                 "",
-                "## Workflow Details",
-                self.workflow_details,
-                "",
-                "## Dependencies & System Requirements",
-                self.dependencies_and_system_requirements,
-                "",
-                "## Dataset",
-                self.dataset,
-                "",
-                "## Evaluation Strategy",
-                self.evaluation_strategy,
-                "",
-                "## Complexity",
-                self.complexity,
+                "## Solvability",
+                self.solvability,
                 "",
                 "## References & Resources",
-                self.references_and_resources,
+                self.references,
                 "",
-                "## Additional Information",
-                self.additional_information,
+                "## Environment",
+                "",
+                "### Software and tools",
+                self.software,
+                "",
+                "### Dataset & artifacts",
+                self.dataset,
+                "",
+                "### Computation resources (time and device)",
+                self.compute,
+                "",
+                "### Expected workflow & outputs",
+                self.workflow,
+                "",
+                "## Evaluation",
+                "",
+                "### How will this task be evaluated?",
+                self.evaluation,
+                "",
+                "### Is there risk of cheating and leakage?",
+                self.leakage,
+                "",
+                "## Contributor",
+                "",
+                f"Name: {self.name}",
+                f"Institution / affiliation: {self.affiliation or 'None provided'}",
+                f"GitHub: https://github.com/{self.github}",
                 "",
                 "## Task Metadata",
                 f"Proposed task slug: `{self.task_slug}`",
-                "",
-                "## Author Information",
-                line("Author", author.author),
-                line("Email", author.email),
-                line("Role", author.role),
-                line("Professional Profile", author.professional_profile),
-                line("Academic Profile", author.academic_profile),
-                f"GitHub: https://github.com/{author.github}" if author.github else "GitHub: None provided",
-                line("Discord", author.discord),
-                line("Recommended Reviewers", author.recommended_reviewers),
-                line("Relevant Experience", author.relevant_experience),
-                "Commercial Affiliation & Conflicts of Interest:",
-                author.conflicts_of_interest,
                 "",
                 "---",
                 "Submitted via ai4sbench contribution form",
             )
         )
-
-
-# Compatibility name for integrations that still import the old request model.
-ProposalCreate = ProposalDocument
 
 
 class CloudProfileCreate(BaseModel):
