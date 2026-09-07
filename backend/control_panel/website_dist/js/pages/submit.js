@@ -5,8 +5,8 @@
    Field → schema mapping lives in ../proposal.js (DOM-free).
    ============================================================ */
 
-import { esc, ICONS } from "../components.js";
-import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js";
+import { esc, ICONS } from "../components.js?v=20260908";
+import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20260908";
 import {
   LIMITS,
   STEP_FIELDS,
@@ -15,7 +15,7 @@ import {
   buildProposalSubmission,
   buildMarkdown,
   slugify,
-} from "../proposal.js";
+} from "../proposal.js?v=20260908";
 
 const STEPS = ["Scientific problem", "Environment", "Evaluation", "Contributor", "Review & submit"];
 const REVIEW_STEP = STEPS.length - 1;

@@ -4,8 +4,8 @@
    Missing fields render gracefully — early proposals are sparse.
    ============================================================ */
 
-import { getTask, ROOT } from "../data.js";
-import { statusBadge, chip, esc, emptyState, ICONS, formatDate } from "../components.js";
+import { getTask, ROOT } from "../data.js?v=20260908";
+import { statusBadge, chip, esc, emptyState, ICONS, formatDate } from "../components.js?v=20260908";
 
 const params = new URLSearchParams(location.search);
 const key = params.get("id");
