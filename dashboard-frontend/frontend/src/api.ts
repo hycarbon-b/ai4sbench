@@ -23,6 +23,10 @@ export type ProposalInput = {
   github: string;
 };
 
+export type ProposalDomainList = {
+  items: string[];
+};
+
 export type Proposal = {
   id: string;
   title: string;
@@ -134,6 +138,8 @@ export async function api<T>(
 export const getCurrentUser = () => api<User>("/api/v1/auth/me");
 export const getGithubAuthorizeUrl = () =>
   api<{ authorization_url: string }>("/auth/github/authorize");
+export const getProposalDomains = () =>
+  api<ProposalDomainList>("/api/v1/proposal-domains");
 export const createProposal = (input: ProposalInput) =>
   api<Proposal>("/api/v1/proposals", {
     method: "POST",

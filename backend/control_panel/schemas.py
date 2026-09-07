@@ -7,6 +7,17 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+PROPOSAL_DOMAIN_OPTIONS = (
+    "Materials Science",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "AI / ML",
+    "Applied Mathematics",
+    "Interdisciplinary",
+)
+
+
 class TaskRevisionCreate(BaseModel):
     repo_url: str = Field(max_length=500)
     commit_sha: str = Field(pattern=r"^[0-9a-fA-F]{40,64}$")
@@ -169,10 +180,18 @@ class ProposalSubmission(BaseModel):
             raise ValueError("github must be a GitHub username without @")
         return value
 
+    @field_validator("domain")
+    @classmethod
+    def normalize_domain_list(cls, value: str) -> str:
+        """Preserve readable domain names in one canonical comma-separated string."""
+
+        domains = [item.strip() for item in value.split(",") if item.strip()]
+        if not domains:
+            raise ValueError("domain must contain at least one domain")
+        return ", ".join(dict.fromkeys(domains))
+
     @model_validator(mode="after")
     def valid_derived_identifiers(self) -> ProposalSubmission:
-        if len(self.domain_slug) < 2:
-            raise ValueError("domain must contain at least two ASCII letters")
         if len(self.field_slug) < 2:
             raise ValueError("field_name must contain at least two ASCII letters")
         if len(self.task_slug) < 3:
@@ -186,10 +205,6 @@ class ProposalSubmission(BaseModel):
     @staticmethod
     def slugify(value: str) -> str:
         return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9]+", "-", value.lower())))[:80]
-
-    @property
-    def domain_slug(self) -> str:
-        return self.slug_alpha(self.domain)
 
     @property
     def field_slug(self) -> str:
@@ -445,6 +460,12 @@ class ProposalListItemResponse(BaseModel):
 
 class ProposalListResponse(BaseModel):
     items: list[ProposalListItemResponse]
+
+
+class ProposalDomainListResponse(BaseModel):
+    """The single public source for selectable proposal domains."""
+
+    items: list[str]
 
 
 class ProposalDerivedResponse(BaseModel):

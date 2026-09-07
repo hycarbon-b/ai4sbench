@@ -81,6 +81,13 @@ def test_form_contract_renders_and_round_trips_through_a_discussion() -> None:
     assert imported.task_slug == "assimilate-a-sparse-coastal-observation-network"
 
 
+def test_domains_are_normalized_as_one_readable_comma_separated_string() -> None:
+    payload = proposal_payload()
+    payload["domain"] = "Materials Science,Chemistry, Materials Science"
+    submission = ProposalSubmission.model_validate(payload)
+    assert submission.domain == "Materials Science, Chemistry"
+
+
 def test_old_canonical_payload_is_rejected() -> None:
     with pytest.raises(ValidationError):
         ProposalSubmission.model_validate(
@@ -160,7 +167,7 @@ def test_member_can_preview_exact_submission_without_creating_a_discussion() -> 
             payload = preview.json()
             assert payload["input"]["github"] == "member-github"
             assert payload["derived"] == {
-                "domain": "earth-sciences",
+                "domain": "Earth Sciences",
                 "field": "coastal-oceanography",
                 "task_slug": "assimilate-a-sparse-coastal-observation-network",
             }
@@ -168,6 +175,36 @@ def test_member_can_preview_exact_submission_without_creating_a_discussion() -> 
             assert payload["discussion"]["title"] == proposal_payload()["title"]
             assert "GitHub: https://github.com/member-github" in payload["discussion"]["body"]
             assert client.get("/api/v1/proposals").json()["items"] == []
+
+
+def test_proposal_domains_are_public_and_documented() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "control.sqlite3"
+        app = create_app(
+            Settings(
+                environment="test",
+                database_url=f"sqlite:///{database.as_posix()}",
+                auto_create_schema=True,
+                execution_mode="fake",
+            )
+        )
+        with TestClient(app) as client:
+            response = client.get("/api/v1/proposal-domains")
+            assert response.status_code == 200, response.text
+            assert response.json()["items"] == [
+                "Materials Science",
+                "Physics",
+                "Chemistry",
+                "Biology",
+                "AI / ML",
+                "Applied Mathematics",
+                "Interdisciplinary",
+            ]
+            schema = client.get("/openapi.json").json()
+            response_schema = schema["paths"]["/api/v1/proposal-domains"]["get"]["responses"]["200"]
+            assert response_schema["content"]["application/json"]["schema"]["$ref"] == (
+                "#/components/schemas/ProposalDomainListResponse"
+            )
 
 
 def test_empty_proposal_preview_lists_required_input_fields() -> None:

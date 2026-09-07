@@ -17,11 +17,13 @@ from .database import get_session
 from .identity import OAuthAccount, User, current_active_user, current_optional_user
 from .models import CloudProfile, Proposal
 from .schemas import (
+    PROPOSAL_DOMAIN_OPTIONS,
     AuthConfigResponse,
     AuthenticatedUserResponse,
     CloudProfileCreate,
     CloudProfileListResponse,
     CloudProfileResponse,
+    ProposalDomainListResponse,
     ProposalListResponse,
     ProposalPreviewResponse,
     ProposalPublishedResponse,
@@ -75,6 +77,16 @@ def auth_config(request: Request) -> AuthConfigResponse:
     return {
         "github_login_enabled": bool(settings.github_oauth_client_id and settings.github_oauth_client_secret)
     }
+
+
+@community_router.get(
+    "/proposal-domains",
+    summary="List selectable proposal domains",
+    description="Provides the shared multi-select options for the Website and Dashboard proposal forms.",
+    response_model=ProposalDomainListResponse,
+)
+def proposal_domains() -> ProposalDomainListResponse:
+    return {"items": list(PROPOSAL_DOMAIN_OPTIONS)}
 
 
 @community_router.post(
@@ -332,7 +344,7 @@ def proposal_preview(submission: ProposalSubmission) -> dict[str, object]:
     return {
         "input": submission.model_dump(mode="json"),
         "derived": {
-            "domain": submission.domain_slug,
+            "domain": submission.domain,
             "field": submission.field_slug,
             "task_slug": submission.task_slug,
         },
@@ -407,7 +419,7 @@ async def create_proposal(
         author_login=user.github_login,
         title=submission.title,
         abstract=submission.problem,
-        domain=submission.domain_slug,
+        domain=submission.domain,
         field=submission.field_slug,
         task_slug=submission.task_slug,
         evidence=submission.references,
@@ -487,7 +499,7 @@ async def sync_proposal_discussions(
             document = submission.model_dump(mode="json")
             title = submission.title
             abstract = submission.problem
-            domain = submission.domain_slug
+            domain = submission.domain
             field = submission.field_slug
             task_slug = submission.task_slug
             evidence = submission.references

@@ -29,6 +29,7 @@ import {
   databaseSnapshotDownloadUrl,
   getCurrentUser,
   getGithubAuthorizeUrl,
+  getProposalDomains,
   signOut,
   syncProposalDiscussions,
   type CloudProfile,
@@ -217,6 +218,7 @@ export default function App() {
     }>
   >([]);
   const [proposal, setProposal] = useState(emptyProposal);
+  const [proposalDomains, setProposalDomains] = useState<string[]>([]);
   const [proposalResult, setProposalResult] = useState<Proposal | null>(null);
   const [profileName, setProfileName] = useState("");
   const [allocation, setAllocation] = useState(
@@ -282,6 +284,11 @@ export default function App() {
         setChecked(true);
       }
     })();
+  }, []);
+  useEffect(() => {
+    void getProposalDomains()
+      .then(({ items }) => setProposalDomains(items))
+      .catch(() => setError("Could not load the shared proposal domain options."));
   }, []);
   useEffect(() => {
     void loadOps();
@@ -601,6 +608,7 @@ export default function App() {
               onProfile={saveProfile}
               onSaveDatabaseSnapshot={saveDatabaseSnapshot}
               proposal={proposal}
+              proposalDomains={proposalDomains}
               onProposalChange={setProposal}
               proposalResult={proposalResult}
               proposalReady={canSubmitProposal}
@@ -611,6 +619,7 @@ export default function App() {
           ) : (
             <ProposalPanel
               proposal={proposal}
+              proposalDomains={proposalDomains}
               onChange={setProposal}
               result={proposalResult}
               ready={canSubmitProposal}
@@ -679,6 +688,7 @@ function AdminPanel({
   onAllocation,
   onProfile,
   proposal,
+  proposalDomains,
   onProposalChange,
   proposalResult,
   proposalReady,
@@ -715,6 +725,7 @@ function AdminPanel({
   onAllocation: (value: string) => void;
   onProfile: (event: FormEvent<HTMLFormElement>) => void;
   proposal: ProposalInput;
+  proposalDomains: string[];
   onProposalChange: (value: ProposalInput) => void;
   proposalResult: Proposal | null;
   proposalReady: boolean;
@@ -787,6 +798,7 @@ function AdminPanel({
         </div>
         <ProposalPanel
           proposal={proposal}
+          proposalDomains={proposalDomains}
           onChange={onProposalChange}
           result={proposalResult}
           recent={ops.proposals}
@@ -1426,6 +1438,7 @@ function DatabaseSnapshotsPanel({
 
 function ProposalPanel({
   proposal,
+  proposalDomains,
   onChange,
   result,
   recent = [],
@@ -1433,12 +1446,26 @@ function ProposalPanel({
   onSubmit,
 }: {
   proposal: ProposalInput;
+  proposalDomains: string[];
   onChange: (value: ProposalInput) => void;
   result: Proposal | null;
   recent?: Proposal[];
   ready: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const selectedDomains = new Set(
+    proposal.domain
+      .split(",")
+      .map((domain) => domain.trim())
+      .filter(Boolean),
+  );
+  const toggleDomain = (domain: string, checked: boolean) => {
+    const next = new Set(selectedDomains);
+    if (checked) next.add(domain);
+    else next.delete(domain);
+    onChange({ ...proposal, domain: [...next].join(", ") });
+  };
+
   return (
     <>
       <Title
@@ -1493,19 +1520,34 @@ function ProposalPanel({
                     />,
                   ],
                   [
-                    "Domain involved",
+                    "Domains involved",
                     <div
                       key="classification"
-                      className="grid gap-2 sm:grid-cols-2"
+                      className="space-y-3"
                     >
-                      <Input
-                        aria-label="Domain"
-                        value={proposal.domain}
-                        onChange={(event) =>
-                          onChange({ ...proposal, domain: event.target.value })
-                        }
-                        placeholder="e.g. Materials Science"
-                      />
+                      <div
+                        role="group"
+                        aria-label="Domains involved"
+                        className="grid gap-2 sm:grid-cols-2"
+                      >
+                        {proposalDomains.map((domain) => (
+                          <label
+                            key={domain}
+                            className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 transition-colors hover:border-sky-400/50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedDomains.has(domain)}
+                              onChange={(event) => toggleDomain(domain, event.target.checked)}
+                              className="size-4 accent-sky-400"
+                            />
+                            {domain}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Selected domains are submitted as one comma-separated string.
+                      </p>
                       <Input
                         aria-label="Specific field"
                         value={proposal.field_name}
