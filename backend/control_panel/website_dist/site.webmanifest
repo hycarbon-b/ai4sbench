@@ -1,0 +1,17 @@
+{
+  "name": "AI4S-Benchmark",
+  "short_name": "AI4S",
+  "description": "An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.",
+  "start_url": "./",
+  "display": "browser",
+  "background_color": "#F7F9FC",
+  "theme_color": "#0D1730",
+  "icons": [
+    {
+      "src": "assets/branding/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

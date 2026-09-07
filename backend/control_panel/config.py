@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     admin_github_emails: tuple[str, ...] = ()
     contributor_github_logins: tuple[str, ...] = ()
     contributor_github_emails: tuple[str, ...] = ()
+    reviewer_github_logins: tuple[str, ...] = ()
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
     max_active_runs: int = Field(default=1, ge=1, le=32)
@@ -101,6 +102,7 @@ class Settings(BaseSettings):
         "admin_github_emails",
         "contributor_github_logins",
         "contributor_github_emails",
+        "reviewer_github_logins",
         mode="before",
     )
     @classmethod

@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
 PROPOSAL_DOMAIN_OPTIONS = (
     "Materials Science",
     "Physics",
@@ -23,6 +22,9 @@ class TaskRevisionCreate(BaseModel):
     commit_sha: str = Field(pattern=r"^[0-9a-fA-F]{40,64}$")
     task_path: str = Field(max_length=500)
     resource_requirements: dict[str, int] = Field(default_factory=dict)
+    proposal_id: str | None = None
+    pull_request_url: str | None = Field(default=None, max_length=500)
+    release: str | None = Field(default=None, max_length=80)
 
     @field_validator("task_path")
     @classmethod
@@ -270,6 +272,97 @@ class ProposalSubmission(BaseModel):
         )
 
 
+REVIEW_SCHEMA_VERSION = "ai4sbench-proposal-review/v1"
+REVIEW_COMMENT_MARKER = "<!-- ai4sbench-proposal-review:v1 -->"
+
+
+class ProposalReview(BaseModel):
+    """Canonical reviewer reply stored on the proposal and rendered to GitHub Markdown."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_schema_version: Literal["ai4sbench-proposal-review/v1"] = REVIEW_SCHEMA_VERSION
+    review_decision: Literal["approved", "changes_requested", "rejected"]
+    review_short_description: str = Field(min_length=20, max_length=2_000)
+    review_tags: list[str] = Field(min_length=1, max_length=30)
+    review_difficulty: str = Field(min_length=2, max_length=80)
+    review_scientific_value: str = Field(min_length=20, max_length=8_000)
+    review_primary_metric: str = Field(min_length=2, max_length=1_000)
+    review_primary_metric_short: str | None = Field(default=None, max_length=240)
+    review_secondary_metrics: list[str] = Field(default_factory=list, max_length=20)
+    review_verification_method: str = Field(min_length=20, max_length=8_000)
+    review_estimated_runtime: str | None = Field(default=None, max_length=240)
+    review_compute_budget: str | None = Field(default=None, max_length=240)
+    review_token_budget: str | None = Field(default=None, max_length=240)
+    review_baseline_results: list[str] = Field(default_factory=list, max_length=30)
+    review_failure_modes: list[str] = Field(default_factory=list, max_length=30)
+    review_notes: str | None = Field(default=None, max_length=8_000)
+
+    @field_validator(
+        "review_short_description",
+        "review_difficulty",
+        "review_scientific_value",
+        "review_primary_metric",
+        "review_primary_metric_short",
+        "review_verification_method",
+        "review_estimated_runtime",
+        "review_compute_budget",
+        "review_token_budget",
+        "review_notes",
+        mode="before",
+    )
+    @classmethod
+    def strip_review_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator(
+        "review_tags",
+        "review_secondary_metrics",
+        "review_baseline_results",
+        "review_failure_modes",
+        mode="before",
+    )
+    @classmethod
+    def normalize_review_lists(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    def render_comment(self) -> str:
+        def section(title: str, value: str | None) -> list[str]:
+            return [f"### {title}", "", value or "", ""]
+
+        def list_section(title: str, values: list[str]) -> list[str]:
+            return [f"### {title}", "", *(f"- {value}" for value in values), ""]
+
+        lines = [
+            REVIEW_COMMENT_MARKER,
+            "",
+            "## AI4S-Bench Proposal Review",
+            "",
+            f"Decision: {self.review_decision}",
+            "",
+        ]
+        lines += section("Short Description", self.review_short_description)
+        lines += list_section("Tags", self.review_tags)
+        lines += section("Difficulty", self.review_difficulty)
+        lines += section("Scientific Value", self.review_scientific_value)
+        lines += section("Primary Metric", self.review_primary_metric)
+        lines += section("Primary Metric Short", self.review_primary_metric_short)
+        lines += list_section("Secondary Metrics", self.review_secondary_metrics)
+        lines += section("Verification Method", self.review_verification_method)
+        lines += section("Estimated Runtime", self.review_estimated_runtime)
+        lines += section("Compute Budget", self.review_compute_budget)
+        lines += section("Token Budget", self.review_token_budget)
+        lines += list_section("Baseline Results", self.review_baseline_results)
+        lines += list_section("Failure Modes", self.review_failure_modes)
+        lines += section("Review Notes", self.review_notes)
+        return "\n".join(lines).rstrip() + "\n"
+
+
 class CloudProfileCreate(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9-]{1,118}$")
     provider: Literal["aws"] = "aws"
@@ -314,6 +407,9 @@ class TaskRevisionResponse(BaseModel):
     commit_sha: str
     task_path: str
     resource_requirements: dict[str, int]
+    proposal_id: str | None
+    pull_request_url: str | None
+    release: str | None
     created_at: datetime
 
 
@@ -462,6 +558,70 @@ class ProposalListResponse(BaseModel):
     items: list[ProposalListItemResponse]
 
 
+class ProposalBoardItemResponse(BaseModel):
+    """Public Website projection combining proposal, review and latest task revision."""
+
+    id: str
+    title: str
+    domain: str
+    field_name: str
+    problem: str
+    solvability: str
+    references: str
+    software: str
+    dataset: str
+    compute: str
+    workflow: str
+    evaluation: str
+    leakage: str
+    name: str
+    affiliation: str
+    github: str
+    task_slug: str
+    status: str
+    discussion_url: str | None
+    discussion_number: int | None
+    input_valid: bool
+    created_at: datetime
+    updated_at: datetime
+
+    review_schema_version: str | None
+    review_decision: Literal["approved", "changes_requested", "rejected"] | None
+    review_short_description: str | None
+    review_tags: list[str]
+    review_difficulty: str | None
+    review_scientific_value: str | None
+    review_primary_metric: str | None
+    review_primary_metric_short: str | None
+    review_secondary_metrics: list[str]
+    review_verification_method: str | None
+    review_estimated_runtime: str | None
+    review_compute_budget: str | None
+    review_token_budget: str | None
+    review_baseline_results: list[str]
+    review_failure_modes: list[str]
+    review_notes: str | None
+    review_reviewer_login: str | None
+    review_comment_url: str | None
+    review_created_at: datetime | None
+    review_updated_at: datetime | None
+    review_input_valid: bool
+
+    revision_id: str | None
+    revision_repo_url: str | None
+    revision_commit_sha: str | None
+    revision_task_path: str | None
+    revision_resource_requirements: dict[str, int] | None
+    revision_pull_request_url: str | None
+    revision_release: str | None
+    revision_created_at: datetime | None
+    revision_agent_results: list[dict[str, Any]]
+
+
+class ProposalBoardListResponse(BaseModel):
+    items: list[ProposalBoardItemResponse]
+
+
 class ProposalDomainListResponse(BaseModel):
     """The single public source for selectable proposal domains."""
 
@@ -493,11 +653,29 @@ class ProposalPublishedResponse(ProposalPreviewResponse):
     discussion_url: str
 
 
+class ReviewCommentPreviewResponse(BaseModel):
+    body: str
+
+
+class ProposalReviewPreviewResponse(BaseModel):
+    input: ProposalReview
+    comment: ReviewCommentPreviewResponse
+
+
+class ProposalReviewPublishedResponse(ProposalReviewPreviewResponse):
+    proposal_id: str
+    discussion_url: str
+    review_comment_node_id: str
+    review_comment_url: str
+
+
 class ProposalSyncResponse(BaseModel):
     scanned_count: int
     created_count: int
     updated_count: int
     invalid_count: int
+    reviewed_count: int
+    invalid_review_count: int
 
 
 class PullRequestInstructionsResponse(BaseModel):

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About & Methodology | AI4S-Benchmark</title>
+  <meta name="description" content="Why AI4S-Benchmark exists, what counts as a good task, how tasks are reviewed, how agents are evaluated, and how the open, independent project is governed.">
+  <link rel="canonical" href="https://ai4sbench.org/about/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AI4S-Benchmark">
+  <meta property="og:title" content="About & Methodology | AI4S-Benchmark">
+  <meta property="og:description" content="Why AI4S-Benchmark exists, what counts as a good task, how tasks are reviewed, how agents are evaluated, and how the open, independent project is governed.">
+  <meta property="og:url" content="https://ai4sbench.org/about/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="About & Methodology | AI4S-Benchmark">
+  <meta name="twitter:description" content="Why AI4S-Benchmark exists, what counts as a good task, how tasks are reviewed, how agents are evaluated, and how the open, independent project is governed.">
+  <link rel="icon" type="image/svg+xml" href="../assets/branding/favicon.svg">
+  <link rel="manifest" href="../site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/pages.css">
+</head>
+<body data-root="../" data-page="about">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container container--wide site-header__inner">
+      <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+        <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="60" cy="60" rx="29" ry="16" transform="rotate(-30 60 60)" stroke="#F7F9FC" stroke-width="2" stroke-dasharray="4 5"/>
+          <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+          <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+          <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+          <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+          <circle cx="92" cy="92" r="5.5" fill="#7E8AA3"/>
+        </svg>
+        <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" data-nav="about" href="../about/">About</a>
+        <a class="site-nav__link" data-nav="tasks" href="../tasks/">Tasks</a>
+        <a class="site-nav__link" data-nav="contributors" href="../contributors/">Contributors</a>
+        <a class="site-nav__link" data-nav="releases" href="../releases/">Releases</a>
+        <a class="site-nav__link site-nav__github" data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <a class="btn btn--primary btn--sm" data-nav="submit" href="../submit/">Submit a Task</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <section class="page-head">
+      <div class="container">
+        <span class="eyebrow">About</span>
+        <h1>Where are the questions?</h1>
+        <p class="lede">Questions drive us to discovery, and they are now driving the agent to improve. Especially in interdisciplinary fields, agent can propose strong solution from broad literature, but the question that matters, hidden deep inside the domain researchers, you and I. AI4S-bench is the communities effort that aims to build the collection with you together.</p>
+      </div>
+    </section>
+
+    <div class="container about-layout">
+      <div class="prose">
+        <h2 id="why-now">Why now?</h2>
+        <p>AI systems are becoming capable of carrying out increasingly complex engineering and research workflows, but their true scientific capabilities are still poorly characterized. Coding has mature executable evaluations; many scientific domains do not. As agents begin to touch real research, the absence of honest measurement becomes the bottleneck.</p>
+        <p>Genuinely valuable scientific problems cannot simply be scraped from the web. Scientific software, data and evaluation expertise are scattered across laboratories, and determining whether an output is <em>scientifically correct</em> often requires domain expertise.</p>
+        <p>Researchers working at the frontier know which problems actually matter, which workflows are genuinely difficult, where current agents hallucinate or fail, what constitutes scientifically meaningful progress, and how a result can be honestly verified. AI4S-Benchmark turns that distributed expertise into open, executable scientific evaluations.</p>
+
+        <h2 id="why-interdisciplinary">Why interdisciplinary science?</h2>
+        <p>Important scientific discoveries frequently emerge at disciplinary boundaries, while successful AI agents increasingly need to combine knowledge, reasoning, code, tools and scientific domain expertise. Interdisciplinary tasks are therefore especially valuable for measuring emerging scientific capability — and especially encouraged in this benchmark.</p>
+
+        <h2 id="good-task">What counts as a good task?</h2>
+        <p>Every task must clear three bars:</p>
+        <ul>
+          <li><strong>Scientific value.</strong> Researchers in the field would consider the problem worth solving on its own merits — never difficulty invented purely to confuse an AI.</li>
+          <li><strong>Verifiable.</strong> Correctness can be judged through a script, metric, experimental criterion or explicit scientific evaluation procedure.</li>
+          <li><strong>Frontier difficulty.</strong> The task remains genuinely challenging, even if it is an open problem, but not artificial difficulty or tricky.</li>
+        </ul>
+        <p>Tasks also declare their integrity posture up front: contamination risk, answer-leakage vectors, and the anti-cheating measures the environment enforces.</p>
+
+        <h2 id="review">How are tasks reviewed?</h2>
+        <p>Every task follows the same transparent path, and recorded in GitHub:</p>
+        <ol>
+          <li><strong>Submit.</strong> A researcher proposes a task through the official issue form.</li>
+          <li><strong>Scientific review.</strong> Automated checks verify format and duplication; domain reviewers assess scientific value, verifiability and difficulty.</li>
+          <li><strong>Task PR.</strong> The specification, environment, evaluator and anti-cheating measures are submitted as a structured pull request.</li>
+          <li><strong>Agent testing.</strong> Frontier agents are run; pass rate, runtime, cost and failure modes are recorded.</li>
+          <li><strong>Release.</strong> Verified tasks enter a versioned release.</li>
+        </ol>
+        <p>Publicly, tasks carry one of five statuses — <em>Proposed, Under Review, Agent Testing, Verified, Released</em> — so visitors never need to understand the full internal state machine.</p>
+
+        <h2 id="evaluation">How are agents evaluated?</h2>
+        <p id="methodology">Agents run inside the task's execution environment under recorded configuration: harness version, model and scaffold identity, budgets, and limits. Scoring is performed by the task's evaluator — never by agent-controlled code — against references that stay hidden from the agent wherever the design requires it.</p>
+        <p>An agent/scaffold and its underlying foundation model are tracked as separate entities. Published results carry score, cost, runtime and a verification status; a result is marked <strong>Verified</strong> only when it was reproduced or validated under the AI4S-Benchmark evaluation procedure. Detailed methodology lives with the harness in the benchmark repository.</p>
+
+        <h2 id="governance">Who governs the project?</h2>
+        <p>AI4S-Benchmark is community-governed. Contribution points, roles (Active Contributor, Core Contributor, Maintainer) and area committees are defined in the public <a href="../contributors/#credit">credit and governance policy</a>. Maintainers participate in task acceptance, review organization, contributor management and roadmap decisions. Scientific areas may form field-specific committees that organize reviews and decide task acceptance in their area.</p>
+
+        <h2 id="open">What does open and independent mean?</h2>
+        <p>Open source, in public, with GitHub as the operational backend: task specifications, review history, evaluator code, releases and evaluation records. Independent means the benchmark is not owned by any single lab or model vendor, and no participant gets private influence over task selection or scoring.</p>
+
+        <h2 id="roadmap">The long-term roadmap</h2>
+        <p>The project moves through three phases:</p>
+        <ul>
+          <li><strong>Bench</strong> <em>(current)</em> — continuously test frontier AI agents against difficult scientific problems and measure the moving boundary of AI × Science capability.</li>
+          <li><strong>Dataset</strong> — accumulate tasks, execution environments, agent trajectories, evaluators and scientific verification systems into a valuable scientific dataset.</li>
+          <li><strong>Challenge</strong> — organize open challenges around important problems that remain unsolved, revisiting them as AI systems become stronger.</li>
+        </ul>
+        <p style="margin-bottom:0;">Detailed documentation — schemas, validators, review guidelines and the evaluation harness — lives in the <a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>.</p>
+      </div>
+
+      <nav class="about-toc" aria-label="On this page">
+        <h4 class="mono-label" style="margin-bottom: var(--space-3);">On this page</h4>
+        <ul>
+          <li><a href="#why-now">Why now?</a></li>
+          <li><a href="#why-interdisciplinary">Why interdisciplinary?</a></li>
+          <li><a href="#good-task">What counts as a good task?</a></li>
+          <li><a href="#review">How tasks are reviewed</a></li>
+          <li><a href="#evaluation">How agents are evaluated</a></li>
+          <li><a href="#governance">Governance</a></li>
+          <li><a href="#open">Open &amp; independent</a></li>
+          <li><a href="#roadmap">Roadmap</a></li>
+        </ul>
+      </nav>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container container--wide">
+      <div class="site-footer__inner">
+        <div class="site-footer__brand">
+          <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+            <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+              <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+              <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+              <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+            </svg>
+            <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+          </a>
+          <p>An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.</p>
+        </div>
+        <div>
+          <h4>Benchmark</h4>
+          <ul>
+            <li><a href="../tasks/">Tasks</a></li>
+            <li><a href="../releases/">Releases</a></li>
+            <li><a href="../about/#methodology">Methodology</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contribute</h4>
+          <ul>
+            <li><a href="../submit/">Submit a Task</a></li>
+            <li><a href="../reviewers/">Become a Reviewer</a></li>
+            <li><a href="../contributors/">Contributors</a></li>
+            <li><a href="../contributors/#credit">Credit &amp; Governance</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="../about/">About</a></li>
+            <li><a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">Benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a href="mailto:contact@ai4sbench.org">contact@ai4sbench.org</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="site-footer__bottom">
+        <span>AI4S-Benchmark · Advancing science through intelligent evaluation</span>
+        <span class="mono">OPEN · INDEPENDENT · COMMUNITY-BUILT · © <span data-year>2026</span></span>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="../js/app.js"></script>
+
+</body>
+</html>

@@ -5,8 +5,8 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from httpx_oauth.clients.github import GitHubOAuth2
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -21,6 +21,7 @@ from .identity import AuthBase, build_auth, create_auth_engine
 from .providers import EC2Provider, provider_from_settings
 
 STATIC_DIR = Path(__file__).with_name("static")
+WEBSITE_DIST_DIR = Path(__file__).with_name("website_dist")
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 OPENAPI_TAGS = [
     {
@@ -50,6 +51,10 @@ OPENAPI_TAGS = [
     {
         "name": "tasks",
         "description": "Immutable benchmark task-revision registration and GitHub synchronization.",
+    },
+    {
+        "name": "public proposals",
+        "description": "Unauthenticated proposal, review and task-revision data for the Website board.",
     },
     {
         "name": "plans",
@@ -173,6 +178,12 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
   });
 </script>"""
             )
+
+    @app.get("/website", include_in_schema=False)
+    async def website_root() -> RedirectResponse:
+        return RedirectResponse("/website/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+    app.mount("/website", StaticFiles(directory=WEBSITE_DIST_DIR, html=True), name="website")
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="admin")
     return app
 

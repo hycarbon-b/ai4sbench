@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proposal Task Board | AI4S-Benchmark</title>
+  <meta name="description" content="Browse scientific proposals, review outcomes and linked benchmark revisions from the AI4S-Benchmark community.">
+  <link rel="canonical" href="https://ai4sbench.org/tasks/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AI4S-Benchmark">
+  <meta property="og:title" content="Proposal Task Board | AI4S-Benchmark">
+  <meta property="og:description" content="Browse scientific proposals, review outcomes and linked benchmark revisions from the AI4S-Benchmark community.">
+  <meta property="og:url" content="https://ai4sbench.org/tasks/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Proposal Task Board | AI4S-Benchmark">
+  <meta name="twitter:description" content="Browse scientific proposals, review outcomes and linked benchmark revisions from the AI4S-Benchmark community.">
+  <link rel="icon" type="image/svg+xml" href="../assets/branding/favicon.svg">
+  <link rel="manifest" href="../site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/pages.css">
+</head>
+<body data-root="../" data-page="tasks">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container container--wide site-header__inner">
+      <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+        <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="60" cy="60" rx="29" ry="16" transform="rotate(-30 60 60)" stroke="#F7F9FC" stroke-width="2" stroke-dasharray="4 5"/>
+          <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+          <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+          <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+          <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+          <circle cx="92" cy="92" r="5.5" fill="#7E8AA3"/>
+        </svg>
+        <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" data-nav="about" href="../about/">About</a>
+        <a class="site-nav__link" data-nav="tasks" href="../tasks/">Tasks</a>
+        <a class="site-nav__link" data-nav="contributors" href="../contributors/">Contributors</a>
+        <a class="site-nav__link" data-nav="releases" href="../releases/">Releases</a>
+        <a class="site-nav__link site-nav__github" data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <a class="btn btn--primary btn--sm" data-nav="submit" href="../submit/">Submit a Task</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <section class="page-head">
+      <div class="container container--wide">
+        <span class="eyebrow">Proposal Task Board</span>
+        <h1>Scientific Proposals</h1>
+        <p class="lede">Follow each proposed problem from its original submission through scientific review and repository revision.</p>
+        <div class="page-head__stats" id="task-stats">
+          <!-- populated from the public proposal API -->
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Task search and filters">
+      <div class="container container--wide explorer-controls">
+        <div class="explorer-controls__row">
+          <div class="search-input">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.5 10.5L14 14" stroke-linecap="round"/></svg>
+            <label class="visually-hidden" for="task-search">Search tasks</label>
+            <input type="search" id="task-search" placeholder="Search title, ID, domain, tags…" autocomplete="off">
+          </div>
+          <div id="task-filters" class="filter-bar">
+            <!-- filter selects generated from data -->
+          </div>
+          <div class="select-control">
+            <label for="task-sort">Sort</label>
+            <select id="task-sort">
+              <option value="updated">Recently updated</option>
+              <option value="added">Recently added</option>
+              <option value="alpha">Alphabetical</option>
+            </select>
+          </div>
+        </div>
+        <div class="explorer-controls__row" style="justify-content: space-between; align-items:center;">
+          <div class="filter-bar" id="task-toggles">
+            <button type="button" class="filter-toggle" id="filter-clear" hidden>Clear filters ×</button>
+          </div>
+          <p class="explorer-count" id="task-count" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Task results">
+      <div class="container container--wide">
+        <div class="task-list" id="task-list">
+          <!-- populated from the public proposal API -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container container--wide">
+      <div class="site-footer__inner">
+        <div class="site-footer__brand">
+          <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+            <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+              <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+              <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+              <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+            </svg>
+            <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+          </a>
+          <p>An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.</p>
+        </div>
+        <div>
+          <h4>Benchmark</h4>
+          <ul>
+            <li><a href="../tasks/">Tasks</a></li>
+            <li><a href="../releases/">Releases</a></li>
+            <li><a href="../about/#methodology">Methodology</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contribute</h4>
+          <ul>
+            <li><a href="../submit/">Submit a Task</a></li>
+            <li><a href="../reviewers/">Become a Reviewer</a></li>
+            <li><a href="../contributors/">Contributors</a></li>
+            <li><a href="../contributors/#credit">Credit &amp; Governance</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="../about/">About</a></li>
+            <li><a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">Benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a href="mailto:contact@ai4sbench.org">contact@ai4sbench.org</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="site-footer__bottom">
+        <span>AI4S-Benchmark · Advancing science through intelligent evaluation</span>
+        <span class="mono">OPEN · INDEPENDENT · COMMUNITY-BUILT · © <span data-year>2026</span></span>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/pages/tasks.js"></script>
+</body>
+</html>

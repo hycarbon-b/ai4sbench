@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI4S-Benchmark · An interdisciplinary benchmark for AI agents in science</title>
+  <meta name="description" content="AI4S-Benchmark collects hard, open scientific problems from researchers and turns them into verifiable tasks that measure what AI agents can do in real research.">
+  <link rel="canonical" href="https://ai4sbench.org/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AI4S-Benchmark">
+  <meta property="og:title" content="AI4S-Benchmark · An interdisciplinary benchmark for AI agents in science">
+  <meta property="og:description" content="An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.">
+  <meta property="og:url" content="https://ai4sbench.org/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="AI4S-Benchmark · An interdisciplinary benchmark for AI agents in science">
+  <meta name="twitter:description" content="An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.">
+  <link rel="icon" type="image/svg+xml" href="assets/branding/favicon.svg">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+  <link rel="stylesheet" href="css/home.css">
+</head>
+<body data-root="" data-page="home">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container container--wide site-header__inner">
+      <a class="brand" href="./" aria-label="AI4S-Benchmark — home">
+        <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="60" cy="60" rx="29" ry="16" transform="rotate(-30 60 60)" stroke="#F7F9FC" stroke-width="2" stroke-dasharray="4 5"/>
+          <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+          <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+          <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+          <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+          <circle cx="92" cy="92" r="5.5" fill="#7E8AA3"/>
+        </svg>
+        <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" data-nav="about" href="about/">About</a>
+        <a class="site-nav__link" data-nav="tasks" href="tasks/">Tasks</a>
+        <a class="site-nav__link" data-nav="contributors" href="contributors/">Contributors</a>
+        <a class="site-nav__link" data-nav="releases" href="releases/">Releases</a>
+        <a class="site-nav__link site-nav__github" data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <a class="btn btn--primary btn--sm" data-nav="submit" href="submit/">Submit a Task</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- ============ Act 1 · Opening ============ -->
+    <section class="hm-open" aria-label="Introduction">
+      <canvas id="orbit-hero" aria-hidden="true"></canvas>
+      <div class="container hm-open__inner">
+        <span class="hm-label">Open · Independent · Community-built</span>
+        <h1>An interdisciplinary benchmark for AI agents <span class="glow">in science.</span></h1>
+        <p class="hm-open__lede">Scientists contribute hard, open problems from their own fields. We turn them into verifiable tasks and measure how far frontier AI agents get.</p>
+        <div class="hm-open__cta">
+          <a class="btn btn--primary btn--lg" href="reviewers/">Become a Reviewer <svg class="arr" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8h11M9 3.5 13.5 8 9 12.5"/></svg></a>
+          <a class="btn btn--glass btn--lg" href="submit/">Submit a Task</a>
+        </div>
+        <dl class="hm-readout" id="hero-readout" aria-label="Benchmark status">
+          <!-- populated from data/site.json, tasks.json, releases.json -->
+        </dl>
+      </div>
+      <div class="hm-cue" aria-hidden="true">Scroll</div>
+    </section>
+
+    <!-- ============ Affiliation band ============
+         Hidden until we have written permission for each institution's mark.
+         Styles live in css/pages.css (.logo-band*), the marquee cloning in
+         js/pages/home.js (renderLogoBand), the files in assets/logos/.
+         To bring it back: delete this comment wrapper.
+
+    <section class="logo-band" aria-label="Participating institutions">
+      <span class="mono-label logo-band__label">Contributors from</span>
+      <div class="logo-band__viewport">
+        <div class="logo-band__track" id="logo-band-track">
+          <ul class="logo-band__group">
+            <li><img class="logo-band__logo logo-band__logo--seal" src="assets/logos/peking-university.svg" alt="Peking University"></li>
+            <li><img class="logo-band__logo" src="assets/logos/mcgill-university.png" alt="McGill University"></li>
+            <li><span class="logo-band__logo--mask logo-band__logo--tongji" role="img" aria-label="Tongji University"></span></li>
+            <li><img class="logo-band__logo" src="assets/logos/ustc.png" alt="University of Science and Technology of China"></li>
+            <li><img class="logo-band__logo" src="assets/logos/politecnico-milano.svg" alt="Politecnico di Milano"></li>
+            <li><img class="logo-band__logo logo-band__logo--seal" src="assets/logos/rqmp.png" alt="RQMP — Regroupement québécois sur les matériaux de pointe"></li>
+            <li><img class="logo-band__logo" src="assets/logos/bytedance.svg" alt="ByteDance"></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    -->
+
+    <!-- ============ Act 2 · Statement ============ -->
+    <section class="hm-statement" aria-label="What AI4S-Benchmark does">
+      <div class="container">
+        <p id="statement" data-hi="verified,open">Scientists bring the problems that matter. Agents attempt them. Every result is verified by domain experts, in the open, with permanent credit for the people who made it possible.</p>
+      </div>
+    </section>
+
+    <!-- ============ Act 3 · What we collect ============ -->
+    <section class="hm-collect" aria-labelledby="collect-h">
+      <div class="container">
+        <div class="hm-head rv">
+          <span class="hm-label hm-label--blue">What we collect</span>
+          <h2 id="collect-h">Hard, open scientific problems.</h2>
+          <p>Every task must clear three bars before it can enter a release.</p>
+        </div>
+        <div class="hm-bars">
+          <div class="hm-bar rv" style="--d:0ms">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="4" fill="currentColor" stroke="none"/><path d="M24 4v6M24 38v6M4 24h6M38 24h6" stroke-linecap="round"/></svg>
+            <h3>Scientific value</h3>
+            <p>Researchers in the field would want this problem solved on its own merits.</p>
+          </div>
+          <div class="hm-bar rv" style="--d:120ms">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 26 C 8 14, 18 8, 24 8 S 40 14, 40 26" stroke-linecap="round"/><path d="M14 26l6 6 14-14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/><path d="M8 40h32" stroke-linecap="round" stroke-dasharray="2 4"/></svg>
+            <h3>Verifiable</h3>
+            <p>A script, metric, experiment or explicit scientific procedure can judge the result.</p>
+          </div>
+          <div class="hm-bar rv" style="--d:240ms">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 40 L 18 20 L 26 30 L 34 12 L 42 40" stroke-linejoin="round" stroke-linecap="round"/><path d="M6 40h36" stroke-linecap="round"/><circle cx="34" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
+            <h3>Frontier difficulty</h3>
+            <p>Current agents still fail at it, and the difficulty comes from the science itself. Open problems are welcome.</p>
+          </div>
+        </div>
+        <div class="hm-pull rv">
+          <h3>Interdisciplinary tasks are <em>especially encouraged.</em></h3>
+          <p>Many of the most important questions live where fields meet, and that is where evaluation is hardest to find. An agent that combines knowledge, code and tools across disciplines shows a kind of scientific capability that single-domain question answering never reveals.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Act 4 · How it works (pinned stage) ============ -->
+    <section class="hm-stage" id="stage" aria-labelledby="stage-h">
+      <div class="hm-stage__pin">
+        <div class="hm-stage__grid" aria-hidden="true"></div>
+        <div class="container hm-stage__kicker">
+          <span class="hm-label hm-label--cyan">How it works</span>
+          <h2 id="stage-h">From proposal to release, in the open.</h2>
+        </div>
+        <div class="container hm-stage__inner">
+          <div class="hm-stage__copy" id="steps">
+            <article class="hm-step on">
+              <div class="hm-step__num">01</div>
+              <h3>Submit</h3>
+              <p>A researcher proposes a task through the <a href="submit/">proposal form</a>: the problem, the environment, and how a result would be judged.</p>
+            </article>
+            <article class="hm-step">
+              <div class="hm-step__num">02</div>
+              <h3>Scientific review</h3>
+              <p>Automated checks screen it. Domain reviewers assess <a href="about/#good-task">scientific value</a>, verifiability and difficulty.</p>
+            </article>
+            <article class="hm-step">
+              <div class="hm-step__num">03</div>
+              <h3>Task PR</h3>
+              <p>Specification, environment, evaluator and anti-cheating measures land as a structured pull request.</p>
+            </article>
+            <article class="hm-step">
+              <div class="hm-step__num">04</div>
+              <h3>Agent testing</h3>
+              <p>Frontier agents run the task. Pass rate, cost, runtime and failure modes are recorded.</p>
+            </article>
+            <article class="hm-step">
+              <div class="hm-step__num">05</div>
+              <h3>Release</h3>
+              <p>Verified tasks enter a versioned <a href="releases/">release</a>, with every contributor credited.</p>
+            </article>
+          </div>
+          <div class="hm-rail" id="rail" aria-hidden="true">
+            <svg viewBox="0 0 400 400">
+              <defs>
+                <linearGradient id="hmRailGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#2474FF"/><stop offset="1" stop-color="#18B7C9"/>
+                </linearGradient>
+              </defs>
+              <circle class="track" cx="200" cy="200" r="150"/>
+              <circle class="track" cx="200" cy="200" r="150" stroke-dasharray="1 9" stroke-width="5" opacity="0.5"/>
+              <path class="prog" id="prog" pathLength="1" d="M200 50 A150 150 0 1 1 50 200"/>
+              <circle class="core-ring" cx="200" cy="200" r="34"/>
+              <circle class="core" cx="200" cy="200" r="7"/>
+              <g id="nodes"></g>
+            </svg>
+          </div>
+        </div>
+        <div class="hm-stage__progress" id="stage-progress" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+      </div>
+    </section>
+
+    <!-- ============ Act 5 · Roadmap ============ -->
+    <section class="hm-roadmap" aria-labelledby="road-h">
+      <div class="container">
+        <div class="hm-head rv">
+          <span class="hm-label hm-label--blue">Roadmap</span>
+          <h2 id="road-h">Bench today. Dataset and Challenge next.</h2>
+          <p>Three phases, with two publications planned along the way.</p>
+        </div>
+        <ol class="hm-line" id="roadmap">
+          <!-- populated from data/site.json -->
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============ Act 6 · Updates ============ -->
+    <section class="hm-updates" aria-labelledby="upd-h" id="updates">
+      <div class="container hm-updates__grid">
+        <div class="rv">
+          <span class="hm-label hm-label--blue">Updates</span>
+          <h2 id="upd-h">Latest from the benchmark</h2>
+        </div>
+        <ul class="hm-news rv" id="news-list" style="--d:120ms">
+          <!-- populated from data/news.json -->
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ Act 7 · Community ============ -->
+    <section class="hm-finale" aria-labelledby="fin-h">
+      <canvas id="orbit-finale" aria-hidden="true"></canvas>
+      <div class="container hm-finale__inner rv">
+        <span class="hm-label hm-label--cyan">Community</span>
+        <h2 id="fin-h">Built by the people who know which problems matter.</h2>
+        <p>The problems worth benchmarking live in laboratories around the world. AI4S-Benchmark turns that expertise into open, executable evaluations, with visible and permanent credit for every contribution.</p>
+        <div class="hm-finale__cta">
+          <a class="btn btn--primary btn--lg" href="submit/">Submit a Task</a>
+          <a class="btn btn--glass btn--lg" data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">
+            <svg class="tag-link__mark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.198.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+            Join the Discord<span class="visually-hidden">(opens in a new tab)</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container container--wide">
+      <div class="site-footer__inner">
+        <div class="site-footer__brand">
+          <a class="brand" href="./" aria-label="AI4S-Benchmark — home">
+            <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+              <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+              <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+              <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+            </svg>
+            <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+          </a>
+          <p>An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.</p>
+        </div>
+        <div>
+          <h4>Benchmark</h4>
+          <ul>
+            <li><a href="tasks/">Tasks</a></li>
+            <li><a href="releases/">Releases</a></li>
+            <li><a href="about/#methodology">Methodology</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contribute</h4>
+          <ul>
+            <li><a href="submit/">Submit a Task</a></li>
+            <li><a href="reviewers/">Become a Reviewer</a></li>
+            <li><a href="contributors/">Contributors</a></li>
+            <li><a href="contributors/#credit">Credit &amp; Governance</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="about/">About</a></li>
+            <li><a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">Benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a href="mailto:contact@ai4sbench.org">contact@ai4sbench.org</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="site-footer__bottom">
+        <span>AI4S-Benchmark · Advancing science through intelligent evaluation</span>
+        <span class="mono">OPEN · INDEPENDENT · COMMUNITY-BUILT · © <span data-year>2026</span></span>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/pages/home.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[
+  {
+    "version": "v0.1",
+    "status": "preparing",
+    "date": null,
+    "summary": "The first AI4S-Benchmark release. Pilot tasks are in scientific review; the evaluation harness and task infrastructure are being built in the open.",
+    "tasks": null,
+    "domains": null,
+    "agents_evaluated": null,
+    "contributors": [],
+    "release_notes": null,
+    "report": null,
+    "github_tag": null
+  }
+]
