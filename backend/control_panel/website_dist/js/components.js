@@ -110,7 +110,7 @@ export function formatDate(iso) {
 }
 
 export function taskURL(task) {
-  return `${ROOT}tasks/task.html?id=${encodeURIComponent(task.task_slug)}`;
+  return `${ROOT}tasks/task.html?id=${encodeURIComponent(task.id)}`;
 }
 
 export function peopleLine(people, fallback) {
