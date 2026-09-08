@@ -519,6 +519,28 @@ class DatabaseJobListResponse(BaseModel):
     items: list[DatabaseJobResponse]
 
 
+class WebhookDeliveryResponse(BaseModel):
+    id: str
+    event_type: str
+    destination_url: str
+    payload: dict[str, Any]
+    dedupe_key: str
+    state: str
+    attempts: int
+    max_attempts: int
+    available_at: datetime
+    last_error: str | None
+    response_status: int | None
+    response_body: str | None
+    sent_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WebhookDeliveryListResponse(BaseModel):
+    items: list[WebhookDeliveryResponse]
+
+
 class WorkerRunReference(BaseModel):
     id: str
     config: dict[str, Any]
@@ -535,6 +557,7 @@ class AuthenticatedUserResponse(BaseModel):
     email: str
     github_login: str
     role: str
+    can_review: bool
 
 
 class AuthConfigResponse(BaseModel):

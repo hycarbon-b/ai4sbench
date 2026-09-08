@@ -36,6 +36,7 @@ from .schemas import (
     ProposalSyncResponse,
     PullRequestInstructionsResponse,
 )
+from .webhooks import enqueue_proposal_notification, enqueue_review_notification
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -43,12 +44,19 @@ UserDep = Annotated[User, Depends(current_active_user)]
 OptionalUserDep = Annotated[User | None, Depends(current_optional_user)]
 
 
-def user_dict(user: User) -> dict[str, str]:
+def user_can_review(request: Request, user: User) -> bool:
+    settings = request.app.state.settings
+    allowed = {login.lower() for login in (*settings.admin_github_logins, *settings.reviewer_github_logins)}
+    return user.role == "admin" or (user.github_login or "").lower() in allowed
+
+
+def user_dict(request: Request, user: User) -> dict[str, object]:
     return {
         "id": str(user.id),
         "email": user.email,
         "github_login": user.github_login or "",
         "role": user.role,
+        "can_review": user_can_review(request, user),
     }
 
 
@@ -62,10 +70,7 @@ AdminDep = Annotated[User, Depends(require_admin)]
 
 
 def require_reviewer(request: Request, user: UserDep) -> User:
-    settings = request.app.state.settings
-    allowed = {login.lower() for login in (*settings.admin_github_logins, *settings.reviewer_github_logins)}
-    login = (user.github_login or "").lower()
-    if user.role != "admin" and login not in allowed:
+    if not user_can_review(request, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Configured proposal reviewer required",
@@ -83,8 +88,8 @@ ReviewerDep = Annotated[User, Depends(require_reviewer)]
         "Returns the current Dashboard cookie session. A 401 means the visitor must sign in with GitHub."
     ),
 )
-async def me(user: UserDep) -> AuthenticatedUserResponse:
-    return user_dict(user)
+async def me(request: Request, user: UserDep) -> AuthenticatedUserResponse:
+    return user_dict(request, user)
 
 
 @community_router.get(
@@ -776,6 +781,13 @@ async def publish_proposal_review(
         "body": rendered,
     }
     proposal.status = body.review_decision
+    enqueue_review_notification(
+        session,
+        request.app.state.settings,
+        proposal,
+        body,
+        proposal.review_reviewer_login,
+    )
     session.commit()
     return {
         "proposal_id": proposal.id,
@@ -825,6 +837,13 @@ async def create_proposal(
         discussion_number=int(discussion["number"]),
     )
     session.add(item)
+    session.flush()
+    enqueue_proposal_notification(
+        session,
+        request.app.state.settings,
+        item,
+        submission.model_dump(mode="json"),
+    )
     session.commit()
     return {
         "id": item.id,

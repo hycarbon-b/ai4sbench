@@ -19,6 +19,7 @@ import {
   SquareStack,
   StopCircle,
   UploadCloud,
+  Webhook,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -30,6 +31,7 @@ import {
   getCurrentUser,
   getGithubAuthorizeUrl,
   getProposalDomains,
+  resendWebhookDelivery,
   signOut,
   syncProposalDiscussions,
   type CloudProfile,
@@ -42,6 +44,7 @@ import {
   type Run,
   type TaskRevision,
   type User,
+  type WebhookDelivery,
 } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -77,6 +80,7 @@ type View =
   | "plans"
   | "runs"
   | "jobs"
+  | "webhooks"
   | "cloud"
   | "snapshots"
   | "proposals";
@@ -96,6 +100,7 @@ type Ops = {
   plans: Plan[];
   runs: Run[];
   jobs: Job[];
+  webhooks: WebhookDelivery[];
   profiles: CloudProfile[];
   snapshots: DatabaseSnapshot[];
 };
@@ -107,6 +112,7 @@ const emptyOps: Ops = {
   plans: [],
   runs: [],
   jobs: [],
+  webhooks: [],
   profiles: [],
   snapshots: [],
 };
@@ -240,7 +246,7 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const [dashboard, proposals, tasks, plans, runs, jobs, profiles, snapshots] =
+      const [dashboard, proposals, tasks, plans, runs, jobs, webhooks, profiles, snapshots] =
         await Promise.all([
           api<Dashboard>("/api/v1/dashboard"),
           api<{ items: Proposal[] }>("/api/v1/proposals"),
@@ -248,6 +254,7 @@ export default function App() {
           api<{ items: Plan[] }>("/api/v1/plans"),
           api<{ items: Run[] }>("/api/v1/runs"),
           api<{ items: Job[] }>("/api/v1/jobs"),
+          api<{ items: WebhookDelivery[] }>("/api/v1/webhook-deliveries"),
           api<{ items: CloudProfile[] }>("/api/v1/cloud-profiles"),
           api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots"),
         ]);
@@ -258,6 +265,7 @@ export default function App() {
         plans: plans.items,
         runs: runs.items,
         jobs: jobs.items,
+        webhooks: webhooks.items,
         profiles: profiles.items,
         snapshots: snapshots.items,
       });
@@ -468,6 +476,30 @@ export default function App() {
       setLoading(false);
     }
   };
+  const resendWebhook = async (delivery: WebhookDelivery) => {
+    if (
+      delivery.state === "completed" &&
+      !window.confirm(
+        "This delivery already completed. Send the same Discord notification again?",
+      )
+    )
+      return;
+    setLoading(true);
+    setError("");
+    try {
+      await resendWebhookDelivery(delivery.id);
+      setMessage(`Webhook delivery ${short(delivery.id)} queued again.`);
+      await loadOps();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not queue the webhook delivery again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
   const submitProposal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -614,6 +646,7 @@ export default function App() {
               proposalReady={canSubmitProposal}
               onProposal={submitProposal}
               onSyncDiscussions={syncDiscussions}
+              onResendWebhook={resendWebhook}
               loading={loading}
             />
           ) : (
@@ -694,6 +727,7 @@ function AdminPanel({
   proposalReady,
   onProposal,
   onSyncDiscussions,
+  onResendWebhook,
   onSaveDatabaseSnapshot,
   loading,
 }: {
@@ -731,6 +765,7 @@ function AdminPanel({
   proposalReady: boolean;
   onProposal: (event: FormEvent<HTMLFormElement>) => void;
   onSyncDiscussions: () => void;
+  onResendWebhook: (delivery: WebhookDelivery) => void;
   onSaveDatabaseSnapshot: () => void;
   loading: boolean;
 }) {
@@ -763,6 +798,14 @@ function AdminPanel({
       />
     );
   if (view === "jobs") return <JobsPanel jobs={ops.jobs} />;
+  if (view === "webhooks")
+    return (
+      <WebhooksPanel
+        deliveries={ops.webhooks}
+        loading={loading}
+        onResend={onResendWebhook}
+      />
+    );
   if (view === "cloud")
     return (
       <CloudPanel
@@ -1285,6 +1328,111 @@ function JobsPanel({ jobs }: { jobs: Job[] }) {
           ))}
         </Table>
         {!jobs.length && <Empty text="No pending or recent database jobs." />}
+      </DataCard>
+    </>
+  );
+}
+function WebhooksPanel({
+  deliveries,
+  loading,
+  onResend,
+}: {
+  deliveries: WebhookDelivery[];
+  loading: boolean;
+  onResend: (delivery: WebhookDelivery) => void;
+}) {
+  return (
+    <>
+      <Title
+        eyebrow="Outbound notifications"
+        title="Discord webhook deliveries"
+        description="Inspect the exact destination, payload, response, and retry state for proposal and review notifications."
+      />
+      <DataCard
+        title="Delivery history"
+        description="Failed and completed deliveries can be queued again manually; completed sends require confirmation."
+      >
+        <Table
+          headers={[
+            "Event",
+            "Status",
+            "Attempts",
+            "Destination",
+            "Content",
+            "Result",
+            "",
+          ]}
+        >
+          {deliveries.map((delivery) => (
+            <tr key={delivery.id}>
+              <td className="min-w-44 align-top">
+                <code className="text-xs text-sky-200">
+                  {delivery.event_type}
+                </code>
+                <p className="mt-1 text-xs text-slate-500">
+                  {when(delivery.created_at)} · {short(delivery.id)}
+                </p>
+              </td>
+              <td className="align-top">
+                <Status state={delivery.state} />
+              </td>
+              <td className="align-top">
+                {delivery.attempts} / {delivery.max_attempts}
+                <p className="mt-1 text-xs text-slate-500">
+                  Next: {when(delivery.available_at)}
+                </p>
+              </td>
+              <td className="max-w-64 align-top">
+                <code className="block break-all text-[11px] leading-5 text-slate-300">
+                  {delivery.destination_url}
+                </code>
+              </td>
+              <td className="min-w-44 align-top">
+                <details>
+                  <summary className="cursor-pointer text-xs text-sky-300">
+                    View JSON payload
+                  </summary>
+                  <pre className="mt-2 max-h-64 max-w-md overflow-auto whitespace-pre-wrap break-all rounded bg-slate-950 p-2 text-[10px] leading-4 text-slate-300">
+                    {JSON.stringify(delivery.payload, null, 2)}
+                  </pre>
+                </details>
+              </td>
+              <td className="min-w-44 align-top text-xs text-slate-400">
+                <p>
+                  {delivery.response_status
+                    ? `HTTP ${delivery.response_status}`
+                    : "No response yet"}
+                </p>
+                <p>{delivery.sent_at ? `Sent ${when(delivery.sent_at)}` : ""}</p>
+                {(delivery.last_error || delivery.response_body) && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-rose-200">
+                      Response details
+                    </summary>
+                    <pre className="mt-2 max-h-40 max-w-sm overflow-auto whitespace-pre-wrap break-all rounded bg-slate-950 p-2 text-[10px] leading-4">
+                      {delivery.last_error || delivery.response_body}
+                    </pre>
+                  </details>
+                )}
+              </td>
+              <td className="align-top text-right">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || delivery.state === "sending"}
+                  onClick={() => onResend(delivery)}
+                >
+                  <RefreshCw className="size-3.5" />
+                  Resend
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </Table>
+        {!deliveries.length && (
+          <Empty text="No proposal or review webhook deliveries have been recorded." />
+        )}
       </DataCard>
     </>
   );
@@ -1838,6 +1986,7 @@ function Sidebar({
         ["plans", "Execution plans", SquareStack],
         ["runs", "Run queue", Rocket],
         ["jobs", "Worker jobs", ServerCog],
+        ["webhooks", "Discord webhooks", Webhook],
         ["cloud", "Cloud resources", CloudCog],
         ["snapshots", "Database snapshots", History],
       ]
@@ -1974,7 +2123,7 @@ function Metric({
   );
 }
 function Status({ state }: { state: string }) {
-  const tone = ["succeeded", "approved", "running", "enabled", "valid"].includes(state)
+  const tone = ["succeeded", "approved", "running", "enabled", "valid", "completed"].includes(state)
     ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
     : ["failed", "launch_failed", "termination_failed", "invalid"].includes(state)
       ? "border-rose-400/30 bg-rose-400/10 text-rose-200"

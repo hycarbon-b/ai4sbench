@@ -3,6 +3,7 @@ export type User = {
   email: string;
   github_login: string;
   role: "admin" | "contributor" | "member";
+  can_review: boolean;
 };
 
 export type ProposalInput = {
@@ -92,6 +93,24 @@ export type Job = {
   last_error: string | null;
 };
 
+export type WebhookDelivery = {
+  id: string;
+  event_type: string;
+  destination_url: string;
+  payload: Record<string, unknown>;
+  dedupe_key: string;
+  state: string;
+  attempts: number;
+  max_attempts: number;
+  available_at: string;
+  last_error: string | null;
+  response_status: number | null;
+  response_body: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CloudProfile = {
   id: string;
   name: string;
@@ -154,6 +173,10 @@ export const syncProposalDiscussions = () =>
   }>("/api/v1/proposals/sync-discussions", { method: "POST" });
 export const signOut = () =>
   api<void>("/api/v1/auth/logout", { method: "POST" });
+export const resendWebhookDelivery = (id: string) =>
+  api<WebhookDelivery>(`/api/v1/webhook-deliveries/${encodeURIComponent(id)}/resend`, {
+    method: "POST",
+  });
 export const listDatabaseSnapshots = () =>
   api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots");
 export const createDatabaseSnapshot = () =>

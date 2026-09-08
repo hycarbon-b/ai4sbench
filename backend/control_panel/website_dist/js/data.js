@@ -37,6 +37,9 @@ export function getTasks() {
   if (!cache.has("public-tasks")) cache.set("public-tasks", loadTaskBoard());
   return cache.get("public-tasks");
 }
+export function invalidateTasks() {
+  cache.delete("public-tasks");
+}
 export const getResults = () => loadJSON("results");
 export const getContributors = () => loadJSON("contributors");
 export const getReleases = () => loadJSON("releases");

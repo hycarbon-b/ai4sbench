@@ -18,7 +18,7 @@ from .auth import Principal, get_principal
 from .config import Settings
 from .database import get_session
 from .github_source import GitHubTaskSource
-from .models import DatabaseJob, ExecutionPlan, Run, RunEvent, TaskRevision
+from .models import DatabaseJob, ExecutionPlan, Run, RunEvent, TaskRevision, WebhookDelivery
 from .schemas import (
     CreatedRunResponse,
     DashboardResponse,
@@ -46,6 +46,8 @@ from .schemas import (
     TaskRevisionListResponse,
     TaskRevisionResponse,
     TaskRevisionSync,
+    WebhookDeliveryListResponse,
+    WebhookDeliveryResponse,
     WorkerClaim,
     WorkerClaimResponse,
     WorkerComplete,
@@ -71,6 +73,7 @@ from .services import (
     upsert_task_revision,
     upsert_task_revisions,
 )
+from .webhooks import resend_delivery
 
 SessionDep = Annotated[Session, Depends(get_session)]
 AdminDep = Annotated[Principal, Depends(get_principal)]
@@ -431,6 +434,61 @@ def list_jobs(session: SessionDep) -> DatabaseJobListResponse:
             for item in items
         ]
     }
+
+
+def webhook_delivery_dict(item: WebhookDelivery) -> dict[str, object]:
+    return {
+        "id": item.id,
+        "event_type": item.event_type,
+        "destination_url": item.destination_url,
+        "payload": item.payload,
+        "dedupe_key": item.dedupe_key,
+        "state": item.state,
+        "attempts": item.attempts,
+        "max_attempts": item.max_attempts,
+        "available_at": item.available_at,
+        "last_error": item.last_error,
+        "response_status": item.response_status,
+        "response_body": item.response_body,
+        "sent_at": item.sent_at,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+@admin_router.get(
+    "/webhook-deliveries",
+    tags=["operations"],
+    response_model=WebhookDeliveryListResponse,
+    summary="List outbound webhook deliveries",
+)
+def list_webhook_deliveries(session: SessionDep) -> WebhookDeliveryListResponse:
+    items = session.scalars(select(WebhookDelivery).order_by(WebhookDelivery.created_at.desc()).limit(100))
+    return {"items": [webhook_delivery_dict(item) for item in items]}
+
+
+@admin_router.post(
+    "/webhook-deliveries/{delivery_id}/resend",
+    tags=["operations"],
+    response_model=WebhookDeliveryResponse,
+    summary="Queue a webhook delivery again",
+    responses={
+        404: {"description": "The webhook delivery does not exist."},
+        409: {"description": "The webhook is currently being sent."},
+    },
+)
+def post_resend_webhook_delivery(
+    delivery_id: str, session: SessionDep
+) -> WebhookDeliveryResponse:
+    delivery = session.get(WebhookDelivery, delivery_id)
+    if delivery is None:
+        raise HTTPException(status_code=404, detail="Webhook delivery not found")
+    try:
+        resend_delivery(session, delivery)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    session.commit()
+    return webhook_delivery_dict(delivery)
 
 
 @worker_router.post("/runs/{run_id}/claim", response_model=WorkerClaimResponse)

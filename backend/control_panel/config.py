@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     contributor_github_logins: tuple[str, ...] = ()
     contributor_github_emails: tuple[str, ...] = ()
     reviewer_github_logins: tuple[str, ...] = ()
+    discord_webhook_url: SecretStr | None = None
+    website_public_base_url: str = "https://ai4sbench.org"
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
     max_active_runs: int = Field(default=1, ge=1, le=32)

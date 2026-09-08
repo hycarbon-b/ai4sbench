@@ -593,6 +593,112 @@
   flex-direction: column;
   gap: var(--space-5);
 }
+
+.review-workbench {
+  margin-top: var(--space-8);
+  padding: var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--electric-blue) 32%, var(--border));
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--selected-bg) 68%, transparent), transparent 42%),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.task-layout__main > .review-workbench { margin-bottom: 0; }
+.task-layout__main > .review-workbench > .review-workbench__head h2 {
+  margin: 0.2rem 0 0;
+  padding: 0;
+  border: 0;
+}
+.review-workbench__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.review-workbench__head p {
+  max-width: 62ch;
+  margin: var(--space-2) 0 0;
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}
+.review-workbench__current {
+  flex: none;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.review-workbench__form { margin-top: var(--space-5); }
+.review-workbench__group {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-faint);
+}
+.review-workbench__group-title {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.review-workbench__group-title > span {
+  color: var(--electric-blue);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  padding-top: 0.18rem;
+}
+.review-workbench__group-title h3 { margin: 0; font-size: var(--text-lg); color: var(--navy); }
+.review-workbench__group-title p { margin: 0.2rem 0 0; color: var(--ink-muted); font-size: var(--text-xs); }
+.review-workbench input[readonly] { background: var(--surface-sunken); color: var(--ink-muted); font-family: var(--font-mono); }
+.review-decision { border: 0; padding: 0; margin: var(--space-5) 0 0; min-width: 0; }
+.review-decision legend { margin-bottom: 0.45rem; color: var(--navy); font-size: var(--text-sm); font-weight: 600; }
+.review-decision__rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.review-decision__option { position: relative; cursor: pointer; }
+.review-decision__option input { position: absolute; opacity: 0; inset: 0; }
+.review-decision__option > span {
+  display: flex;
+  min-height: 4.25rem;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.review-decision__option strong { color: var(--navy); font-size: var(--text-sm); }
+.review-decision__option small { color: var(--ink-muted); font-size: var(--text-xs); line-height: 1.35; }
+.review-decision__option input:focus-visible + span { box-shadow: var(--focus-ring); }
+.review-decision__option input:checked + span { border-color: var(--electric-blue); background: var(--selected-bg); }
+.review-decision__option--approved input:checked + span { border-color: var(--green); background: var(--green-soft); }
+.review-decision__option--rejected input:checked + span { border-color: var(--red); background: var(--red-soft); }
+.review-workbench__actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.review-workbench__actions > div:first-child { flex: 1; }
+
+@media (max-width: 700px) {
+  .review-workbench { padding: var(--space-4); }
+  .review-workbench__head, .review-workbench__actions { flex-direction: column; align-items: stretch; }
+  .review-decision__rail { grid-template-columns: 1fr; }
+}
 .aside-card {
   background: var(--surface);
   border: 1px solid var(--border);

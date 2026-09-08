@@ -56,3 +56,10 @@ linked task revision. Review comments are accepted only from administrators or
 GitHub logins configured by `TBCP_REVIEWER_GITHUB_LOGINS`. Reviewers can render
 the canonical reply with `POST /api/v1/proposals/reviews/preview` and publish it
 beneath a Discussion with `POST /api/v1/proposals/{proposal_id}/reviews`.
+
+Set `TBCP_DISCORD_WEBHOOK_URL` to enqueue Discord notifications for newly
+published proposals and reviews. `TBCP_WEBSITE_PUBLIC_BASE_URL` controls the
+task-detail link in those messages. The existing `ai4sbench-jobs` process sends
+the queued deliveries. Administrators can inspect the full destination, JSON
+payload, response and retry state at `GET /api/v1/webhook-deliveries`, or queue a
+delivery again with `POST /api/v1/webhook-deliveries/{delivery_id}/resend`.

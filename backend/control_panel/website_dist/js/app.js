@@ -3,7 +3,7 @@
    Global behavior: navigation, GitHub links, footer, a11y bits.
    ============================================================ */
 
-import { getSite, ROOT } from "./data.js";
+import { getSite, ROOT } from "./data.js?v=20260908-review";
 import "./motion.js";
 
 const controlPlaneConfig = getSite().then((site) => String(site.control_plane_url || "").replace(/\/$/, ""));
