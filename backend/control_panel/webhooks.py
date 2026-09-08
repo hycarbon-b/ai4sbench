@@ -12,6 +12,13 @@ from .models import Proposal, WebhookDelivery
 from .schemas import ProposalReview
 
 
+class WebhookResponseError(RuntimeError):
+    def __init__(self, status_code: int, response_body: str) -> None:
+        self.status_code = status_code
+        self.response_body = response_body[:20_000]
+        super().__init__(f"Webhook returned HTTP {status_code}: {self.response_body[:500]}")
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -59,6 +66,10 @@ def enqueue_proposal_notification(
 ) -> WebhookDelivery | None:
     website_url = _website_url(settings, proposal.id)
     payload = {
+        "thread_name": _trim(
+            f"Proposal #{proposal.discussion_number or proposal.id[:8]} - {proposal.title}",
+            100,
+        ),
         "username": "AI4S-Bench",
         "allowed_mentions": {"parse": []},
         "embeds": [
@@ -109,6 +120,11 @@ def enqueue_review_notification(
     }
     colors = {"approved": 0x087A69, "changes_requested": 0xD97706, "rejected": 0xB42318}
     payload = {
+        "thread_name": _trim(
+            f"Review {decision_labels[review.review_decision]} - "
+            f"Proposal #{proposal.discussion_number or proposal.id[:8]}",
+            100,
+        ),
         "username": "AI4S-Bench",
         "allowed_mentions": {"parse": []},
         "embeds": [
@@ -167,8 +183,10 @@ def send_delivery(delivery: WebhookDelivery) -> tuple[int, str]:
     separator = "&" if "?" in delivery.destination_url else "?"
     with httpx.Client(timeout=15) as client:
         response = client.post(f"{delivery.destination_url}{separator}wait=true", json=delivery.payload)
-    response.raise_for_status()
-    return response.status_code, response.text[:20_000]
+    body = response.text[:20_000]
+    if response.is_error:
+        raise WebhookResponseError(response.status_code, body)
+    return response.status_code, body
 
 
 def complete_delivery(session: Session, delivery_id: str, status_code: int, body: str) -> None:
@@ -187,7 +205,14 @@ def complete_delivery(session: Session, delivery_id: str, status_code: int, body
     )
 
 
-def fail_delivery(session: Session, delivery: WebhookDelivery, error: str) -> None:
+def fail_delivery(
+    session: Session,
+    delivery: WebhookDelivery,
+    error: str,
+    *,
+    response_status: int | None = None,
+    response_body: str | None = None,
+) -> None:
     terminal = delivery.attempts >= delivery.max_attempts
     delay = min(300, 2 ** max(0, delivery.attempts - 1))
     session.execute(
@@ -197,6 +222,8 @@ def fail_delivery(session: Session, delivery: WebhookDelivery, error: str) -> No
             state="failed" if terminal else "pending",
             available_at=utcnow() + timedelta(seconds=delay),
             last_error=error[:2_000],
+            response_status=response_status,
+            response_body=response_body[:20_000] if response_body else None,
             updated_at=utcnow(),
         )
     )

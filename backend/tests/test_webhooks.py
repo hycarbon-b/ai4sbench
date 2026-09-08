@@ -15,7 +15,7 @@ from control_panel.identity import User, current_active_user
 from control_panel.job_runner import JobRunner
 from control_panel.main import create_app
 from control_panel.models import WebhookDelivery
-from control_panel.webhooks import enqueue_delivery
+from control_panel.webhooks import WebhookResponseError, enqueue_delivery
 
 
 def github_user(role: str, login: str) -> User:
@@ -96,6 +96,8 @@ def test_proposals_and_reviews_queue_inspectable_discord_deliveries() -> None:
                 )
                 assert deliveries[0].dedupe_key == f"discord:proposal-created:{proposal_id}"
                 assert deliveries[1].dedupe_key == "discord:review-published:DC_kwDONotifyReview"
+                assert deliveries[0].payload["thread_name"].startswith("Proposal #61")
+                assert deliveries[1].payload["thread_name"].startswith("Review Approved")
                 assert deliveries[0].payload["embeds"][0]["title"].startswith("New proposal")
                 assert "Approved" in deliveries[1].payload["embeds"][0]["title"]
 
@@ -160,14 +162,17 @@ def test_webhook_deduplication_and_bounded_retry() -> None:
             delivery_id = first.id
 
         runner = JobRunner(settings)
-        with patch("control_panel.job_runner.send_delivery", side_effect=RuntimeError("offline")):
+        response_error = WebhookResponseError(400, '{"message":"invalid payload"}')
+        with patch("control_panel.job_runner.send_delivery", side_effect=response_error):
             assert runner.run_once() is True
             with app.state.session_factory() as session:
                 delivery = session.get(WebhookDelivery, delivery_id)
                 assert delivery is not None
                 assert delivery.state == "pending"
                 assert delivery.attempts == 1
-                assert "offline" in (delivery.last_error or "")
+                assert "invalid payload" in (delivery.last_error or "")
+                assert delivery.response_status == 400
+                assert delivery.response_body == '{"message":"invalid payload"}'
                 delivery.available_at = datetime.now(UTC) - timedelta(seconds=1)
                 session.commit()
 

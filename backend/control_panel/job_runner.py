@@ -104,7 +104,13 @@ class JobRunner:
             with self.sessions() as session:
                 current = session.get(WebhookDelivery, delivery.id)
                 if current is not None:
-                    fail_delivery(session, current, f"{type(exc).__name__}: {exc}")
+                    fail_delivery(
+                        session,
+                        current,
+                        f"{type(exc).__name__}: {exc}",
+                        response_status=getattr(exc, "status_code", None),
+                        response_body=getattr(exc, "response_body", None),
+                    )
                     session.commit()
         return True
 
