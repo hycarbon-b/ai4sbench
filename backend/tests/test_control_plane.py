@@ -145,6 +145,10 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(site_config.status_code, 200)
         self.assertEqual(site_config.json()["control_plane_url"], "https://dashboard.ai4sbench.org")
 
+        reviewer_form = self.client.get("/website/reviewers/")
+        self.assertEqual(reviewer_form.status_code, 200)
+        self.assertIn("20260910-reviewer-intake", reviewer_form.text)
+
     def test_every_json_api_route_declares_a_response_schema(self) -> None:
         excluded_binary_route = "/api/v1/database-snapshots/{name}/download"
         undocumented = [

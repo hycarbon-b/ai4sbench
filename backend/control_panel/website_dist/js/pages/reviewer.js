@@ -2,10 +2,9 @@
    AI4S-Benchmark · Reviewer application page
 
    Submission is endpoint-first: it POSTs a ReviewerApplication to
-   the control plane. That endpoint is not deployed yet, so when it
-   answers 404/405/501 the form falls back to opening the same
-   application as a prefilled GitHub issue. Once the endpoint ships
-   nothing here needs changing — the POST simply starts succeeding.
+   the control plane. A missing endpoint can still fall back to a
+   prefilled GitHub issue, while validation and service errors remain
+   visible so a successful database submission is never duplicated.
    ============================================================ */
 
 import { getSite } from "../data.js";
@@ -17,7 +16,7 @@ import {
   buildMarkdown,
   buildReviewerDocument,
   validateApplication,
-} from "../reviewer.js";
+} from "../reviewer.js?v=20260910-reviewer-intake";
 
 const form = document.getElementById("reviewer-form");
 const statusEl = document.getElementById("reviewer-status");
@@ -137,16 +136,12 @@ form.addEventListener("submit", async (event) => {
     setStatus("Thank you — your application was received. We will be in touch by email.", "success");
   } catch (error) {
     if (NOT_DEPLOYED.has(error?.status)) {
-      // Expected until the reviewer endpoint ships.
+      // Retain a graceful fallback for static deployments pointing at an older backend.
       await openOnGitHub(a);
     } else if (error?.status === 422) {
       setStatus(error.message || "Some answers were rejected. Please check them and try again.", "error");
     } else {
-      setStatus(
-        `${error?.message || "The application could not be sent."} Opening it on GitHub instead…`,
-        "error"
-      );
-      await openOnGitHub(a);
+      setStatus(error?.message || "The application could not be sent. Please try again.", "error");
     }
   } finally {
     submitBtn.disabled = false;

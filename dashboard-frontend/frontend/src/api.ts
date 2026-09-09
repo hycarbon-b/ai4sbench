@@ -41,6 +41,36 @@ export type Proposal = {
   input_valid: boolean;
 };
 
+export type ReviewerApplicationStatus = "pending" | "approved" | "rejected";
+
+export type ReviewerApplication = {
+  id: string;
+  schema_version: string;
+  name: string;
+  affiliation: string;
+  email: string;
+  github: string | null;
+  role: string | null;
+  domains: string[];
+  domains_display: string[];
+  field: string | null;
+  subfield: string | null;
+  research_background: string;
+  status: ReviewerApplicationStatus;
+  admin_notes: string | null;
+  submitted_by_login: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReviewerApplicationUpdate = {
+  status?: ReviewerApplicationStatus;
+  github?: string | null;
+  admin_notes?: string | null;
+};
+
 export type TaskRevision = {
   id: string;
   repo_url: string;
@@ -164,6 +194,17 @@ export const createProposal = (input: ProposalInput) =>
     method: "POST",
     body: JSON.stringify(input),
   });
+export const updateReviewerApplication = (
+  id: string,
+  input: ReviewerApplicationUpdate,
+) =>
+  api<ReviewerApplication>(
+    `/api/v1/reviewer-applications/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
 export const syncProposalDiscussions = () =>
   api<{
     scanned_count: number;

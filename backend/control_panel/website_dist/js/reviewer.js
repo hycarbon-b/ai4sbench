@@ -5,7 +5,7 @@
    (b) a Markdown fallback. Kept DOM-free so it can be unit-tested
    with Node and reused by other pages — same shape as proposal.js.
 
-   Backend contract (endpoint not deployed yet, see REVIEWER_ENDPOINT):
+   Backend contract:
      POST {control_plane_url}/api/v1/reviewers
      body: ReviewerApplication, schema tb-reviewer-application/v1
      expected: 201 with the created record, 422 on validation error.
@@ -17,7 +17,7 @@
 
 import { slugAlpha } from "./proposal.js";
 
-/** Path on the control plane. Until it exists the form falls back to GitHub. */
+/** Public intake path on the control plane. */
 export const REVIEWER_ENDPOINT = "/api/v1/reviewers";
 
 export const SCHEMA_VERSION = "tb-reviewer-application/v1";

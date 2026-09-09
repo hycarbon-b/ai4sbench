@@ -57,6 +57,12 @@ OPENAPI_TAGS = [
         "description": "Unauthenticated proposal, review and task-revision data for the Website board.",
     },
     {
+        "name": "reviewers",
+        "description": (
+            "Public reviewer applications plus administrator-only application review and access decisions."
+        ),
+    },
+    {
         "name": "plans",
         "description": "Execution-plan creation and optimistic-lock approval.",
     },
@@ -126,7 +132,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
             CORSMiddleware,
             allow_origins=list(resolved.cors_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
             allow_headers=["Content-Type"],
         )
 

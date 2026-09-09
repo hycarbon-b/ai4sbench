@@ -168,6 +168,33 @@ class Proposal(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class ReviewerApplication(Base):
+    """A Website reviewer application and its administrator decision."""
+
+    __tablename__ = "reviewer_applications"
+    __table_args__ = (Index("ix_reviewer_applications_status_created", "status", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    schema_version: Mapped[str] = mapped_column(String(80))
+    name: Mapped[str] = mapped_column(String(200))
+    affiliation: Mapped[str] = mapped_column(String(300))
+    email: Mapped[str] = mapped_column(String(200), index=True)
+    github: Mapped[str | None] = mapped_column(String(100), index=True)
+    role: Mapped[str | None] = mapped_column(String(200))
+    domains: Mapped[list[str]] = mapped_column(JSON, default=list)
+    domains_display: Mapped[list[str]] = mapped_column(JSON, default=list)
+    field: Mapped[str | None] = mapped_column(String(80))
+    subfield: Mapped[str | None] = mapped_column(String(200))
+    research_background: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text)
+    submitted_by_login: Mapped[str | None] = mapped_column(String(100))
+    reviewed_by: Mapped[str | None] = mapped_column(String(100))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ContributionDashboardSnapshot(Base):
     """One immutable, schema-versioned TBS-compatible GitHub projection."""
 

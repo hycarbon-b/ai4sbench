@@ -57,6 +57,14 @@ GitHub logins configured by `TBCP_REVIEWER_GITHUB_LOGINS`. Reviewers can render
 the canonical reply with `POST /api/v1/proposals/reviews/preview` and publish it
 beneath a Discussion with `POST /api/v1/proposals/{proposal_id}/reviews`.
 
+The Website reviewer form submits its versioned dossier to the public
+`POST /api/v1/reviewers` endpoint. Administrators list and inspect applications
+with `GET /api/v1/reviewer-applications`, then update the GitHub identity,
+private notes, or decision with
+`PATCH /api/v1/reviewer-applications/{application_id}`. An approved application
+with a GitHub username grants the same review permission as the configured
+`TBCP_REVIEWER_GITHUB_LOGINS` allowlist.
+
 Set `TBCP_DISCORD_WEBHOOK_URL` to enqueue Discord notifications for newly
 published proposals and reviews. `TBCP_WEBSITE_PUBLIC_BASE_URL` controls the
 task-detail link in those messages. The existing `ai4sbench-jobs` process sends

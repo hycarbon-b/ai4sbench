@@ -18,7 +18,15 @@ from .auth import Principal, get_principal
 from .config import Settings
 from .database import get_session
 from .github_source import GitHubTaskSource
-from .models import DatabaseJob, ExecutionPlan, Run, RunEvent, TaskRevision, WebhookDelivery
+from .models import (
+    DatabaseJob,
+    ExecutionPlan,
+    ReviewerApplication,
+    Run,
+    RunEvent,
+    TaskRevision,
+    WebhookDelivery,
+)
 from .schemas import (
     CreatedRunResponse,
     DashboardResponse,
@@ -34,6 +42,9 @@ from .schemas import (
     PlanListResponse,
     PlanResponse,
     ReadyHealthResponse,
+    ReviewerApplicationListResponse,
+    ReviewerApplicationResponse,
+    ReviewerApplicationUpdate,
     RunCreate,
     RunEventListResponse,
     RunEventResponse,
@@ -116,6 +127,73 @@ def dashboard(session: SessionDep) -> DashboardResponse:
         "task_revisions": [task_dict(item) for item in revisions],
         "counts": counts,
     }
+
+
+@admin_router.get(
+    "/reviewer-applications",
+    tags=["reviewers"],
+    response_model=ReviewerApplicationListResponse,
+    summary="List reviewer applications",
+    description="Returns the complete applicant dossiers and administrator decisions, newest first.",
+)
+def list_reviewer_applications(session: SessionDep) -> ReviewerApplicationListResponse:
+    items = session.scalars(select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc()))
+    return {"items": list(items)}
+
+
+@admin_router.get(
+    "/reviewer-applications/{application_id}",
+    tags=["reviewers"],
+    response_model=ReviewerApplicationResponse,
+    summary="Get one reviewer application",
+    responses={404: {"description": "The reviewer application does not exist."}},
+)
+def get_reviewer_application(
+    application_id: str,
+    session: SessionDep,
+) -> ReviewerApplicationResponse:
+    item = session.get(ReviewerApplication, application_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Reviewer application not found")
+    return item
+
+
+@admin_router.patch(
+    "/reviewer-applications/{application_id}",
+    tags=["reviewers"],
+    response_model=ReviewerApplicationResponse,
+    summary="Manage a reviewer application",
+    description=(
+        "Updates the GitHub identity, private administrator notes, or decision. "
+        "An approved application with a GitHub username grants reviewer access immediately."
+    ),
+    responses={404: {"description": "The reviewer application does not exist."}},
+)
+def update_reviewer_application(
+    application_id: str,
+    body: ReviewerApplicationUpdate,
+    session: SessionDep,
+    principal: AdminDep,
+) -> ReviewerApplicationResponse:
+    item = session.get(ReviewerApplication, application_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Reviewer application not found")
+
+    if "github" in body.model_fields_set:
+        item.github = body.github
+    if "admin_notes" in body.model_fields_set:
+        item.admin_notes = body.admin_notes
+    if "status" in body.model_fields_set and body.status is not None:
+        item.status = body.status
+        if body.status == "pending":
+            item.reviewed_by = None
+            item.reviewed_at = None
+        else:
+            item.reviewed_by = principal.subject
+            item.reviewed_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(item)
+    return item
 
 
 def sqlite_snapshot_paths(settings: Settings) -> tuple[Path, Path]:
@@ -477,9 +555,7 @@ def list_webhook_deliveries(session: SessionDep) -> WebhookDeliveryListResponse:
         409: {"description": "The webhook is currently being sent."},
     },
 )
-def post_resend_webhook_delivery(
-    delivery_id: str, session: SessionDep
-) -> WebhookDeliveryResponse:
+def post_resend_webhook_delivery(delivery_id: str, session: SessionDep) -> WebhookDeliveryResponse:
     delivery = session.get(WebhookDelivery, delivery_id)
     if delivery is None:
         raise HTTPException(status_code=404, detail="Webhook delivery not found")

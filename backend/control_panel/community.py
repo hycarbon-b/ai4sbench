@@ -10,12 +10,12 @@ from typing import Annotated, Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .database import get_session
 from .identity import OAuthAccount, User, current_active_user, current_optional_user
-from .models import CloudProfile, ExecutionPlan, Proposal, Run, TaskRevision
+from .models import CloudProfile, ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
 from .schemas import (
     PROPOSAL_DOMAIN_OPTIONS,
     REVIEW_COMMENT_MARKER,
@@ -35,6 +35,8 @@ from .schemas import (
     ProposalSubmission,
     ProposalSyncResponse,
     PullRequestInstructionsResponse,
+    ReviewerApplicationCreatedResponse,
+    ReviewerApplicationSubmission,
 )
 from .webhooks import enqueue_proposal_notification, enqueue_review_notification
 
@@ -44,19 +46,32 @@ UserDep = Annotated[User, Depends(current_active_user)]
 OptionalUserDep = Annotated[User | None, Depends(current_optional_user)]
 
 
-def user_can_review(request: Request, user: User) -> bool:
+def user_can_review(request: Request, user: User, session: Session) -> bool:
     settings = request.app.state.settings
     allowed = {login.lower() for login in (*settings.admin_github_logins, *settings.reviewer_github_logins)}
-    return user.role == "admin" or (user.github_login or "").lower() in allowed
+    login = (user.github_login or "").lower()
+    if user.role == "admin" or login in allowed:
+        return True
+    if not login:
+        return False
+    approved_application = session.scalar(
+        select(ReviewerApplication.id)
+        .where(
+            ReviewerApplication.status == "approved",
+            func.lower(ReviewerApplication.github) == login,
+        )
+        .limit(1)
+    )
+    return approved_application is not None
 
 
-def user_dict(request: Request, user: User) -> dict[str, object]:
+def user_dict(request: Request, user: User, session: Session) -> dict[str, object]:
     return {
         "id": str(user.id),
         "email": user.email,
         "github_login": user.github_login or "",
         "role": user.role,
-        "can_review": user_can_review(request, user),
+        "can_review": user_can_review(request, user, session),
     }
 
 
@@ -69,8 +84,8 @@ def require_admin(user: UserDep) -> User:
 AdminDep = Annotated[User, Depends(require_admin)]
 
 
-def require_reviewer(request: Request, user: UserDep) -> User:
-    if not user_can_review(request, user):
+def require_reviewer(request: Request, user: UserDep, session: SessionDep) -> User:
+    if not user_can_review(request, user, session):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Configured proposal reviewer required",
@@ -88,8 +103,8 @@ ReviewerDep = Annotated[User, Depends(require_reviewer)]
         "Returns the current Dashboard cookie session. A 401 means the visitor must sign in with GitHub."
     ),
 )
-async def me(request: Request, user: UserDep) -> AuthenticatedUserResponse:
-    return user_dict(request, user)
+async def me(request: Request, user: UserDep, session: SessionDep) -> AuthenticatedUserResponse:
+    return user_dict(request, user, session)
 
 
 @community_router.get(
@@ -112,6 +127,33 @@ def auth_config(request: Request) -> AuthConfigResponse:
 )
 def proposal_domains() -> ProposalDomainListResponse:
     return {"items": list(PROPOSAL_DOMAIN_OPTIONS)}
+
+
+@community_router.post(
+    "/reviewers",
+    tags=["reviewers"],
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewerApplicationCreatedResponse,
+    summary="Submit a reviewer application",
+    description=(
+        "Accepts the exact schema emitted by the public Website reviewer form. "
+        "Authentication is optional; a signed-in GitHub login is recorded for administrator context."
+    ),
+    responses={422: {"description": "The application does not match the Website reviewer schema."}},
+)
+def create_reviewer_application(
+    body: ReviewerApplicationSubmission,
+    session: SessionDep,
+    user: OptionalUserDep,
+) -> ReviewerApplicationCreatedResponse:
+    item = ReviewerApplication(
+        **body.model_dump(),
+        status="pending",
+        submitted_by_login=user.github_login if user else None,
+    )
+    session.add(item)
+    session.commit()
+    return ReviewerApplicationCreatedResponse.model_validate(item, from_attributes=True)
 
 
 @community_router.post(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
 from typing import Any, Literal
 
@@ -15,6 +16,16 @@ PROPOSAL_DOMAIN_OPTIONS = (
     "Applied Mathematics",
     "Interdisciplinary",
 )
+
+REVIEWER_APPLICATION_SCHEMA_VERSION = "tb-reviewer-application/v1"
+
+
+def reviewer_slug_alpha(value: str) -> str:
+    """Mirror the Website's NFKD ASCII-letter slug generation."""
+
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_letters = "".join(character for character in normalized if not unicodedata.combining(character))
+    return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z]+", "-", ascii_letters.lower())))[:79]
 
 
 class TaskRevisionCreate(BaseModel):
@@ -270,6 +281,159 @@ class ProposalSubmission(BaseModel):
                 "Submitted via ai4sbench contribution form",
             )
         )
+
+
+class ReviewerApplicationSubmission(BaseModel):
+    """Public reviewer-intake contract emitted by the Website form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["tb-reviewer-application/v1"] = REVIEWER_APPLICATION_SCHEMA_VERSION
+    name: str = Field(min_length=2, max_length=200)
+    affiliation: str = Field(min_length=2, max_length=300)
+    email: str = Field(min_length=5, max_length=200)
+    github: str | None = Field(default=None, max_length=100)
+    role: str | None = Field(default=None, max_length=200)
+    domains: list[str] = Field(min_length=1, max_length=20)
+    domains_display: list[str] = Field(min_length=1, max_length=20)
+    field: str | None = Field(default=None, max_length=79)
+    subfield: str | None = Field(default=None, max_length=200)
+    research_background: str = Field(min_length=60, max_length=4_000)
+
+    @field_validator(
+        "name",
+        "affiliation",
+        "email",
+        "github",
+        "role",
+        "field",
+        "subfield",
+        "research_background",
+        mode="before",
+    )
+    @classmethod
+    def strip_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("email must be a valid email address")
+        return value.lower()
+
+    @field_validator("github")
+    @classmethod
+    def valid_optional_github_login(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.removeprefix("@").lower()
+        if not re.fullmatch(r"[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", value):
+            raise ValueError("github must be a GitHub username without @")
+        return value
+
+    @field_validator("domains", "domains_display")
+    @classmethod
+    def unique_nonempty_list(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value]
+        if any(not item or len(item) > 200 for item in cleaned):
+            raise ValueError("domain entries must contain 1 to 200 characters")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("domain entries must be unique")
+        return cleaned
+
+    @model_validator(mode="after")
+    def matching_display_identifiers(self) -> ReviewerApplicationSubmission:
+        if len(self.domains) != len(self.domains_display):
+            raise ValueError("domains and domains_display must contain the same number of entries")
+        expected_domains = [reviewer_slug_alpha(item) for item in self.domains_display]
+        if any(not re.fullmatch(r"[a-z][a-z-]{1,78}", item) for item in self.domains):
+            raise ValueError("domains must contain lowercase ASCII letter-and-hyphen identifiers")
+        if self.domains != expected_domains:
+            raise ValueError("domains must match the slugs derived from domains_display")
+        if (self.field is None) != (self.subfield is None):
+            raise ValueError("field and subfield must either both be provided or both be null")
+        if self.subfield is not None:
+            if not re.fullmatch(r"[a-z][a-z-]{1,78}", self.field or ""):
+                raise ValueError("field must be a lowercase ASCII letter-and-hyphen identifier")
+            if self.field != reviewer_slug_alpha(self.subfield):
+                raise ValueError("field must match the slug derived from subfield")
+        return self
+
+
+class ReviewerApplicationCreatedResponse(BaseModel):
+    """The stored applicant-facing record returned after public submission."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    schema_version: str
+    name: str
+    affiliation: str
+    email: str
+    github: str | None
+    role: str | None
+    domains: list[str]
+    domains_display: list[str]
+    field: str | None
+    subfield: str | None
+    research_background: str
+    status: Literal["pending", "approved", "rejected"]
+    submitted_by_login: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewerApplicationResponse(ReviewerApplicationCreatedResponse):
+    """Administrator view including private notes and decision provenance."""
+
+    admin_notes: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+
+
+class ReviewerApplicationListResponse(BaseModel):
+    items: list[ReviewerApplicationResponse]
+
+
+class ReviewerApplicationUpdate(BaseModel):
+    """Administrator decision fields; omitted values remain unchanged."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["pending", "approved", "rejected"] | None = None
+    github: str | None = Field(default=None, max_length=100)
+    admin_notes: str | None = Field(default=None, max_length=8_000)
+
+    @field_validator("github", mode="before")
+    @classmethod
+    def normalize_github(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        value = value.strip().removeprefix("@").lower()
+        if not value:
+            return None
+        if not re.fullmatch(r"[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", value):
+            raise ValueError("github must be a GitHub username without @")
+        return value
+
+    @field_validator("admin_notes", mode="before")
+    @classmethod
+    def normalize_notes(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+    @model_validator(mode="after")
+    def contains_an_update(self) -> ReviewerApplicationUpdate:
+        if not self.model_fields_set:
+            raise ValueError("at least one reviewer application field must be supplied")
+        if "status" in self.model_fields_set and self.status is None:
+            raise ValueError("status cannot be null")
+        return self
 
 
 REVIEW_SCHEMA_VERSION = "ai4sbench-proposal-review/v1"
