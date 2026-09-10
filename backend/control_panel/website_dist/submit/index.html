@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit a Scientific Task | AI4S-Benchmark</title>
+  <meta name="description" content="Propose a research-grade, verifiable, genuinely challenging scientific task for AI4S-Benchmark. Sign in with GitHub and your proposal opens as a GitHub Discussion for scientific review.">
+  <link rel="canonical" href="https://ai4sbench.org/submit/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AI4S-Benchmark">
+  <meta property="og:title" content="Submit a Scientific Task | AI4S-Benchmark">
+  <meta property="og:description" content="Propose a research-grade, verifiable, genuinely challenging scientific task for AI4S-Benchmark. Sign in with GitHub and your proposal opens as a GitHub Discussion for scientific review.">
+  <meta property="og:url" content="https://ai4sbench.org/submit/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Submit a Scientific Task | AI4S-Benchmark">
+  <meta name="twitter:description" content="Propose a research-grade, verifiable, genuinely challenging scientific task for AI4S-Benchmark. Sign in with GitHub and your proposal opens as a GitHub Discussion for scientific review.">
+  <link rel="icon" type="image/svg+xml" href="../assets/branding/favicon.svg">
+  <link rel="manifest" href="../site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/components.css">
+  <link rel="stylesheet" href="../css/pages.css">
+</head>
+<body data-root="../" data-page="submit">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container container--wide site-header__inner">
+      <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+        <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="60" cy="60" rx="29" ry="16" transform="rotate(-30 60 60)" stroke="#F7F9FC" stroke-width="2" stroke-dasharray="4 5"/>
+          <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+          <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+          <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+          <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+          <circle cx="92" cy="92" r="5.5" fill="#7E8AA3"/>
+        </svg>
+        <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" data-nav="about" href="../about/">About</a>
+        <a class="site-nav__link" data-nav="tasks" href="../tasks/">Tasks</a>
+        <a class="site-nav__link" data-nav="contributors" href="../contributors/">Contributors</a>
+        <a class="site-nav__link" data-nav="releases" href="../releases/">Releases</a>
+        <a class="site-nav__link site-nav__github" data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <a class="btn btn--primary btn--sm" data-nav="submit" href="../submit/">Submit a Task</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <section class="section section--tight" id="wizard-section">
+      <div class="container container--wide">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Task proposal</span>
+            <h1 id="wizard">Draft your proposal</h1>
+            <p>Four short sections. When you submit, your proposal opens as a GitHub Discussion in the benchmark repository.</p>
+          </div>
+        </div>
+
+        <form class="wizard" id="proposal-wizard" novalidate>
+          <nav class="wizard__nav" aria-label="Proposal steps" id="wizard-nav">
+            <!-- populated by submit.js -->
+          </nav>
+
+          <div class="wizard__panel">
+
+            <!-- Step 1 · Scientific problem -->
+            <fieldset class="wizard__step" data-step="0">
+              <legend class="visually-hidden">Scientific problem</legend>
+              <h2>Scientific problem</h2>
+              <p>What is the problem, and why does it matter scientifically?</p>
+
+              <div class="form-field" data-field="title">
+                <label for="f-title">Task title</label>
+                <input type="text" id="f-title" name="title" maxlength="160" placeholder="e.g. Active learning for electronic-structure surrogates" autocomplete="off">
+                <p class="hint">Identifier: <code id="slug-preview" class="slug-preview">—</code></p>
+              </div>
+
+              <div class="form-field" data-field="domain">
+                <label id="f-domain-label">Domains involved</label>
+                <p class="hint">Pick every domain the task draws on. Interdisciplinary tasks are especially encouraged.</p>
+                <div class="choice-grid" id="f-domain" role="group" aria-labelledby="f-domain-label">
+                  <!-- populated from data/site.json -->
+                </div>
+              </div>
+
+              <div class="form-field" data-field="field_name">
+                <label for="f-field">Specific field</label>
+                <input type="text" id="f-field" name="field_name" maxlength="160" placeholder="e.g. Coastal oceanography, DFT, single-cell genomics" autocomplete="off">
+              </div>
+
+              <div class="form-field" data-field="problem">
+                <label for="f-problem">Problem specification</label>
+                <textarea id="f-problem" name="problem" rows="5" placeholder="What scientific problem does this task address? Why is it important?"></textarea>
+              </div>
+
+              <div class="form-field" data-field="solvability">
+                <label for="f-solvability">Solvability</label>
+                <textarea id="f-solvability" name="solvability" rows="3" placeholder="Is this problem solvable in principle? Does the difficulty matter in a “good way”?"></textarea>
+              </div>
+
+              <div class="form-field" data-field="references">
+                <label for="f-references">References &amp; resources</label>
+                <textarea id="f-references" name="references" rows="3" placeholder="Papers, datasets, code or protocols this task builds on — enough for a reviewer to check the science."></textarea>
+              </div>
+            </fieldset>
+
+            <!-- Step 2 · Environment -->
+            <fieldset class="wizard__step" data-step="1" hidden>
+              <legend class="visually-hidden">Environment</legend>
+              <h2>Environment</h2>
+              <p>What does the agent need to run this task?</p>
+
+              <div class="form-field" data-field="software">
+                <label for="f-software">Software and tools</label>
+                <textarea id="f-software" name="software" rows="3" placeholder="The tools, software and dependencies required in this task."></textarea>
+              </div>
+
+              <div class="form-field" data-field="dataset">
+                <label for="f-dataset">Dataset &amp; artifacts</label>
+                <textarea id="f-dataset" name="dataset" rows="3" placeholder="What data is provided, its provenance and license, and what must stay hidden from the agent."></textarea>
+              </div>
+
+              <div class="form-field" data-field="compute">
+                <label for="f-compute">Computation resources (time and device)</label>
+                <textarea id="f-compute" name="compute" rows="2" placeholder="e.g. About 2 hours on one GPU and 8 CPU cores; 20 GB of disk."></textarea>
+                <p class="hint"><strong>Limit for now: one GPU and 16 CPU cores per task.</strong> Estimate the run time and memory within that budget.</p>
+              </div>
+
+              <div class="form-field" data-field="workflow">
+                <label for="f-workflow">Expected workflow &amp; outputs <span class="optional">(optional)</span></label>
+                <textarea id="f-workflow" name="workflow" rows="3" placeholder="What the agent starts with, what it is expected to do, and what it hands back."></textarea>
+                <p class="hint">Leave empty for open questions where no workflow can be prescribed.</p>
+              </div>
+            </fieldset>
+
+            <!-- Step 3 · Evaluation -->
+            <fieldset class="wizard__step" data-step="2" hidden>
+              <legend class="visually-hidden">Evaluation</legend>
+              <h2>Evaluation</h2>
+              <p>How is success measured — honestly and reproducibly?</p>
+
+              <div class="form-field" data-field="evaluation">
+                <label for="f-evaluation">How will this task be evaluated?</label>
+                <textarea id="f-evaluation" name="evaluation" rows="4" placeholder="What is the metric, and how is it used to validate the agent's output? If an LLM is used as judge, how do you make that repeatable?"></textarea>
+              </div>
+
+              <div class="form-field" data-field="leakage">
+                <label for="f-leakage">Is there risk of cheating and leakage?</label>
+                <textarea id="f-leakage" name="leakage" rows="4" placeholder="Are there open resources that weaken this task? Could an agent use openly available answers? Is the evaluation repeatable?"></textarea>
+              </div>
+            </fieldset>
+
+            <!-- Step 4 · Contributor -->
+            <fieldset class="wizard__step" data-step="3" hidden>
+              <legend class="visually-hidden">Contributor</legend>
+              <h2>Contributor</h2>
+              <p>How you will be credited, and how reviewers can reach you.</p>
+
+              <div class="form-field" data-field="name">
+                <label for="f-name">Name</label>
+                <input type="text" id="f-name" name="name" maxlength="200" autocomplete="name">
+              </div>
+
+              <div class="form-field" data-field="affiliation">
+                <label for="f-affiliation">Institution / affiliation <span class="optional">(optional)</span></label>
+                <input type="text" id="f-affiliation" name="affiliation" maxlength="300" autocomplete="organization">
+              </div>
+
+              <div class="form-field" data-field="github">
+                <label for="f-github">GitHub username</label>
+                <input type="text" id="f-github" name="github" maxlength="100" autocomplete="off" placeholder="octocat">
+                <p class="hint">Filled in automatically once you sign in.</p>
+              </div>
+            </fieldset>
+
+            <!-- Step 5 · Review & submit -->
+            <fieldset class="wizard__step" data-step="4" hidden>
+              <legend class="visually-hidden">Review and submit</legend>
+              <h2>Review &amp; submit</h2>
+              <p>Submitting opens a GitHub Discussion linked to your GitHub identity, so sign in first. Nothing is sent until you press Submit.</p>
+
+              <div class="review-list" id="review-list" aria-live="polite"></div>
+
+              <div class="auth-card" id="auth-card">
+                <div class="auth-card__state" id="auth-state" role="status">Checking sign-in…</div>
+                <button type="button" class="btn btn--secondary" id="auth-action" hidden>Sign in with GitHub</button>
+              </div>
+
+              <div class="submit-actions">
+                <button type="submit" class="btn btn--primary btn--lg" id="wizard-submit" disabled>Submit proposal</button>
+                <button type="button" class="btn btn--ghost" id="copy-markdown">Copy as Markdown</button>
+                <span class="copy-feedback" id="copy-feedback" role="status">Copied</span>
+              </div>
+              <p class="submit-status" id="submit-status" role="status" aria-live="polite"></p>
+              <details class="preview-details">
+                <summary>Preview the Markdown version</summary>
+                <div class="proposal-preview" id="proposal-preview" tabindex="0" aria-label="Proposal preview in Markdown"></div>
+              </details>
+            </fieldset>
+
+            <!-- Success -->
+            <div class="submit-success" id="submit-success" hidden>
+              <span class="submit-success__mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+              </span>
+              <h2>Proposal submitted</h2>
+              <p id="success-text">Your proposal is now a GitHub Discussion. Reviewers will reply there.</p>
+              <div class="submit-actions">
+                <a class="btn btn--primary" id="success-link" href="#" target="_blank" rel="noopener">Open the Discussion <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>
+                <button type="button" class="btn btn--secondary" id="success-another">Submit another task</button>
+              </div>
+              <ol class="next-steps">
+                <li><strong>Domain review</strong> — reviewers assess scientific value, verifiability and difficulty in the Discussion.</li>
+                <li><strong>Task PR</strong> — an accepted proposal becomes a task specification and verifier in the benchmark repository.</li>
+                <li><strong>Validation</strong> — the task is run against agents and, once verified, enters a release.</li>
+              </ol>
+            </div>
+
+            <div class="wizard__footer" id="wizard-footer">
+              <button type="button" class="btn btn--secondary" id="wizard-prev"><svg class="arr arr--back" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8h-11M7 3.5 2.5 8 7 12.5"/></svg> Back</button>
+              <button type="button" class="btn btn--primary" id="wizard-next">Next <svg class="arr" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8h11M9 3.5 13.5 8 9 12.5"/></svg></button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container container--wide">
+      <div class="site-footer__inner">
+        <div class="site-footer__brand">
+          <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+            <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+              <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+              <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+              <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+            </svg>
+            <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+          </a>
+          <p>An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.</p>
+        </div>
+        <div>
+          <h4>Benchmark</h4>
+          <ul>
+            <li><a href="../tasks/">Tasks</a></li>
+            <li><a href="../releases/">Releases</a></li>
+            <li><a href="../about/#methodology">Methodology</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contribute</h4>
+          <ul>
+            <li><a href="../submit/">Submit a Task</a></li>
+            <li><a href="../reviewers/">Become a Reviewer</a></li>
+            <li><a href="../contributors/">Contributors</a></li>
+            <li><a href="../contributors/#credit">Credit &amp; Governance</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="../about/">About</a></li>
+            <li><a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">Benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a href="mailto:contact@ai4sbench.org">contact@ai4sbench.org</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="site-footer__bottom">
+        <span>AI4S-Benchmark · Advancing science through intelligent evaluation</span>
+        <span class="mono">OPEN · INDEPENDENT · COMMUNITY-BUILT · © <span data-year>2026</span></span>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="../js/app.js?v=20260908"></script>
+  <script type="module" src="../js/pages/submit.js?v=20260908"></script>
+</body>
+</html>

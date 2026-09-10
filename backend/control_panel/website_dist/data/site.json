@@ -1,0 +1,165 @@
+{
+  "name": "AI4S-Benchmark",
+  "tagline": "Define what AI solves next in science.",
+  "description": "An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.",
+  "phase": "bench",
+  "roadmap": [
+    {
+      "id": "bench",
+      "title": "Bench",
+      "summary": "Continuously test frontier AI agents against difficult scientific problems and measure the moving boundary of AI × Science capability.",
+      "current": true,
+      "short": "Continuously test frontier agents on hard scientific problems."
+    },
+    {
+      "id": "dataset",
+      "title": "Dataset",
+      "summary": "Accumulate high-quality tasks, execution environments, agent trajectories, evaluators and scientific verification systems into a valuable scientific dataset.",
+      "current": false,
+      "short": "Accumulate tasks, environments, trajectories and evaluators."
+    },
+    {
+      "id": "challenge",
+      "title": "Challenge",
+      "summary": "Organize open challenges around important problems that remain unsolved, and revisit them periodically as AI systems become stronger.",
+      "current": false,
+      "short": "Open challenges on problems that remain unsolved."
+    }
+  ],
+  "submissions": [
+    {
+      "venue": "ICML 2027",
+      "when": "Task proposals close 31 December 2026",
+      "deadline": "2026-12-31",
+      "summary": "The benchmark, its first task set and the accompanying agent results go to ICML 2027.",
+      "short": "Proposals close 31 December 2026."
+    },
+    {
+      "venue": "Nature",
+      "when": "After ICML 2027",
+      "summary": "The complete task set, environments and evaluation results are submitted to Nature.",
+      "short": "The full task set, methodology and results, after ICML."
+    }
+  ],
+  "github": {
+    "org_url": "https://github.com/ai4s-bench",
+    "bench_repo": "https://github.com/ai4s-bench/ai4s-bench",
+    "web_repo": "https://github.com/ai4s-bench/ai4s-bench-web",
+    "task_proposal_form": "https://github.com/ai4s-bench/ai4s-bench/issues/new/choose",
+    "reviewer_form": "https://github.com/ai4s-bench/ai4s-bench/issues/new/choose",
+    "discussions": "https://github.com/ai4s-bench/ai4s-bench/discussions",
+    "contributing": "https://github.com/ai4s-bench/ai4s-bench/blob/main/CONTRIBUTING.md",
+    "methodology_docs": "https://github.com/ai4s-bench/ai4s-bench/tree/main/docs"
+  },
+  "discord": "https://discord.gg/3SNTCj5wm",
+  "canonical_url": "https://ai4sbench.org",
+  "control_plane_url": "https://dashboard.ai4sbench.org",
+  "statuses": {
+    "proposed": {
+      "label": "Proposed",
+      "description": "A researcher has proposed this task. It has not yet entered formal scientific review."
+    },
+    "under_review": {
+      "label": "Under Review",
+      "description": "Automated screening has passed and domain reviewers are assessing scientific value, verifiability and difficulty."
+    },
+    "agent_testing": {
+      "label": "Agent Testing",
+      "description": "The task environment and evaluator are built. Frontier agents are being run to calibrate difficulty and record failure modes."
+    },
+    "verified": {
+      "label": "Verified",
+      "description": "The task, environment and evaluator have been validated under the AI4S-Benchmark evaluation procedure."
+    },
+    "released": {
+      "label": "Released",
+      "description": "The task is part of a versioned AI4S-Benchmark release."
+    }
+  },
+  "domains": [
+    "Materials Science",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "AI / ML",
+    "Applied Mathematics",
+    "Interdisciplinary"
+  ],
+  "criteria": [
+    {
+      "title": "Scientific Value",
+      "text": "The task represents something researchers in the field genuinely consider meaningful — not difficulty invented purely to confuse an AI."
+    },
+    {
+      "title": "Verifiable",
+      "text": "Correctness can be judged through a script, metric, experimental criterion or explicit scientific evaluation procedure."
+    },
+    {
+      "title": "Frontier Difficulty",
+      "text": "The task remains genuinely challenging for current agents, or involves a workflow whose solution itself constitutes meaningful scientific work."
+    }
+  ],
+  "credit": {
+    "points": [
+      {
+        "contribution": "Task accepted into AI4S-Benchmark",
+        "points": "5",
+        "category": "Task"
+      },
+      {
+        "contribution": "Formal task review",
+        "points": "4",
+        "category": "Review"
+      },
+      {
+        "contribution": "Infrastructure, documentation or website maintenance",
+        "points": "5",
+        "category": "Maintain"
+      },
+      {
+        "contribution": "Contributor organization, review coordination, helping newcomers",
+        "points": "1–2",
+        "category": "Organize"
+      },
+      {
+        "contribution": "Effective PI / student / collaborator referral",
+        "points": "2",
+        "category": "Referral"
+      },
+      {
+        "contribution": "Effective sponsor introduction",
+        "points": "3",
+        "category": "Sponsorship"
+      },
+      {
+        "contribution": "Sponsorship / strategic collaboration completed",
+        "points": "5",
+        "category": "Sponsorship"
+      }
+    ],
+    "roles": [
+      {
+        "name": "Contributor",
+        "threshold": "First formal contribution",
+        "description": "Recognized in CONTRIBUTORS.md, the website contributor directory and the relevant release contributor list."
+      },
+      {
+        "name": "Active Contributor",
+        "threshold": "10 points",
+        "description": "A sustained participant across tasks, reviews or maintenance."
+      },
+      {
+        "name": "Core Contributor",
+        "threshold": "20 points · ≥ 2 contribution categories",
+        "description": "Demonstrated breadth — for example Task + Review, or Task + Maintain."
+      },
+      {
+        "name": "Maintainer",
+        "threshold": "20 points + sustained project maintenance",
+        "description": "Participates in task acceptance, review organization, contributor management, roadmap and important technical decisions."
+      }
+    ],
+    "committees_note": "Scientific areas may form field-specific committees (Area Chair, Committee Members) responsible for organizing reviews and deciding task acceptance in that area. Committees are being formed as the community grows.",
+    "authorship_note": "Substantive academic contributions may be considered for authorship according to the contribution and release policy. Specific task and review credit remains permanently visible regardless."
+  }
+}

@@ -1,0 +1,98 @@
+[
+  {
+    "name": "Mei-Lin Zhao",
+    "github": null,
+    "institution": "Peking University",
+    "role": "Maintainer",
+    "areas": ["Materials Science", "AI / ML"],
+    "points": 34,
+    "breakdown": { "task": 10, "review": 8, "maintain": 10, "community": 6 },
+    "tasks_authored": ["AI4S-MAT-001", "AI4S-MAT-004"],
+    "tasks_reviewed": ["AI4S-CHE-002", "AI4S-PHY-003"],
+    "since": "2026-06"
+  },
+  {
+    "name": "Tomás Ferreira",
+    "github": null,
+    "institution": "Politecnico di Milano",
+    "role": "Core Contributor",
+    "areas": ["Applied Mathematics", "Physics"],
+    "points": 27,
+    "breakdown": { "task": 15, "review": 12, "maintain": 0, "community": 0 },
+    "tasks_authored": ["AI4S-MTH-002", "AI4S-PHY-003", "AI4S-MTH-005"],
+    "tasks_reviewed": ["AI4S-MAT-001", "AI4S-BIO-002", "AI4S-CHE-002"],
+    "since": "2026-06"
+  },
+  {
+    "name": "Priya Raghunathan",
+    "github": null,
+    "institution": "McGill University",
+    "role": "Core Contributor",
+    "areas": ["Biology", "Chemistry", "AI / ML"],
+    "points": 24,
+    "breakdown": { "task": 5, "review": 16, "maintain": 0, "community": 3 },
+    "tasks_authored": ["AI4S-BIO-002"],
+    "tasks_reviewed": ["AI4S-MAT-004", "AI4S-CHE-001", "AI4S-BIO-003", "AI4S-MTH-002"],
+    "since": "2026-07"
+  },
+  {
+    "name": "Jonas Weber",
+    "github": null,
+    "institution": "University of Science and Technology of China",
+    "role": "Active Contributor",
+    "areas": ["Chemistry"],
+    "points": 17,
+    "breakdown": { "task": 5, "review": 12, "maintain": 0, "community": 0 },
+    "tasks_authored": ["AI4S-CHE-002"],
+    "tasks_reviewed": ["AI4S-MAT-001", "AI4S-CHE-001", "AI4S-BIO-002"],
+    "since": "2026-07"
+  },
+  {
+    "name": "Hana Okafor",
+    "github": null,
+    "institution": "Tongji University",
+    "role": "Active Contributor",
+    "areas": ["Physics", "Interdisciplinary"],
+    "points": 14,
+    "breakdown": { "task": 10, "review": 4, "maintain": 0, "community": 0 },
+    "tasks_authored": ["AI4S-PHY-001", "AI4S-PHY-002"],
+    "tasks_reviewed": ["AI4S-MTH-005"],
+    "since": "2026-07"
+  },
+  {
+    "name": "Lucas Moreau",
+    "github": null,
+    "institution": "RQMP",
+    "role": "Active Contributor",
+    "areas": ["Materials Science"],
+    "points": 12,
+    "breakdown": { "task": 0, "review": 8, "maintain": 0, "community": 4 },
+    "tasks_authored": [],
+    "tasks_reviewed": ["AI4S-MAT-004", "AI4S-PHY-001"],
+    "since": "2026-08"
+  },
+  {
+    "name": "Sofia Andersson",
+    "github": null,
+    "institution": "ByteDance",
+    "role": "Contributor",
+    "areas": ["AI / ML"],
+    "points": 10,
+    "breakdown": { "task": 0, "review": 0, "maintain": 10, "community": 0 },
+    "tasks_authored": [],
+    "tasks_reviewed": [],
+    "since": "2026-08"
+  },
+  {
+    "name": "Daniel Kim",
+    "github": null,
+    "institution": "Peking University",
+    "role": "Contributor",
+    "areas": ["Biology"],
+    "points": 5,
+    "breakdown": { "task": 5, "review": 0, "maintain": 0, "community": 0 },
+    "tasks_authored": ["AI4S-BIO-003"],
+    "tasks_reviewed": [],
+    "since": "2026-08"
+  }
+]

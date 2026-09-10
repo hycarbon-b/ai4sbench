@@ -13,7 +13,7 @@ from sqlalchemy import select
 from .config import Settings, get_settings
 from .database import Base, create_database_engine, create_session_factory
 from .job_queue import claim, complete, defer, fail
-from .models import DatabaseJob
+from .models import DatabaseJob, WebhookDelivery
 from .providers import EC2Provider, provider_from_settings
 from .services import (
     CapacityError,
@@ -23,6 +23,7 @@ from .services import (
     mark_job_exhausted,
     reconcile,
 )
+from .webhooks import claim_delivery, complete_delivery, fail_delivery, send_delivery
 
 logger = logging.getLogger("ai4sbench.jobs")
 
@@ -85,10 +86,40 @@ class JobRunner:
                         mark_job_exhausted(session, current)
         return True
 
+    def process_webhook_one(self) -> bool:
+        with self.sessions() as session:
+            delivery = claim_delivery(session)
+            session.commit()
+        if delivery is None:
+            return False
+
+        try:
+            status_code, body = send_delivery(delivery)
+            with self.sessions() as session:
+                complete_delivery(session, delivery.id, status_code, body)
+                session.commit()
+            logger.info("completed webhook=%s event=%s", delivery.id, delivery.event_type)
+        except Exception as exc:
+            logger.exception("failed webhook=%s event=%s", delivery.id, delivery.event_type)
+            with self.sessions() as session:
+                current = session.get(WebhookDelivery, delivery.id)
+                if current is not None:
+                    fail_delivery(
+                        session,
+                        current,
+                        f"{type(exc).__name__}: {exc}",
+                        response_status=getattr(exc, "status_code", None),
+                        response_body=getattr(exc, "response_body", None),
+                    )
+                    session.commit()
+        return True
+
     def run_once(self) -> bool:
         with self.sessions() as session:
             reconcile(session)
-        return self.process_one()
+        processed_job = self.process_one()
+        processed_webhook = self.process_webhook_one()
+        return processed_job or processed_webhook
 
     def run_forever(self) -> None:
         signal.signal(signal.SIGINT, self.request_stop)
@@ -103,7 +134,9 @@ class JobRunner:
                 if reconciled:
                     logger.warning("timed out runs=%s", reconciled)
                 last_reconcile = now
-            if not self.process_one():
+            processed_job = self.process_one()
+            processed_webhook = self.process_webhook_one()
+            if not processed_job and not processed_webhook:
                 time.sleep(self.settings.queue_poll_seconds)
         self.engine.dispose()
 

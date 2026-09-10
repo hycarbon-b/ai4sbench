@@ -1,0 +1,119 @@
+/* ============================================================
+   AI4S-Benchmark · Design tokens
+   Brand: Concept 02 · Scientific Orbit
+   ============================================================ */
+
+:root {
+  /* ---- Core brand palette ---- */
+  --navy: #0D1730;
+  --off-white: #F7F9FC;
+  --electric-blue: #2474FF;
+  --cyan: #18B7C9;
+  --slate: #7E8AA3;
+
+  /* ---- Derived neutrals (navy-tinted) ---- */
+  --navy-800: #16213E;
+  --navy-700: #1F2C4E;
+  --ink: var(--navy);
+  --ink-secondary: #3C4A68;
+  --ink-muted: var(--slate);
+  --ink-faint: #A6B0C3;
+
+  --surface: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --surface-sunken: #EFF3F9;
+  --surface-navy: var(--navy);
+  --bg: var(--off-white);
+
+  --border: #DFE5EF;
+  --border-strong: #C6CFDE;
+  --border-faint: #EAEEF5;
+
+  --hover-bg: #F1F5FB;
+  --selected-bg: #E9F1FF;
+
+  /* ---- Functional accents (status system) ---- */
+  --blue-soft: #E9F1FF;
+  --cyan-soft: #E3F7F9;
+  --cyan-deep: #0E93A3;
+  --green: #0E9F6E;
+  --green-soft: #E3F5EE;
+  --amber: #B45309;
+  --amber-soft: #FCF0E0;
+  --slate-soft: #EEF1F6;
+  --red: #C2410C;
+  --red-soft: #FDEEE6;
+
+  /* ---- Typography ---- */
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+  --text-xs: 0.75rem;     /* 12 */
+  --text-sm: 0.8125rem;   /* 13 */
+  --text-base: 0.9375rem; /* 15 */
+  --text-md: 1.0625rem;   /* 17 */
+  --text-lg: 1.25rem;     /* 20 */
+  --text-xl: 1.5rem;      /* 24 */
+  --text-2xl: 1.875rem;   /* 30 */
+  --text-3xl: 2.5rem;     /* 40 */
+  --text-4xl: 3.25rem;    /* 52 */
+  --text-hero: clamp(1.9rem, 3.6vw, 2.8rem);
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+
+  --tracking-wide: 0.08em;
+  --tracking-wider: 0.14em;
+
+  /* ---- Spacing ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+
+  /* ---- Layout ---- */
+  --content-width: 1240px;
+  /* One column for the whole site: chrome and content share a left edge.
+     Kept as an alias rather than removed so existing markup still reads. */
+  --content-width-wide: 1240px;
+  --content-width-narrow: 860px;
+  --gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --header-height: 4.25rem;
+
+  /* ---- Shape & depth ---- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  --shadow-xs: 0 1px 2px rgba(13, 23, 48, 0.05);
+  --shadow-sm: 0 1px 3px rgba(13, 23, 48, 0.07), 0 4px 14px rgba(13, 23, 48, 0.04);
+  --shadow-md: 0 2px 6px rgba(13, 23, 48, 0.08), 0 10px 28px rgba(13, 23, 48, 0.07);
+
+  --focus-ring: 0 0 0 3px rgba(36, 116, 255, 0.35);
+
+  /* ---- Motion ---- */
+  --ease: cubic-bezier(0.25, 0.6, 0.3, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur-med: 240ms;
+  --dur-slow: 700ms;
+
+  /* ---- Blueprint texture (Vercel-style, near-subliminal) ---- */
+  --grid-line-light: rgba(13, 23, 48, 0.032);
+  --grid-line-dark: rgba(247, 249, 252, 0.04);
+  --grid-size: 48px;
+
+  /* ---- Depth accents ---- */
+  --glow-blue: radial-gradient(ellipse 60% 55% at 50% 0%, rgba(36, 116, 255, 0.14), transparent 70%);
+
+  /* Check mark drawn as a mask — U+2713 is outside the served font subset */
+  --tick-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2.8 8.4l3.2 3.4 7.2-7.6' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --hairline-gradient: linear-gradient(90deg, transparent, rgba(36, 116, 255, 0.55), rgba(24, 183, 201, 0.45), transparent);
+}

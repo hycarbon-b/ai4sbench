@@ -60,6 +60,9 @@ def task_dict(item: TaskRevision) -> dict[str, Any]:
         "commit_sha": item.commit_sha,
         "task_path": item.task_path,
         "resource_requirements": item.resource_requirements,
+        "proposal_id": item.proposal_id,
+        "pull_request_url": item.pull_request_url,
+        "release": item.release,
         "created_at": item.created_at,
     }
 
@@ -149,8 +152,15 @@ def add_audit(
 
 def upsert_task_revision(session: Session, values: dict[str, Any], principal: Principal) -> TaskRevision:
     begin_immediate(session)
+    link_values = {
+        field: values[field] for field in ("proposal_id", "pull_request_url", "release") if field in values
+    }
     task_values = {
-        key: values[key] for key in ("repo_url", "commit_sha", "task_path", "resource_requirements")
+        "repo_url": values["repo_url"],
+        "commit_sha": values["commit_sha"],
+        "task_path": values["task_path"],
+        "resource_requirements": values["resource_requirements"],
+        **link_values,
     }
     item = session.scalar(
         select(TaskRevision).where(
@@ -170,6 +180,10 @@ def upsert_task_revision(session: Session, values: dict[str, Any], principal: Pr
         if item.resource_requirements != requirements:
             item.resource_requirements = requirements
             changed = True
+        for field, value in link_values.items():
+            if getattr(item, field) != value:
+                setattr(item, field, value)
+                changed = True
         if changed:
             add_audit(session, principal, "task_revision.updated", "task_revision", item.id)
     session.commit()
@@ -187,8 +201,17 @@ def upsert_task_revisions(
     items: list[TaskRevision] = []
     try:
         for values in values_list:
+            link_values = {
+                field: values[field]
+                for field in ("proposal_id", "pull_request_url", "release")
+                if field in values
+            }
             task_values = {
-                key: values[key] for key in ("repo_url", "commit_sha", "task_path", "resource_requirements")
+                "repo_url": values["repo_url"],
+                "commit_sha": values["commit_sha"],
+                "task_path": values["task_path"],
+                "resource_requirements": values["resource_requirements"],
+                **link_values,
             }
             item = session.scalar(
                 select(TaskRevision).where(
@@ -208,6 +231,10 @@ def upsert_task_revisions(
                 if item.resource_requirements != task_values["resource_requirements"]:
                     item.resource_requirements = task_values["resource_requirements"]
                     changed = True
+                for field, value in link_values.items():
+                    if getattr(item, field) != value:
+                        setattr(item, field, value)
+                        changed = True
                 if changed:
                     add_audit(session, principal, "task_revision.updated", "task_revision", item.id)
                     updated += 1

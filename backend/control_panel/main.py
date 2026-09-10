@@ -5,8 +5,8 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from httpx_oauth.clients.github import GitHubOAuth2
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -21,6 +21,7 @@ from .identity import AuthBase, build_auth, create_auth_engine
 from .providers import EC2Provider, provider_from_settings
 
 STATIC_DIR = Path(__file__).with_name("static")
+WEBSITE_DIST_DIR = Path(__file__).with_name("website_dist")
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 OPENAPI_TAGS = [
     {
@@ -52,6 +53,16 @@ OPENAPI_TAGS = [
         "description": "Immutable benchmark task-revision registration and GitHub synchronization.",
     },
     {
+        "name": "public proposals",
+        "description": "Unauthenticated proposal, review and task-revision data for the Website board.",
+    },
+    {
+        "name": "reviewers",
+        "description": (
+            "Public reviewer applications plus administrator-only application review and access decisions."
+        ),
+    },
+    {
         "name": "plans",
         "description": "Execution-plan creation and optimistic-lock approval.",
     },
@@ -61,7 +72,9 @@ OPENAPI_TAGS = [
     },
     {
         "name": "operations",
-        "description": "Administrator view of asynchronous database-backed jobs.",
+        "description": (
+            "Administrator view of asynchronous database-backed jobs and outbound webhook deliveries."
+        ),
     },
     {
         "name": "worker",
@@ -119,7 +132,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
             CORSMiddleware,
             allow_origins=list(resolved.cors_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
             allow_headers=["Content-Type"],
         )
 
@@ -173,6 +186,12 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
   });
 </script>"""
             )
+
+    @app.get("/website", include_in_schema=False)
+    async def website_root() -> RedirectResponse:
+        return RedirectResponse("/website/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+    app.mount("/website", StaticFiles(directory=WEBSITE_DIST_DIR, html=True), name="website")
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="admin")
     return app
 

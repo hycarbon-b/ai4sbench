@@ -19,6 +19,8 @@ import {
   SquareStack,
   StopCircle,
   UploadCloud,
+  UserCheck,
+  Webhook,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -30,8 +32,10 @@ import {
   getCurrentUser,
   getGithubAuthorizeUrl,
   getProposalDomains,
+  resendWebhookDelivery,
   signOut,
   syncProposalDiscussions,
+  updateReviewerApplication,
   type CloudProfile,
   type DatabaseSnapshot,
   type Dashboard,
@@ -39,9 +43,12 @@ import {
   type Plan,
   type Proposal,
   type ProposalInput,
+  type ReviewerApplication,
+  type ReviewerApplicationUpdate,
   type Run,
   type TaskRevision,
   type User,
+  type WebhookDelivery,
 } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -77,8 +84,10 @@ type View =
   | "plans"
   | "runs"
   | "jobs"
+  | "webhooks"
   | "cloud"
   | "snapshots"
+  | "reviewers"
   | "proposals";
 type Config = {
   agent: string;
@@ -92,10 +101,12 @@ type Config = {
 type Ops = {
   dashboard: Dashboard | null;
   proposals: Proposal[];
+  reviewers: ReviewerApplication[];
   tasks: TaskRevision[];
   plans: Plan[];
   runs: Run[];
   jobs: Job[];
+  webhooks: WebhookDelivery[];
   profiles: CloudProfile[];
   snapshots: DatabaseSnapshot[];
 };
@@ -103,10 +114,12 @@ type Ops = {
 const emptyOps: Ops = {
   dashboard: null,
   proposals: [],
+  reviewers: [],
   tasks: [],
   plans: [],
   runs: [],
   jobs: [],
+  webhooks: [],
   profiles: [],
   snapshots: [],
 };
@@ -240,24 +253,39 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const [dashboard, proposals, tasks, plans, runs, jobs, profiles, snapshots] =
+      const [
+        dashboard,
+        proposals,
+        reviewers,
+        tasks,
+        plans,
+        runs,
+        jobs,
+        webhooks,
+        profiles,
+        snapshots,
+      ] =
         await Promise.all([
           api<Dashboard>("/api/v1/dashboard"),
           api<{ items: Proposal[] }>("/api/v1/proposals"),
+          api<{ items: ReviewerApplication[] }>("/api/v1/reviewer-applications"),
           api<{ items: TaskRevision[] }>("/api/v1/task-revisions"),
           api<{ items: Plan[] }>("/api/v1/plans"),
           api<{ items: Run[] }>("/api/v1/runs"),
           api<{ items: Job[] }>("/api/v1/jobs"),
+          api<{ items: WebhookDelivery[] }>("/api/v1/webhook-deliveries"),
           api<{ items: CloudProfile[] }>("/api/v1/cloud-profiles"),
           api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots"),
         ]);
       setOps({
         dashboard,
         proposals: proposals.items,
+        reviewers: reviewers.items,
         tasks: tasks.items,
         plans: plans.items,
         runs: runs.items,
         jobs: jobs.items,
+        webhooks: webhooks.items,
         profiles: profiles.items,
         snapshots: snapshots.items,
       });
@@ -468,6 +496,50 @@ export default function App() {
       setLoading(false);
     }
   };
+  const resendWebhook = async (delivery: WebhookDelivery) => {
+    if (
+      delivery.state === "completed" &&
+      !window.confirm(
+        "This delivery already completed. Send the same Discord notification again?",
+      )
+    )
+      return;
+    setLoading(true);
+    setError("");
+    try {
+      await resendWebhookDelivery(delivery.id);
+      setMessage(`Webhook delivery ${short(delivery.id)} queued again.`);
+      await loadOps();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not queue the webhook delivery again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+  const manageReviewer = async (
+    application: ReviewerApplication,
+    update: ReviewerApplicationUpdate,
+  ) => {
+    setLoading(true);
+    setError("");
+    try {
+      await updateReviewerApplication(application.id, update);
+      setMessage(`Reviewer application for ${application.name} updated.`);
+      await loadOps();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not update the reviewer application.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
   const submitProposal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
@@ -614,6 +686,8 @@ export default function App() {
               proposalReady={canSubmitProposal}
               onProposal={submitProposal}
               onSyncDiscussions={syncDiscussions}
+              onResendWebhook={resendWebhook}
+              onManageReviewer={manageReviewer}
               loading={loading}
             />
           ) : (
@@ -694,6 +768,8 @@ function AdminPanel({
   proposalReady,
   onProposal,
   onSyncDiscussions,
+  onResendWebhook,
+  onManageReviewer,
   onSaveDatabaseSnapshot,
   loading,
 }: {
@@ -731,6 +807,11 @@ function AdminPanel({
   proposalReady: boolean;
   onProposal: (event: FormEvent<HTMLFormElement>) => void;
   onSyncDiscussions: () => void;
+  onResendWebhook: (delivery: WebhookDelivery) => void;
+  onManageReviewer: (
+    application: ReviewerApplication,
+    update: ReviewerApplicationUpdate,
+  ) => void;
   onSaveDatabaseSnapshot: () => void;
   loading: boolean;
 }) {
@@ -763,6 +844,22 @@ function AdminPanel({
       />
     );
   if (view === "jobs") return <JobsPanel jobs={ops.jobs} />;
+  if (view === "webhooks")
+    return (
+      <WebhooksPanel
+        deliveries={ops.webhooks}
+        loading={loading}
+        onResend={onResendWebhook}
+      />
+    );
+  if (view === "reviewers")
+    return (
+      <ReviewerApplicationsPanel
+        applications={ops.reviewers}
+        loading={loading}
+        onUpdate={onManageReviewer}
+      />
+    );
   if (view === "cloud")
     return (
       <CloudPanel
@@ -1285,6 +1382,111 @@ function JobsPanel({ jobs }: { jobs: Job[] }) {
           ))}
         </Table>
         {!jobs.length && <Empty text="No pending or recent database jobs." />}
+      </DataCard>
+    </>
+  );
+}
+function WebhooksPanel({
+  deliveries,
+  loading,
+  onResend,
+}: {
+  deliveries: WebhookDelivery[];
+  loading: boolean;
+  onResend: (delivery: WebhookDelivery) => void;
+}) {
+  return (
+    <>
+      <Title
+        eyebrow="Outbound notifications"
+        title="Discord webhook deliveries"
+        description="Inspect the exact destination, payload, response, and retry state for proposal and review notifications."
+      />
+      <DataCard
+        title="Delivery history"
+        description="Failed and completed deliveries can be queued again manually; completed sends require confirmation."
+      >
+        <Table
+          headers={[
+            "Event",
+            "Status",
+            "Attempts",
+            "Destination",
+            "Content",
+            "Result",
+            "",
+          ]}
+        >
+          {deliveries.map((delivery) => (
+            <tr key={delivery.id}>
+              <td className="min-w-44 align-top">
+                <code className="text-xs text-sky-200">
+                  {delivery.event_type}
+                </code>
+                <p className="mt-1 text-xs text-slate-500">
+                  {when(delivery.created_at)} · {short(delivery.id)}
+                </p>
+              </td>
+              <td className="align-top">
+                <Status state={delivery.state} />
+              </td>
+              <td className="align-top">
+                {delivery.attempts} / {delivery.max_attempts}
+                <p className="mt-1 text-xs text-slate-500">
+                  Next: {when(delivery.available_at)}
+                </p>
+              </td>
+              <td className="max-w-64 align-top">
+                <code className="block break-all text-[11px] leading-5 text-slate-300">
+                  {delivery.destination_url}
+                </code>
+              </td>
+              <td className="min-w-44 align-top">
+                <details>
+                  <summary className="cursor-pointer text-xs text-sky-300">
+                    View JSON payload
+                  </summary>
+                  <pre className="mt-2 max-h-64 max-w-md overflow-auto whitespace-pre-wrap break-all rounded bg-slate-950 p-2 text-[10px] leading-4 text-slate-300">
+                    {JSON.stringify(delivery.payload, null, 2)}
+                  </pre>
+                </details>
+              </td>
+              <td className="min-w-44 align-top text-xs text-slate-400">
+                <p>
+                  {delivery.response_status
+                    ? `HTTP ${delivery.response_status}`
+                    : "No response yet"}
+                </p>
+                <p>{delivery.sent_at ? `Sent ${when(delivery.sent_at)}` : ""}</p>
+                {(delivery.last_error || delivery.response_body) && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-rose-200">
+                      Response details
+                    </summary>
+                    <pre className="mt-2 max-h-40 max-w-sm overflow-auto whitespace-pre-wrap break-all rounded bg-slate-950 p-2 text-[10px] leading-4">
+                      {delivery.last_error || delivery.response_body}
+                    </pre>
+                  </details>
+                )}
+              </td>
+              <td className="align-top text-right">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || delivery.state === "sending"}
+                  onClick={() => onResend(delivery)}
+                >
+                  <RefreshCw className="size-3.5" />
+                  Resend
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </Table>
+        {!deliveries.length && (
+          <Empty text="No proposal or review webhook deliveries have been recorded." />
+        )}
       </DataCard>
     </>
   );
@@ -1821,6 +2023,234 @@ function ProposalPanel({
   );
 }
 
+function ReviewerApplicationsPanel({
+  applications,
+  loading,
+  onUpdate,
+}: {
+  applications: ReviewerApplication[];
+  loading: boolean;
+  onUpdate: (
+    application: ReviewerApplication,
+    update: ReviewerApplicationUpdate,
+  ) => void;
+}) {
+  const [filter, setFilter] = useState<"all" | ReviewerApplication["status"]>("all");
+  const filtered = useMemo(
+    () =>
+      filter === "all"
+        ? applications
+        : applications.filter((application) => application.status === filter),
+    [applications, filter],
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected =
+    filtered.find((application) => application.id === selectedId) || filtered[0] || null;
+  const [github, setGithub] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    setGithub(selected?.github || "");
+    setNotes(selected?.admin_notes || "");
+  }, [selected?.id, selected?.github, selected?.admin_notes]);
+
+  const counts = {
+    all: applications.length,
+    pending: applications.filter((application) => application.status === "pending").length,
+    approved: applications.filter((application) => application.status === "approved").length,
+    rejected: applications.filter((application) => application.status === "rejected").length,
+  };
+  const draft = {
+    github: github.trim() || null,
+    admin_notes: notes.trim() || null,
+  };
+
+  return (
+    <>
+      <Title
+        eyebrow="Reviewer onboarding"
+        title="Scientific reviewer applications"
+        description="Inspect each Website submission, connect it to a GitHub identity, and make the access decision recorded by the control plane."
+      />
+      <div className="flex flex-wrap gap-1 border-b border-slate-800 pb-3">
+        {(["all", "pending", "approved", "rejected"] as const).map((state) => (
+          <button
+            key={state}
+            type="button"
+            onClick={() => setFilter(state)}
+            className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide transition-colors ${
+              filter === state
+                ? "border-sky-400/50 bg-sky-400/10 text-sky-200"
+                : "border-slate-800 bg-slate-950/40 text-slate-500 hover:text-slate-200"
+            }`}
+          >
+            {state} <span className="ml-1 text-slate-400">{counts[state]}</span>
+          </button>
+        ))}
+      </div>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(34rem,1.05fr)_minmax(26rem,.95fr)]">
+        <DataCard
+          title="Application queue"
+          description="Select a record to open its complete applicant dossier."
+        >
+          <Table
+            className="min-w-[32rem]"
+            headers={["Applicant", "Expertise", "Submitted", "Status"]}
+          >
+            {filtered.map((application) => (
+              <TableRow
+                key={application.id}
+                onClick={() => setSelectedId(application.id)}
+                className={`cursor-pointer ${
+                  selected?.id === application.id
+                    ? "bg-sky-400/10 hover:bg-sky-400/10"
+                    : "hover:bg-slate-900/70"
+                }`}
+              >
+                <TableCell>
+                  <p className="font-medium text-slate-100">{application.name}</p>
+                  <p className="mt-1 text-xs text-slate-500">{application.affiliation}</p>
+                </TableCell>
+                <TableCell>
+                  <p className="text-slate-300">
+                    {application.subfield || application.domains_display.join(", ")}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {application.role || "Position not provided"}
+                  </p>
+                </TableCell>
+                <TableCell>{when(application.created_at)}</TableCell>
+                <TableCell><Status state={application.status} /></TableCell>
+              </TableRow>
+            ))}
+          </Table>
+          {!filtered.length && (
+            <Empty text={`No ${filter === "all" ? "" : `${filter} `}reviewer applications.`} />
+          )}
+        </DataCard>
+
+        <Card className="xl:sticky xl:top-20">
+          {selected ? (
+            <>
+              <CardHeader className="border-b border-slate-800">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-sky-300">
+                      Applicant dossier
+                    </p>
+                    <CardTitle className="mt-1">{selected.name}</CardTitle>
+                    <CardDescription>{selected.affiliation}</CardDescription>
+                  </div>
+                  <Status state={selected.status} />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5 pt-5">
+                <dl className="grid grid-cols-[7.5rem_1fr] gap-x-3 gap-y-2 text-xs">
+                  <dt className="text-slate-500">Email</dt>
+                  <dd><a className="text-sky-300 hover:text-sky-200" href={`mailto:${selected.email}`}>{selected.email}</a></dd>
+                  <dt className="text-slate-500">Position</dt>
+                  <dd className="text-slate-300">{selected.role || "Not provided"}</dd>
+                  <dt className="text-slate-500">Specific field</dt>
+                  <dd className="text-slate-300">{selected.subfield || "Not provided"}</dd>
+                  <dt className="text-slate-500">Signed-in identity</dt>
+                  <dd className="text-slate-300">
+                    {selected.submitted_by_login ? `@${selected.submitted_by_login}` : "Anonymous submission"}
+                  </dd>
+                  <dt className="text-slate-500">Received</dt>
+                  <dd className="text-slate-300">{when(selected.created_at)}</dd>
+                  <dt className="text-slate-500">Schema</dt>
+                  <dd><code className="text-slate-400">{selected.schema_version}</code></dd>
+                </dl>
+
+                <div>
+                  <p className="mb-2 font-mono text-[10px] uppercase tracking-wide text-slate-500">Review domains</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selected.domains_display.map((domain) => (
+                      <Badge key={domain} className="border-slate-700 bg-slate-900 text-slate-300">{domain}</Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 font-mono text-[10px] uppercase tracking-wide text-slate-500">Research background</p>
+                  <p className="whitespace-pre-wrap border-l-2 border-sky-400/40 pl-3 text-sm leading-6 text-slate-300">
+                    {selected.research_background}
+                  </p>
+                </div>
+
+                <div className="space-y-3 border-t border-slate-800 pt-4">
+                  <Field label="GitHub username used for reviewer access">
+                    <Input
+                      value={github}
+                      onChange={(event) => setGithub(event.target.value)}
+                      placeholder="octocat"
+                    />
+                  </Field>
+                  {!github.trim() && (
+                    <p className="text-xs text-amber-200">
+                      Approval can be recorded, but access remains disabled until a GitHub username is saved.
+                    </p>
+                  )}
+                  <Field label="Private administrator notes">
+                    <Textarea
+                      className="min-h-24"
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      placeholder="Internal rationale, follow-up, or verification notes"
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => onUpdate(selected, draft)}
+                    >
+                      Save details
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => onUpdate(selected, { ...draft, status: "approved" })}
+                    >
+                      <CheckCircle2 className="size-4" /> Approve
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={loading}
+                      onClick={() => onUpdate(selected, { ...draft, status: "rejected" })}
+                    >
+                      Reject
+                    </Button>
+                    {selected.status !== "pending" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={loading}
+                        onClick={() => onUpdate(selected, { ...draft, status: "pending" })}
+                      >
+                        Return to pending
+                      </Button>
+                    )}
+                  </div>
+                  {selected.reviewed_by && (
+                    <p className="text-xs text-slate-500">
+                      Last decision by {selected.reviewed_by} · {when(selected.reviewed_at)}
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </>
+          ) : (
+            <CardContent><Empty text="Select an application to inspect and manage it." /></CardContent>
+          )}
+        </Card>
+      </div>
+    </>
+  );
+}
+
 function Sidebar({
   active,
   admin,
@@ -1833,11 +2263,13 @@ function Sidebar({
   const items: Array<[View, string, typeof Activity]> = admin
     ? [
         ["proposals", "Task proposals", Send],
+        ["reviewers", "Reviewer applications", UserCheck],
         ["overview", "Operations", Activity],
         ["tasks", "Task library", Database],
         ["plans", "Execution plans", SquareStack],
         ["runs", "Run queue", Rocket],
         ["jobs", "Worker jobs", ServerCog],
+        ["webhooks", "Discord webhooks", Webhook],
         ["cloud", "Cloud resources", CloudCog],
         ["snapshots", "Database snapshots", History],
       ]
@@ -1974,7 +2406,7 @@ function Metric({
   );
 }
 function Status({ state }: { state: string }) {
-  const tone = ["succeeded", "approved", "running", "enabled", "valid"].includes(state)
+  const tone = ["succeeded", "approved", "running", "enabled", "valid", "completed"].includes(state)
     ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
     : ["failed", "launch_failed", "termination_failed", "invalid"].includes(state)
       ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
@@ -2027,12 +2459,14 @@ function DataCard({
 function Table({
   headers,
   children,
+  className = "min-w-[650px]",
 }: {
   headers: string[];
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <UiTable className="min-w-[650px]">
+    <UiTable className={className}>
       <TableHeader>
         <TableRow className="hover:bg-slate-900/70">
           {headers.map((header, index) => (

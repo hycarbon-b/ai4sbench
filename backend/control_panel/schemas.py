@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 
 PROPOSAL_DOMAIN_OPTIONS = (
     "Materials Science",
@@ -17,12 +17,25 @@ PROPOSAL_DOMAIN_OPTIONS = (
     "Interdisciplinary",
 )
 
+REVIEWER_APPLICATION_SCHEMA_VERSION = "tb-reviewer-application/v1"
+
+
+def reviewer_slug_alpha(value: str) -> str:
+    """Mirror the Website's NFKD ASCII-letter slug generation."""
+
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_letters = "".join(character for character in normalized if not unicodedata.combining(character))
+    return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z]+", "-", ascii_letters.lower())))[:79]
+
 
 class TaskRevisionCreate(BaseModel):
     repo_url: str = Field(max_length=500)
     commit_sha: str = Field(pattern=r"^[0-9a-fA-F]{40,64}$")
     task_path: str = Field(max_length=500)
     resource_requirements: dict[str, int] = Field(default_factory=dict)
+    proposal_id: str | None = None
+    pull_request_url: str | None = Field(default=None, max_length=500)
+    release: str | None = Field(default=None, max_length=80)
 
     @field_validator("task_path")
     @classmethod
@@ -270,6 +283,250 @@ class ProposalSubmission(BaseModel):
         )
 
 
+class ReviewerApplicationSubmission(BaseModel):
+    """Public reviewer-intake contract emitted by the Website form."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["tb-reviewer-application/v1"] = REVIEWER_APPLICATION_SCHEMA_VERSION
+    name: str = Field(min_length=2, max_length=200)
+    affiliation: str = Field(min_length=2, max_length=300)
+    email: str = Field(min_length=5, max_length=200)
+    github: str | None = Field(default=None, max_length=100)
+    role: str | None = Field(default=None, max_length=200)
+    domains: list[str] = Field(min_length=1, max_length=20)
+    domains_display: list[str] = Field(min_length=1, max_length=20)
+    field: str | None = Field(default=None, max_length=79)
+    subfield: str | None = Field(default=None, max_length=200)
+    research_background: str = Field(min_length=60, max_length=4_000)
+
+    @field_validator(
+        "name",
+        "affiliation",
+        "email",
+        "github",
+        "role",
+        "field",
+        "subfield",
+        "research_background",
+        mode="before",
+    )
+    @classmethod
+    def strip_text(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("email must be a valid email address")
+        return value.lower()
+
+    @field_validator("github")
+    @classmethod
+    def valid_optional_github_login(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.removeprefix("@").lower()
+        if not re.fullmatch(r"[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", value):
+            raise ValueError("github must be a GitHub username without @")
+        return value
+
+    @field_validator("domains", "domains_display")
+    @classmethod
+    def unique_nonempty_list(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value]
+        if any(not item or len(item) > 200 for item in cleaned):
+            raise ValueError("domain entries must contain 1 to 200 characters")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("domain entries must be unique")
+        return cleaned
+
+    @model_validator(mode="after")
+    def matching_display_identifiers(self) -> ReviewerApplicationSubmission:
+        if len(self.domains) != len(self.domains_display):
+            raise ValueError("domains and domains_display must contain the same number of entries")
+        expected_domains = [reviewer_slug_alpha(item) for item in self.domains_display]
+        if any(not re.fullmatch(r"[a-z][a-z-]{1,78}", item) for item in self.domains):
+            raise ValueError("domains must contain lowercase ASCII letter-and-hyphen identifiers")
+        if self.domains != expected_domains:
+            raise ValueError("domains must match the slugs derived from domains_display")
+        if (self.field is None) != (self.subfield is None):
+            raise ValueError("field and subfield must either both be provided or both be null")
+        if self.subfield is not None:
+            if not re.fullmatch(r"[a-z][a-z-]{1,78}", self.field or ""):
+                raise ValueError("field must be a lowercase ASCII letter-and-hyphen identifier")
+            if self.field != reviewer_slug_alpha(self.subfield):
+                raise ValueError("field must match the slug derived from subfield")
+        return self
+
+
+class ReviewerApplicationCreatedResponse(BaseModel):
+    """The stored applicant-facing record returned after public submission."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    schema_version: str
+    name: str
+    affiliation: str
+    email: str
+    github: str | None
+    role: str | None
+    domains: list[str]
+    domains_display: list[str]
+    field: str | None
+    subfield: str | None
+    research_background: str
+    status: Literal["pending", "approved", "rejected"]
+    submitted_by_login: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewerApplicationResponse(ReviewerApplicationCreatedResponse):
+    """Administrator view including private notes and decision provenance."""
+
+    admin_notes: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+
+
+class ReviewerApplicationListResponse(BaseModel):
+    items: list[ReviewerApplicationResponse]
+
+
+class ReviewerApplicationUpdate(BaseModel):
+    """Administrator decision fields; omitted values remain unchanged."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["pending", "approved", "rejected"] | None = None
+    github: str | None = Field(default=None, max_length=100)
+    admin_notes: str | None = Field(default=None, max_length=8_000)
+
+    @field_validator("github", mode="before")
+    @classmethod
+    def normalize_github(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        value = value.strip().removeprefix("@").lower()
+        if not value:
+            return None
+        if not re.fullmatch(r"[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}", value):
+            raise ValueError("github must be a GitHub username without @")
+        return value
+
+    @field_validator("admin_notes", mode="before")
+    @classmethod
+    def normalize_notes(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+    @model_validator(mode="after")
+    def contains_an_update(self) -> ReviewerApplicationUpdate:
+        if not self.model_fields_set:
+            raise ValueError("at least one reviewer application field must be supplied")
+        if "status" in self.model_fields_set and self.status is None:
+            raise ValueError("status cannot be null")
+        return self
+
+
+REVIEW_SCHEMA_VERSION = "ai4sbench-proposal-review/v1"
+REVIEW_COMMENT_MARKER = "<!-- ai4sbench-proposal-review:v1 -->"
+
+
+class ProposalReview(BaseModel):
+    """Canonical reviewer reply stored on the proposal and rendered to GitHub Markdown."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_schema_version: Literal["ai4sbench-proposal-review/v1"] = REVIEW_SCHEMA_VERSION
+    review_decision: Literal["approved", "changes_requested", "rejected"]
+    review_short_description: str = Field(min_length=20, max_length=2_000)
+    review_tags: list[str] = Field(min_length=1, max_length=30)
+    review_difficulty: str = Field(min_length=2, max_length=80)
+    review_scientific_value: str = Field(min_length=20, max_length=8_000)
+    review_primary_metric: str = Field(min_length=2, max_length=1_000)
+    review_primary_metric_short: str | None = Field(default=None, max_length=240)
+    review_secondary_metrics: list[str] = Field(default_factory=list, max_length=20)
+    review_verification_method: str = Field(min_length=20, max_length=8_000)
+    review_estimated_runtime: str | None = Field(default=None, max_length=240)
+    review_compute_budget: str | None = Field(default=None, max_length=240)
+    review_token_budget: str | None = Field(default=None, max_length=240)
+    review_baseline_results: list[str] = Field(default_factory=list, max_length=30)
+    review_failure_modes: list[str] = Field(default_factory=list, max_length=30)
+    review_notes: str | None = Field(default=None, max_length=8_000)
+
+    @field_validator(
+        "review_short_description",
+        "review_difficulty",
+        "review_scientific_value",
+        "review_primary_metric",
+        "review_primary_metric_short",
+        "review_verification_method",
+        "review_estimated_runtime",
+        "review_compute_budget",
+        "review_token_budget",
+        "review_notes",
+        mode="before",
+    )
+    @classmethod
+    def strip_review_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator(
+        "review_tags",
+        "review_secondary_metrics",
+        "review_baseline_results",
+        "review_failure_modes",
+        mode="before",
+    )
+    @classmethod
+    def normalize_review_lists(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    def render_comment(self) -> str:
+        def section(title: str, value: str | None) -> list[str]:
+            return [f"### {title}", "", value or "", ""]
+
+        def list_section(title: str, values: list[str]) -> list[str]:
+            return [f"### {title}", "", *(f"- {value}" for value in values), ""]
+
+        lines = [
+            REVIEW_COMMENT_MARKER,
+            "",
+            "## AI4S-Bench Proposal Review",
+            "",
+            f"Decision: {self.review_decision}",
+            "",
+        ]
+        lines += section("Short Description", self.review_short_description)
+        lines += list_section("Tags", self.review_tags)
+        lines += section("Difficulty", self.review_difficulty)
+        lines += section("Scientific Value", self.review_scientific_value)
+        lines += section("Primary Metric", self.review_primary_metric)
+        lines += section("Primary Metric Short", self.review_primary_metric_short)
+        lines += list_section("Secondary Metrics", self.review_secondary_metrics)
+        lines += section("Verification Method", self.review_verification_method)
+        lines += section("Estimated Runtime", self.review_estimated_runtime)
+        lines += section("Compute Budget", self.review_compute_budget)
+        lines += section("Token Budget", self.review_token_budget)
+        lines += list_section("Baseline Results", self.review_baseline_results)
+        lines += list_section("Failure Modes", self.review_failure_modes)
+        lines += section("Review Notes", self.review_notes)
+        return "\n".join(lines).rstrip() + "\n"
+
+
 class CloudProfileCreate(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9-]{1,118}$")
     provider: Literal["aws"] = "aws"
@@ -314,6 +571,9 @@ class TaskRevisionResponse(BaseModel):
     commit_sha: str
     task_path: str
     resource_requirements: dict[str, int]
+    proposal_id: str | None
+    pull_request_url: str | None
+    release: str | None
     created_at: datetime
 
 
@@ -423,6 +683,28 @@ class DatabaseJobListResponse(BaseModel):
     items: list[DatabaseJobResponse]
 
 
+class WebhookDeliveryResponse(BaseModel):
+    id: str
+    event_type: str
+    destination_url: str
+    payload: dict[str, Any]
+    dedupe_key: str
+    state: str
+    attempts: int
+    max_attempts: int
+    available_at: datetime
+    last_error: str | None
+    response_status: int | None
+    response_body: str | None
+    sent_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class WebhookDeliveryListResponse(BaseModel):
+    items: list[WebhookDeliveryResponse]
+
+
 class WorkerRunReference(BaseModel):
     id: str
     config: dict[str, Any]
@@ -439,6 +721,7 @@ class AuthenticatedUserResponse(BaseModel):
     email: str
     github_login: str
     role: str
+    can_review: bool
 
 
 class AuthConfigResponse(BaseModel):
@@ -460,6 +743,70 @@ class ProposalListItemResponse(BaseModel):
 
 class ProposalListResponse(BaseModel):
     items: list[ProposalListItemResponse]
+
+
+class ProposalBoardItemResponse(BaseModel):
+    """Public Website projection combining proposal, review and latest task revision."""
+
+    id: str
+    title: str
+    domain: str
+    field_name: str
+    problem: str
+    solvability: str
+    references: str
+    software: str
+    dataset: str
+    compute: str
+    workflow: str
+    evaluation: str
+    leakage: str
+    name: str
+    affiliation: str
+    github: str
+    task_slug: str
+    status: str
+    discussion_url: str | None
+    discussion_number: int | None
+    input_valid: bool
+    created_at: datetime
+    updated_at: datetime
+
+    review_schema_version: str | None
+    review_decision: Literal["approved", "changes_requested", "rejected"] | None
+    review_short_description: str | None
+    review_tags: list[str]
+    review_difficulty: str | None
+    review_scientific_value: str | None
+    review_primary_metric: str | None
+    review_primary_metric_short: str | None
+    review_secondary_metrics: list[str]
+    review_verification_method: str | None
+    review_estimated_runtime: str | None
+    review_compute_budget: str | None
+    review_token_budget: str | None
+    review_baseline_results: list[str]
+    review_failure_modes: list[str]
+    review_notes: str | None
+    review_reviewer_login: str | None
+    review_comment_url: str | None
+    review_created_at: datetime | None
+    review_updated_at: datetime | None
+    review_input_valid: bool
+
+    revision_id: str | None
+    revision_repo_url: str | None
+    revision_commit_sha: str | None
+    revision_task_path: str | None
+    revision_resource_requirements: dict[str, int] | None
+    revision_pull_request_url: str | None
+    revision_release: str | None
+    revision_created_at: datetime | None
+    revision_agent_results: list[dict[str, Any]]
+
+
+class ProposalBoardListResponse(BaseModel):
+    items: list[ProposalBoardItemResponse]
 
 
 class ProposalDomainListResponse(BaseModel):
@@ -493,11 +840,29 @@ class ProposalPublishedResponse(ProposalPreviewResponse):
     discussion_url: str
 
 
+class ReviewCommentPreviewResponse(BaseModel):
+    body: str
+
+
+class ProposalReviewPreviewResponse(BaseModel):
+    input: ProposalReview
+    comment: ReviewCommentPreviewResponse
+
+
+class ProposalReviewPublishedResponse(ProposalReviewPreviewResponse):
+    proposal_id: str
+    discussion_url: str
+    review_comment_node_id: str
+    review_comment_url: str
+
+
 class ProposalSyncResponse(BaseModel):
     scanned_count: int
     created_count: int
     updated_count: int
     invalid_count: int
+    reviewed_count: int
+    invalid_review_count: int
 
 
 class PullRequestInstructionsResponse(BaseModel):

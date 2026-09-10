@@ -23,6 +23,11 @@ class TaskRevision(Base):
     commit_sha: Mapped[str] = mapped_column(String(64))
     task_path: Mapped[str] = mapped_column(String(500))
     resource_requirements: Mapped[dict[str, int]] = mapped_column(JSON, default=dict)
+    proposal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("proposals.id", ondelete="SET NULL"), index=True
+    )
+    pull_request_url: Mapped[str | None] = mapped_column(String(500))
+    release: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -136,6 +141,56 @@ class Proposal(Base):
     discussion_number: Mapped[int | None] = mapped_column(Integer)
     github_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     github_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_schema_version: Mapped[str | None] = mapped_column(String(80))
+    review_decision: Mapped[str | None] = mapped_column(String(32))
+    review_short_description: Mapped[str | None] = mapped_column(Text)
+    review_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    review_difficulty: Mapped[str | None] = mapped_column(String(80))
+    review_scientific_value: Mapped[str | None] = mapped_column(Text)
+    review_primary_metric: Mapped[str | None] = mapped_column(Text)
+    review_primary_metric_short: Mapped[str | None] = mapped_column(String(240))
+    review_secondary_metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
+    review_verification_method: Mapped[str | None] = mapped_column(Text)
+    review_estimated_runtime: Mapped[str | None] = mapped_column(String(240))
+    review_compute_budget: Mapped[str | None] = mapped_column(String(240))
+    review_token_budget: Mapped[str | None] = mapped_column(String(240))
+    review_baseline_results: Mapped[list[str]] = mapped_column(JSON, default=list)
+    review_failure_modes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    review_notes: Mapped[str | None] = mapped_column(Text)
+    review_reviewer_login: Mapped[str | None] = mapped_column(String(100))
+    review_comment_node_id: Mapped[str | None] = mapped_column(String(100), unique=True)
+    review_comment_url: Mapped[str | None] = mapped_column(String(500))
+    review_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_input_valid: Mapped[bool] = mapped_column(default=False)
+    review_document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ReviewerApplication(Base):
+    """A Website reviewer application and its administrator decision."""
+
+    __tablename__ = "reviewer_applications"
+    __table_args__ = (Index("ix_reviewer_applications_status_created", "status", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    schema_version: Mapped[str] = mapped_column(String(80))
+    name: Mapped[str] = mapped_column(String(200))
+    affiliation: Mapped[str] = mapped_column(String(300))
+    email: Mapped[str] = mapped_column(String(200), index=True)
+    github: Mapped[str | None] = mapped_column(String(100), index=True)
+    role: Mapped[str | None] = mapped_column(String(200))
+    domains: Mapped[list[str]] = mapped_column(JSON, default=list)
+    domains_display: Mapped[list[str]] = mapped_column(JSON, default=list)
+    field: Mapped[str | None] = mapped_column(String(80))
+    subfield: Mapped[str | None] = mapped_column(String(200))
+    research_background: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    admin_notes: Mapped[str | None] = mapped_column(Text)
+    submitted_by_login: Mapped[str | None] = mapped_column(String(100))
+    reviewed_by: Mapped[str | None] = mapped_column(String(100))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -174,5 +229,31 @@ class DatabaseJob(Base):
     lease_owner: Mapped[str | None] = mapped_column(String(200))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class WebhookDelivery(Base):
+    """One inspectable outbound webhook message and its delivery state."""
+
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key"),
+        Index("ix_webhook_deliveries_claim", "state", "available_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_type: Mapped[str] = mapped_column(String(80), index=True)
+    destination_url: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    dedupe_key: Mapped[str] = mapped_column(String(240))
+    state: Mapped[str] = mapped_column(String(32), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=5)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[str | None] = mapped_column(Text)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

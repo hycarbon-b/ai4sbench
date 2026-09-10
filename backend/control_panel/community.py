@@ -10,27 +10,35 @@ from typing import Annotated, Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .database import get_session
 from .identity import OAuthAccount, User, current_active_user, current_optional_user
-from .models import CloudProfile, Proposal
+from .models import CloudProfile, ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
 from .schemas import (
     PROPOSAL_DOMAIN_OPTIONS,
+    REVIEW_COMMENT_MARKER,
     AuthConfigResponse,
     AuthenticatedUserResponse,
     CloudProfileCreate,
     CloudProfileListResponse,
     CloudProfileResponse,
+    ProposalBoardListResponse,
     ProposalDomainListResponse,
     ProposalListResponse,
     ProposalPreviewResponse,
     ProposalPublishedResponse,
+    ProposalReview,
+    ProposalReviewPreviewResponse,
+    ProposalReviewPublishedResponse,
     ProposalSubmission,
     ProposalSyncResponse,
     PullRequestInstructionsResponse,
+    ReviewerApplicationCreatedResponse,
+    ReviewerApplicationSubmission,
 )
+from .webhooks import enqueue_proposal_notification, enqueue_review_notification
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -38,12 +46,32 @@ UserDep = Annotated[User, Depends(current_active_user)]
 OptionalUserDep = Annotated[User | None, Depends(current_optional_user)]
 
 
-def user_dict(user: User) -> dict[str, str]:
+def user_can_review(request: Request, user: User, session: Session) -> bool:
+    settings = request.app.state.settings
+    allowed = {login.lower() for login in (*settings.admin_github_logins, *settings.reviewer_github_logins)}
+    login = (user.github_login or "").lower()
+    if user.role == "admin" or login in allowed:
+        return True
+    if not login:
+        return False
+    approved_application = session.scalar(
+        select(ReviewerApplication.id)
+        .where(
+            ReviewerApplication.status == "approved",
+            func.lower(ReviewerApplication.github) == login,
+        )
+        .limit(1)
+    )
+    return approved_application is not None
+
+
+def user_dict(request: Request, user: User, session: Session) -> dict[str, object]:
     return {
         "id": str(user.id),
         "email": user.email,
         "github_login": user.github_login or "",
         "role": user.role,
+        "can_review": user_can_review(request, user, session),
     }
 
 
@@ -56,6 +84,18 @@ def require_admin(user: UserDep) -> User:
 AdminDep = Annotated[User, Depends(require_admin)]
 
 
+def require_reviewer(request: Request, user: UserDep, session: SessionDep) -> User:
+    if not user_can_review(request, user, session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Configured proposal reviewer required",
+        )
+    return user
+
+
+ReviewerDep = Annotated[User, Depends(require_reviewer)]
+
+
 @community_router.get(
     "/auth/me",
     summary="Get the signed-in Website user",
@@ -63,8 +103,8 @@ AdminDep = Annotated[User, Depends(require_admin)]
         "Returns the current Dashboard cookie session. A 401 means the visitor must sign in with GitHub."
     ),
 )
-async def me(user: UserDep) -> AuthenticatedUserResponse:
-    return user_dict(user)
+async def me(request: Request, user: UserDep, session: SessionDep) -> AuthenticatedUserResponse:
+    return user_dict(request, user, session)
 
 
 @community_router.get(
@@ -87,6 +127,33 @@ def auth_config(request: Request) -> AuthConfigResponse:
 )
 def proposal_domains() -> ProposalDomainListResponse:
     return {"items": list(PROPOSAL_DOMAIN_OPTIONS)}
+
+
+@community_router.post(
+    "/reviewers",
+    tags=["reviewers"],
+    status_code=status.HTTP_201_CREATED,
+    response_model=ReviewerApplicationCreatedResponse,
+    summary="Submit a reviewer application",
+    description=(
+        "Accepts the exact schema emitted by the public Website reviewer form. "
+        "Authentication is optional; a signed-in GitHub login is recorded for administrator context."
+    ),
+    responses={422: {"description": "The application does not match the Website reviewer schema."}},
+)
+def create_reviewer_application(
+    body: ReviewerApplicationSubmission,
+    session: SessionDep,
+    user: OptionalUserDep,
+) -> ReviewerApplicationCreatedResponse:
+    item = ReviewerApplication(
+        **body.model_dump(),
+        status="pending",
+        submitted_by_login=user.github_login if user else None,
+    )
+    session.add(item)
+    session.commit()
+    return ReviewerApplicationCreatedResponse.model_validate(item, from_attributes=True)
 
 
 @community_router.post(
@@ -138,6 +205,115 @@ def list_proposals(session: SessionDep) -> ProposalListResponse:
     }
 
 
+def proposal_form_values(item: Proposal) -> dict[str, object]:
+    document = item.document or {}
+    candidate = document.get("form_payload") if isinstance(document, dict) else None
+    return candidate if isinstance(candidate, dict) else document
+
+
+def revision_run_results(session: Session, revision: TaskRevision | None) -> list[dict[str, object]]:
+    if revision is None:
+        return []
+    runs = session.scalars(
+        select(Run)
+        .join(ExecutionPlan, Run.plan_id == ExecutionPlan.id)
+        .where(ExecutionPlan.task_revision_id == revision.id)
+        .order_by(Run.created_at.desc())
+    )
+    return [
+        {
+            "id": run.id,
+            "state": run.state,
+            "agent": run.config_snapshot.get("agent"),
+            "model": run.config_snapshot.get("model"),
+            "result": run.result,
+            "created_at": run.created_at,
+            "updated_at": run.updated_at,
+        }
+        for run in runs
+    ]
+
+
+def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision | None) -> dict[str, object]:
+    form = proposal_form_values(item)
+    return {
+        "id": item.id,
+        "title": str(form.get("title") or item.title),
+        "domain": str(form.get("domain") or item.domain),
+        "field_name": str(form.get("field_name") or item.field),
+        "problem": str(form.get("problem") or item.abstract),
+        "solvability": str(form.get("solvability") or ""),
+        "references": str(form.get("references") or item.evidence),
+        "software": str(form.get("software") or ""),
+        "dataset": str(form.get("dataset") or ""),
+        "compute": str(form.get("compute") or ""),
+        "workflow": str(form.get("workflow") or ""),
+        "evaluation": str(form.get("evaluation") or ""),
+        "leakage": str(form.get("leakage") or ""),
+        "name": str(form.get("name") or item.author_login or ""),
+        "affiliation": str(form.get("affiliation") or ""),
+        "github": str(form.get("github") or item.author_login or ""),
+        "task_slug": item.task_slug,
+        "status": item.status,
+        "discussion_url": item.discussion_url,
+        "discussion_number": item.discussion_number,
+        "input_valid": item.input_valid,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+        **{field: getattr(item, field) for field in REVIEW_VALUE_FIELDS},
+        "review_reviewer_login": item.review_reviewer_login,
+        "review_comment_url": item.review_comment_url,
+        "review_created_at": item.review_created_at,
+        "review_updated_at": item.review_updated_at,
+        "review_input_valid": item.review_input_valid,
+        "revision_id": revision.id if revision else None,
+        "revision_repo_url": revision.repo_url if revision else None,
+        "revision_commit_sha": revision.commit_sha if revision else None,
+        "revision_task_path": revision.task_path if revision else None,
+        "revision_resource_requirements": revision.resource_requirements if revision else None,
+        "revision_pull_request_url": revision.pull_request_url if revision else None,
+        "revision_release": revision.release if revision else None,
+        "revision_created_at": revision.created_at if revision else None,
+        "revision_agent_results": revision_run_results(session, revision),
+    }
+
+
+@community_router.get(
+    "/public/proposals",
+    tags=["public proposals"],
+    response_model=ProposalBoardListResponse,
+    summary="List Website task-board proposals",
+    description=(
+        "Returns valid proposal submissions with their latest synchronized review and latest linked "
+        "task revision. The route is public and reads only the local database."
+    ),
+)
+def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
+    proposals = list(
+        session.scalars(
+            select(Proposal).where(Proposal.input_valid.is_(True)).order_by(Proposal.updated_at.desc())
+        )
+    )
+    revisions = (
+        list(
+            session.scalars(
+                select(TaskRevision)
+                .where(TaskRevision.proposal_id.in_([item.id for item in proposals]))
+                .order_by(TaskRevision.created_at.desc())
+            )
+        )
+        if proposals
+        else []
+    )
+    latest_revisions: dict[str, TaskRevision] = {}
+    for revision in revisions:
+        if revision.proposal_id:
+            latest_revisions.setdefault(revision.proposal_id, revision)
+    return {
+        "items": [proposal_board_item(session, item, latest_revisions.get(item.id)) for item in proposals]
+    }
+
+
 TASK_PROPOSALS_CATEGORY = "Task Proposals"
 PROPOSAL_TITLE_RE = re.compile(r"^\s*\[\s*Task Proposal\s*#\d+\s*\]\s*(.+)$", re.IGNORECASE)
 
@@ -151,6 +327,19 @@ query($owner: String!, $name: String!, $cursor: String) {
         category { name }
         author { login }
         labels(first: 30) { nodes { name } }
+      }
+    }
+  }
+}
+"""
+
+DISCUSSION_COMMENTS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    discussion(number: $number) {
+      comments(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes { id url body createdAt updatedAt author { login } }
       }
     }
   }
@@ -214,22 +403,159 @@ def parse_github_time(value: str | None) -> datetime | None:
 
 
 def markdown_section(body: str, heading: str, fallback: str = "") -> str:
-    match = re.search(
-        rf"(?ims)^##\s*{re.escape(heading)}\s*$\n+(.+?)(?=^##\s|\Z)", body or ""
-    )
+    match = re.search(rf"(?ims)^##\s*{re.escape(heading)}\s*$\n+(.+?)(?=^##\s|\Z)", body or "")
     return match.group(1).strip() if match else fallback
 
 
 def markdown_subsection(body: str, heading: str, fallback: str = "") -> str:
-    match = re.search(
-        rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^##?\s|\Z)", body or ""
-    )
+    match = re.search(rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^##?\s|\Z)", body or "")
     return match.group(1).strip() if match else fallback
 
 
 def markdown_line(body: str, label: str) -> str | None:
     match = re.search(rf"(?im)^{re.escape(label)}\s*:\s*(.+?)\s*$", body or "")
     return match.group(1).strip() if match else None
+
+
+def review_markdown_section(body: str, heading: str) -> str:
+    match = re.search(rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^###\s|\Z)", body or "")
+    return match.group(1).strip() if match else ""
+
+
+def markdown_list(body: str, heading: str) -> list[str]:
+    section = review_markdown_section(body, heading)
+    return [
+        match.group(1).strip()
+        for line in section.splitlines()
+        if (match := re.match(r"^\s*[-*]\s+(.+?)\s*$", line))
+    ]
+
+
+def review_payload_from_comment(node: dict[str, Any]) -> dict[str, object] | None:
+    """Extract the versioned review form from one GitHub Discussion reply."""
+
+    body = str(node.get("body") or "")
+    if REVIEW_COMMENT_MARKER not in body:
+        return None
+    return {
+        "review_decision": markdown_line(body, "Decision") or "",
+        "review_short_description": review_markdown_section(body, "Short Description"),
+        "review_tags": markdown_list(body, "Tags"),
+        "review_difficulty": review_markdown_section(body, "Difficulty"),
+        "review_scientific_value": review_markdown_section(body, "Scientific Value"),
+        "review_primary_metric": review_markdown_section(body, "Primary Metric"),
+        "review_primary_metric_short": review_markdown_section(body, "Primary Metric Short") or None,
+        "review_secondary_metrics": markdown_list(body, "Secondary Metrics"),
+        "review_verification_method": review_markdown_section(body, "Verification Method"),
+        "review_estimated_runtime": review_markdown_section(body, "Estimated Runtime") or None,
+        "review_compute_budget": review_markdown_section(body, "Compute Budget") or None,
+        "review_token_budget": review_markdown_section(body, "Token Budget") or None,
+        "review_baseline_results": markdown_list(body, "Baseline Results"),
+        "review_failure_modes": markdown_list(body, "Failure Modes"),
+        "review_notes": review_markdown_section(body, "Review Notes") or None,
+    }
+
+
+REVIEW_VALUE_FIELDS = (
+    "review_schema_version",
+    "review_decision",
+    "review_short_description",
+    "review_tags",
+    "review_difficulty",
+    "review_scientific_value",
+    "review_primary_metric",
+    "review_primary_metric_short",
+    "review_secondary_metrics",
+    "review_verification_method",
+    "review_estimated_runtime",
+    "review_compute_budget",
+    "review_token_budget",
+    "review_baseline_results",
+    "review_failure_modes",
+    "review_notes",
+)
+
+
+def empty_review_values() -> dict[str, object]:
+    values: dict[str, object] = {
+        field: []
+        if field
+        in {
+            "review_tags",
+            "review_secondary_metrics",
+            "review_baseline_results",
+            "review_failure_modes",
+        }
+        else None
+        for field in REVIEW_VALUE_FIELDS
+    }
+    values.update(
+        {
+            "review_reviewer_login": None,
+            "review_comment_node_id": None,
+            "review_comment_url": None,
+            "review_created_at": None,
+            "review_updated_at": None,
+            "review_input_valid": False,
+            "review_document": {},
+        }
+    )
+    return values
+
+
+def review_values_from_discussion(
+    node: dict[str, Any], reviewer_logins: set[str]
+) -> tuple[dict[str, object], bool, bool]:
+    """Return latest authorized review values plus valid/invalid counters."""
+
+    comments = list((node.get("comments") or {}).get("nodes") or [])
+    candidates = [
+        comment
+        for comment in comments
+        if REVIEW_COMMENT_MARKER in str(comment.get("body") or "")
+        and str((comment.get("author") or {}).get("login") or "").lower() in reviewer_logins
+    ]
+    if not candidates:
+        return empty_review_values(), False, False
+    latest = max(candidates, key=lambda item: str(item.get("updatedAt") or item.get("createdAt") or ""))
+    raw = review_payload_from_comment(latest) or {}
+    identity = {
+        "review_reviewer_login": str((latest.get("author") or {}).get("login") or ""),
+        "review_comment_node_id": str(latest.get("id") or ""),
+        "review_comment_url": str(latest.get("url") or ""),
+        "review_created_at": parse_github_time(latest.get("createdAt")),
+        "review_updated_at": parse_github_time(latest.get("updatedAt")),
+    }
+    try:
+        review = ProposalReview.model_validate(raw)
+    except ValidationError as error:
+        values = empty_review_values()
+        values.update(identity)
+        values.update(
+            {
+                "review_input_valid": False,
+                "review_document": {
+                    "source": "github-discussion-comment",
+                    "payload": raw,
+                    "body": str(latest.get("body") or ""),
+                    "validation_errors": validation_errors_for_document(error),
+                },
+            }
+        )
+        return values, False, True
+    values = review.model_dump(mode="json")
+    values.update(identity)
+    values.update(
+        {
+            "review_input_valid": True,
+            "review_document": {
+                "source": "github-discussion-comment",
+                "payload": review.model_dump(mode="json"),
+                "body": str(latest.get("body") or ""),
+            },
+        }
+    )
+    return values, True, False
 
 
 def slugify(value: str) -> str:
@@ -394,6 +720,128 @@ async def preview_proposal(
 
 
 @community_router.post(
+    "/proposals/reviews/preview",
+    tags=["community"],
+    response_model=ProposalReviewPreviewResponse,
+    summary="Render a canonical proposal-review reply",
+    description=(
+        "Reviewer-only preview of the exact Markdown reply posted beneath the proposal Discussion. "
+        "The endpoint has no side effects."
+    ),
+)
+def preview_proposal_review(body: ProposalReview, _user: ReviewerDep) -> ProposalReviewPreviewResponse:
+    return {
+        "input": body,
+        "comment": {"body": body.render_comment()},
+    }
+
+
+async def create_github_discussion_comment(
+    request: Request, user: User, discussion_node_id: str, body: str
+) -> dict[str, object]:
+    payload = {
+        "query": (
+            "mutation($input: AddDiscussionCommentInput!) { "
+            "addDiscussionComment(input: $input) { "
+            "comment { id url body createdAt updatedAt author { login } } } }"
+        ),
+        "variables": {"input": {"discussionId": discussion_node_id, "body": body}},
+    }
+    token = await github_access_token(request, user)
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            "https://api.github.com/graphql",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        )
+        if response.status_code == 401:
+            token = await refresh_github_access_token(request, user)
+            response = await client.post(
+                "https://api.github.com/graphql",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+            )
+    response_payload = response.json()
+    if response.status_code == 401:
+        raise HTTPException(status_code=401, detail="GitHub authorization expired; sign in again")
+    if response.status_code >= 400 or response_payload.get("errors"):
+        raise HTTPException(status_code=502, detail="GitHub could not publish the proposal review")
+    return dict(response_payload["data"]["addDiscussionComment"]["comment"])
+
+
+@community_router.post(
+    "/proposals/{proposal_id}/reviews",
+    status_code=status.HTTP_201_CREATED,
+    tags=["community"],
+    response_model=ProposalReviewPublishedResponse,
+    summary="Publish a structured proposal review",
+    description=(
+        "Requires an administrator or a GitHub login listed in TBCP_REVIEWER_GITHUB_LOGINS. "
+        "Publishes the canonical review as a reply beneath the proposal Discussion and immediately "
+        "updates the proposal's review_* columns. A later Discussion sync verifies the same reply."
+    ),
+    responses={
+        401: {"description": "GitHub sign-in is missing or expired."},
+        403: {"description": "The signed-in GitHub user is not a configured reviewer."},
+        404: {"description": "The proposal does not exist."},
+        409: {"description": "The proposal is not linked to a GitHub Discussion."},
+        502: {"description": "GitHub did not accept the Discussion reply."},
+    },
+)
+async def publish_proposal_review(
+    proposal_id: str,
+    body: ProposalReview,
+    request: Request,
+    session: SessionDep,
+    user: ReviewerDep,
+) -> ProposalReviewPublishedResponse:
+    proposal = session.get(Proposal, proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if not proposal.discussion_node_id or not proposal.discussion_url:
+        raise HTTPException(status_code=409, detail="Proposal has no GitHub Discussion identity")
+
+    rendered = body.render_comment()
+    comment = await create_github_discussion_comment(request, user, proposal.discussion_node_id, rendered)
+    now = datetime.now(UTC)
+    review_values = body.model_dump(mode="json")
+    for field, value in review_values.items():
+        setattr(proposal, field, value)
+    proposal.review_reviewer_login = str(
+        ((comment.get("author") or {}).get("login") if isinstance(comment.get("author"), dict) else None)
+        or user.github_login
+        or ""
+    )
+    proposal.review_comment_node_id = str(comment["id"])
+    proposal.review_comment_url = str(comment["url"])
+    proposal.review_created_at = parse_github_time(str(comment.get("createdAt") or "")) or now
+    proposal.review_updated_at = parse_github_time(str(comment.get("updatedAt") or "")) or now
+    proposal.review_input_valid = True
+    proposal.review_document = {
+        "source": "github-discussion-comment",
+        "payload": review_values,
+        "body": rendered,
+    }
+    proposal.status = body.review_decision
+    enqueue_review_notification(
+        session,
+        request.app.state.settings,
+        proposal,
+        body,
+        proposal.review_reviewer_login,
+    )
+    session.commit()
+    return {
+        "proposal_id": proposal.id,
+        "discussion_url": proposal.discussion_url,
+        "review_comment_node_id": proposal.review_comment_node_id,
+        "review_comment_url": proposal.review_comment_url,
+        "input": body,
+        "comment": {"body": rendered},
+    }
+
+
+@community_router.post(
     "/proposals",
     status_code=status.HTTP_201_CREATED,
     summary="Publish a proposal as a GitHub Discussion",
@@ -431,6 +879,13 @@ async def create_proposal(
         discussion_number=int(discussion["number"]),
     )
     session.add(item)
+    session.flush()
+    enqueue_proposal_notification(
+        session,
+        request.app.state.settings,
+        item,
+        submission.model_dump(mode="json"),
+    )
     session.commit()
     return {
         "id": item.id,
@@ -438,6 +893,31 @@ async def create_proposal(
         "discussion_url": item.discussion_url,
         **proposal_preview(submission),
     }
+
+
+async def fetch_discussion_comments(
+    client: httpx.AsyncClient, owner: str, name: str, number: int, token: str
+) -> list[dict[str, Any]]:
+    cursor: str | None = None
+    comments: list[dict[str, Any]] = []
+    while True:
+        response = await client.post(
+            "https://api.github.com/graphql",
+            json={
+                "query": DISCUSSION_COMMENTS_QUERY,
+                "variables": {"owner": owner, "name": name, "number": number, "cursor": cursor},
+            },
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        )
+        payload = response.json()
+        if response.status_code >= 400 or payload.get("errors"):
+            raise HTTPException(status_code=502, detail="GitHub could not scan proposal reviews")
+        connection = payload["data"]["repository"]["discussion"]["comments"]
+        comments.extend(connection["nodes"])
+        page = connection["pageInfo"]
+        if not page["hasNextPage"]:
+            return comments
+        cursor = page["endCursor"]
 
 
 async def fetch_all_discussions(settings: object, token: str) -> list[dict[str, Any]]:
@@ -466,8 +946,14 @@ async def fetch_all_discussions(settings: object, token: str) -> list[dict[str, 
             nodes.extend(connection["nodes"])
             page = connection["pageInfo"]
             if not page["hasNextPage"]:
-                return nodes
+                break
             cursor = page["endCursor"]
+        for node in nodes:
+            if (node.get("category") or {}).get("name") != TASK_PROPOSALS_CATEGORY:
+                continue
+            comments = await fetch_discussion_comments(client, owner, name, int(node["number"]), token)
+            node["comments"] = {"nodes": comments}
+    return nodes
 
 
 @community_router.post(
@@ -488,6 +974,12 @@ async def sync_proposal_discussions(
     updated_count = 0
     scanned_count = 0
     invalid_count = 0
+    reviewed_count = 0
+    invalid_review_count = 0
+    settings = request.app.state.settings
+    reviewer_logins = {
+        login.lower() for login in (*settings.admin_github_logins, *settings.reviewer_github_logins)
+    }
     for node in nodes:
         if (node.get("category") or {}).get("name") != TASK_PROPOSALS_CATEGORY:
             continue
@@ -520,6 +1012,9 @@ async def sync_proposal_discussions(
             evidence = form_payload["references"] or "Not provided"
             author_login = form_payload["github"] or None
         labels = [str(label["name"]) for label in (node.get("labels") or {}).get("nodes", [])]
+        review_values, review_valid, review_invalid = review_values_from_discussion(node, reviewer_logins)
+        reviewed_count += int(review_valid)
+        invalid_review_count += int(review_invalid)
         values = {
             "author_login": author_login,
             "title": title,
@@ -530,12 +1025,13 @@ async def sync_proposal_discussions(
             "evidence": evidence,
             "document": document,
             "input_valid": input_valid,
-            "status": discussion_status(labels),
+            "status": (str(review_values["review_decision"]) if review_valid else discussion_status(labels)),
             "discussion_url": str(node["url"]),
             "discussion_node_id": str(node["id"]),
             "discussion_number": int(node["number"]),
             "github_created_at": parse_github_time(node.get("createdAt")),
             "github_updated_at": parse_github_time(node.get("updatedAt")),
+            **review_values,
         }
         existing = session.scalar(
             select(Proposal).where(Proposal.discussion_node_id == values["discussion_node_id"])
@@ -559,6 +1055,8 @@ async def sync_proposal_discussions(
         "created_count": created_count,
         "updated_count": updated_count,
         "invalid_count": invalid_count,
+        "reviewed_count": reviewed_count,
+        "invalid_review_count": invalid_review_count,
     }
 
 

@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2026-08-16",
+    "title": "First candidate pilot task enters scientific review",
+    "text": "Active Learning for Electronic Structure is the first candidate task under review for release v0.1.",
+    "link": "tasks/"
+  },
+  {
+    "date": "2026-08-16",
+    "title": "AI4S-Benchmark opens its public site",
+    "text": "The benchmark's public presentation, task explorer and submission portal are now live. Task proposals are open via GitHub.",
+    "link": "submit/"
+  }
+]

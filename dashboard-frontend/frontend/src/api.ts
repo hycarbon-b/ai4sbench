@@ -3,6 +3,7 @@ export type User = {
   email: string;
   github_login: string;
   role: "admin" | "contributor" | "member";
+  can_review: boolean;
 };
 
 export type ProposalInput = {
@@ -38,6 +39,36 @@ export type Proposal = {
   author_login: string;
   discussion_number?: number | null;
   input_valid: boolean;
+};
+
+export type ReviewerApplicationStatus = "pending" | "approved" | "rejected";
+
+export type ReviewerApplication = {
+  id: string;
+  schema_version: string;
+  name: string;
+  affiliation: string;
+  email: string;
+  github: string | null;
+  role: string | null;
+  domains: string[];
+  domains_display: string[];
+  field: string | null;
+  subfield: string | null;
+  research_background: string;
+  status: ReviewerApplicationStatus;
+  admin_notes: string | null;
+  submitted_by_login: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReviewerApplicationUpdate = {
+  status?: ReviewerApplicationStatus;
+  github?: string | null;
+  admin_notes?: string | null;
 };
 
 export type TaskRevision = {
@@ -90,6 +121,24 @@ export type Job = {
   lease_owner: string | null;
   lease_expires_at: string | null;
   last_error: string | null;
+};
+
+export type WebhookDelivery = {
+  id: string;
+  event_type: string;
+  destination_url: string;
+  payload: Record<string, unknown>;
+  dedupe_key: string;
+  state: string;
+  attempts: number;
+  max_attempts: number;
+  available_at: string;
+  last_error: string | null;
+  response_status: number | null;
+  response_body: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type CloudProfile = {
@@ -145,6 +194,17 @@ export const createProposal = (input: ProposalInput) =>
     method: "POST",
     body: JSON.stringify(input),
   });
+export const updateReviewerApplication = (
+  id: string,
+  input: ReviewerApplicationUpdate,
+) =>
+  api<ReviewerApplication>(
+    `/api/v1/reviewer-applications/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  );
 export const syncProposalDiscussions = () =>
   api<{
     scanned_count: number;
@@ -154,6 +214,10 @@ export const syncProposalDiscussions = () =>
   }>("/api/v1/proposals/sync-discussions", { method: "POST" });
 export const signOut = () =>
   api<void>("/api/v1/auth/logout", { method: "POST" });
+export const resendWebhookDelivery = (id: string) =>
+  api<WebhookDelivery>(`/api/v1/webhook-deliveries/${encodeURIComponent(id)}/resend`, {
+    method: "POST",
+  });
 export const listDatabaseSnapshots = () =>
   api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots");
 export const createDatabaseSnapshot = () =>

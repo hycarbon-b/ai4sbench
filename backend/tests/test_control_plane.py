@@ -132,6 +132,23 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             self.assertEqual(payload["info"]["title"], "AI4S-Bench Control Plane API")
             self.assertIn("community", {tag["name"] for tag in payload["tags"]})
 
+    def test_website_dist_is_served_beneath_dashboard(self) -> None:
+        redirect = self.client.get("/website", follow_redirects=False)
+        self.assertEqual(redirect.status_code, 307)
+        self.assertEqual(redirect.headers["location"], "/website/")
+
+        index = self.client.get("/website/")
+        self.assertEqual(index.status_code, 200)
+        self.assertIn("AI4S-Benchmark", index.text)
+
+        site_config = self.client.get("/website/data/site.json")
+        self.assertEqual(site_config.status_code, 200)
+        self.assertEqual(site_config.json()["control_plane_url"], "https://dashboard.ai4sbench.org")
+
+        reviewer_form = self.client.get("/website/reviewers/")
+        self.assertEqual(reviewer_form.status_code, 200)
+        self.assertIn("20260910-reviewer-intake", reviewer_form.text)
+
     def test_every_json_api_route_declares_a_response_schema(self) -> None:
         excluded_binary_route = "/api/v1/database-snapshots/{name}/download"
         undocumented = [
@@ -149,6 +166,21 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(
             proposal_preview["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/ProposalPreviewResponse",
+        )
+        proposal_board = openapi["paths"]["/api/v1/public/proposals"]["get"]
+        self.assertEqual(
+            proposal_board["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalBoardListResponse",
+        )
+        review_preview = openapi["paths"]["/api/v1/proposals/reviews/preview"]["post"]
+        self.assertEqual(
+            review_preview["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalReviewPreviewResponse",
+        )
+        review_publish = openapi["paths"]["/api/v1/proposals/{proposal_id}/reviews"]["post"]
+        self.assertEqual(
+            review_publish["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalReviewPublishedResponse",
         )
         task_revisions = openapi["paths"]["/api/v1/task-revisions"]["get"]
         self.assertEqual(

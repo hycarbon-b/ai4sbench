@@ -43,5 +43,31 @@ contexts:
 docker compose -f backend/compose.yaml up --build
 ```
 
+The public Website snapshot is committed under `control_panel/website_dist` and
+served at `/website`. Refresh that directory manually from the Website
+submodule whenever a new static release is prepared.
+
 The public task repository is configured through `TBCP_GITHUB_REPOSITORY` and
 is intentionally external to this service's private data directory.
+
+The Website task board reads `GET /api/v1/public/proposals`. Each item combines
+the stored proposal, its latest valid structured review reply, and its latest
+linked task revision. Review comments are accepted only from administrators or
+GitHub logins configured by `TBCP_REVIEWER_GITHUB_LOGINS`. Reviewers can render
+the canonical reply with `POST /api/v1/proposals/reviews/preview` and publish it
+beneath a Discussion with `POST /api/v1/proposals/{proposal_id}/reviews`.
+
+The Website reviewer form submits its versioned dossier to the public
+`POST /api/v1/reviewers` endpoint. Administrators list and inspect applications
+with `GET /api/v1/reviewer-applications`, then update the GitHub identity,
+private notes, or decision with
+`PATCH /api/v1/reviewer-applications/{application_id}`. An approved application
+with a GitHub username grants the same review permission as the configured
+`TBCP_REVIEWER_GITHUB_LOGINS` allowlist.
+
+Set `TBCP_DISCORD_WEBHOOK_URL` to enqueue Discord notifications for newly
+published proposals and reviews. `TBCP_WEBSITE_PUBLIC_BASE_URL` controls the
+task-detail link in those messages. The existing `ai4sbench-jobs` process sends
+the queued deliveries. Administrators can inspect the full destination, JSON
+payload, response and retry state at `GET /api/v1/webhook-deliveries`, or queue a
+delivery again with `POST /api/v1/webhook-deliveries/{delivery_id}/resend`.
