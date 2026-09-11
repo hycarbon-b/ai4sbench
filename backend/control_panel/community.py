@@ -408,7 +408,7 @@ def markdown_section(body: str, heading: str, fallback: str = "") -> str:
 
 
 def markdown_subsection(body: str, heading: str, fallback: str = "") -> str:
-    match = re.search(rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^##?\s|\Z)", body or "")
+    match = re.search(rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^#{{2,3}}\s|\Z)", body or "")
     return match.group(1).strip() if match else fallback
 
 
@@ -603,6 +603,22 @@ def validation_errors_for_document(error: ValidationError) -> list[dict[str, Any
     return json.loads(error.json(include_url=False))
 
 
+def validate_proposal_submission(
+    value: ProposalSubmission | dict[str, object], *, github_login: str | None = None
+) -> ProposalSubmission:
+    """Validate and normalize proposal input through one shared contract.
+
+    Create, preview and Discussion sync all call this function. Publishing may
+    replace the form GitHub value with the authenticated account before the
+    complete payload is validated again.
+    """
+
+    payload = value.model_dump(mode="json") if isinstance(value, ProposalSubmission) else dict(value)
+    if github_login:
+        payload["github"] = github_login
+    return ProposalSubmission.model_validate(payload)
+
+
 def discussion_status(labels: list[str]) -> str:
     if any(label.startswith("proposal-approved") for label in labels):
         return "approved"
@@ -712,7 +728,9 @@ async def preview_proposal(
                 name for name, field in ProposalSubmission.model_fields.items() if field.is_required()
             ],
         }
-    submission = body.with_github_identity(user.github_login) if user else body
+    submission = validate_proposal_submission(
+        body, github_login=user.github_login if user else None
+    )
     return {
         **proposal_preview(submission),
         "github_identity_source": "authenticated" if user else "form",
@@ -860,7 +878,7 @@ async def publish_proposal_review(
 async def create_proposal(
     body: ProposalSubmission, request: Request, session: SessionDep, user: UserDep
 ) -> ProposalPublishedResponse:
-    submission = body.with_github_identity(user.github_login)
+    submission = validate_proposal_submission(body, github_login=user.github_login)
     discussion = await create_github_discussion(request, user, submission)
     item = Proposal(
         author_id=str(user.id),
@@ -986,7 +1004,7 @@ async def sync_proposal_discussions(
         scanned_count += 1
         form_payload = form_payload_from_discussion(node)
         try:
-            submission = ProposalSubmission.model_validate(form_payload)
+            submission = validate_proposal_submission(form_payload)
             input_valid = True
             document = submission.model_dump(mode="json")
             title = submission.title

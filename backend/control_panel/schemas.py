@@ -227,9 +227,6 @@ class ProposalSubmission(BaseModel):
     def task_slug(self) -> str:
         return self.slugify(self.title)
 
-    def with_github_identity(self, github_login: str | None) -> ProposalSubmission:
-        return self.model_copy(update={"github": github_login or self.github})
-
     def render_discussion(self) -> str:
         return "\n".join(
             (

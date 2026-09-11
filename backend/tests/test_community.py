@@ -9,7 +9,11 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from control_panel.community import form_payload_from_discussion, review_payload_from_comment
+from control_panel.community import (
+    form_payload_from_discussion,
+    review_payload_from_comment,
+    validate_proposal_submission,
+)
 from control_panel.config import Settings
 from control_panel.identity import User, current_active_user, current_optional_user
 from control_panel.main import create_app
@@ -91,7 +95,12 @@ def review_payload() -> dict[str, object]:
 
 
 def test_form_contract_renders_and_round_trips_through_a_discussion() -> None:
-    submission = ProposalSubmission.model_validate(proposal_payload())
+    source = proposal_payload()
+    source["workflow"] = (
+        "Execute the deterministic workflow, preserve every intermediate artifact, and publish "
+        "the complete verifier-ready output bundle. "
+    ) * 15
+    submission = validate_proposal_submission(source)
     rendered = submission.render_discussion()
     payload = form_payload_from_discussion(
         {
@@ -100,11 +109,8 @@ def test_form_contract_renders_and_round_trips_through_a_discussion() -> None:
             "body": rendered,
         }
     )
-    imported = ProposalSubmission.model_validate(payload)
-    assert imported.domain == "Earth Sciences"
-    assert imported.field_name == "Coastal oceanography"
-    assert imported.github == "scientist"
-    assert imported.task_slug == "assimilate-a-sparse-coastal-observation-network"
+    imported = validate_proposal_submission(payload)
+    assert imported == submission
 
 
 def test_review_contract_renders_and_round_trips_through_a_discussion_reply() -> None:
