@@ -2291,7 +2291,7 @@ function Sidebar({
           </button>
         ))}
         <a
-          href="https://github.com/hycarbon-b/ai4sbench-benchmark"
+          href="https://github.com/AI4S-Bench/ai4s-benchmark"
           target="_blank"
           rel="noreferrer"
           className="mt-2 flex items-center gap-2 border-t border-slate-800 px-2.5 pt-3 text-xs text-slate-500 hover:text-slate-200"

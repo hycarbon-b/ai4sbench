@@ -119,8 +119,13 @@ credentials.
 | CORS origins | `https://ai4s-bench.github.io`, `https://ai4sbench.org`, `http://198.18.0.1:3000` |
 | Database URL | `sqlite:////var/lib/ai4sbench/control-panel.sqlite3` |
 | Auto-create schema | `false` |
-| Proposal GitHub repository | `hycarbon-b/ai4sbench-benchmark` |
+| Proposal GitHub repository | `AI4S-Bench/ai4s-benchmark` |
 | GitHub OAuth callback | `https://dashboard.ai4sbench.org/auth/github/callback` |
+
+Because the proposal repository is organization-owned, the Dashboard OAuth App
+must be approved for the `AI4S-Bench` organization when OAuth App access
+restrictions are enabled. Without that approval, GitHub accepts sign-in and
+public reads but rejects `createDiscussion` mutations made with user tokens.
 
 ### CORS verification
 
