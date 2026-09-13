@@ -1,38 +1,135 @@
 # ai4sbench
 
-ai4sbench is a contribution and execution system for scientific Harbor benchmarks.
-It separates the public task repository from the private control plane and its
-operator dashboard.
+ai4sbench is the contribution and execution control plane for scientific
+Harbor benchmarks. It connects the public Website and GitHub Discussions to a
+private operator Dashboard, SQLite state, immutable task revisions, background
+jobs, and EC2 workers.
+
+## Repository layout
 
 ```text
 ai4sbench/
-├── backend/                 FastAPI control plane, SQLite, EC2 worker lifecycle
-├── dashboard-frontend/      React operator and contribution dashboard
-└── benchmark-repository/    Public Harbor task repository and contribution checks
+|-- backend/                     FastAPI API, SQLite, migrations and EC2 lifecycle
+|-- dashboard-frontend/          React operator and contribution Dashboard
+|-- ai4s-bench-website/          Public Website submodule
+|-- benchmark-repository/        Public ai4s-benchmark task submodule
+`-- reference/                   Upstream reference implementations
 ```
 
-## Components
+- [`backend/`](backend/README.md) owns GitHub OAuth, proposal and review APIs,
+  Discussion synchronization, SQLite jobs, database snapshots, migrations, and
+  worker orchestration.
+- [`dashboard-frontend/frontend/`](dashboard-frontend/frontend/README.md) is
+  compiled into `backend/control_panel/static/` and served at `/`.
+- `ai4s-bench-website/` is developed in its own repository. A reviewed static
+  build is committed under `backend/control_panel/website_dist/` and served at
+  `/website`.
+- `benchmark-repository/` points to
+  `https://github.com/AI4S-Bench/ai4s-benchmark.git` and contains public task
+  definitions rather than private control-plane state.
 
-- [`backend/`](backend/README.md) owns GitHub OAuth, Proposal-to-Discussion
-  submission, immutable task revision records, SQLite job dispatch, EC2 worker
-  lifecycle, migrations, deployment configuration, and private environment data.
-- [`dashboard-frontend/frontend/`](dashboard-frontend/frontend/README.md)
-  contains the React application that is built into the backend's static assets.
-- [`benchmark-repository/`](benchmark-repository/README.md) is structured as a
-  standalone Terminal-Bench-Science-style repository. It contains only public
-  task material, benchmark maintenance tools, and contribution validation.
+## Clone and initialize
 
-## Local development
+Prerequisites are Git, Python 3.12 or newer, `uv`, Node.js, and npm.
 
-Run the control plane from `backend/`; build the dashboard from
-`dashboard-frontend/frontend/`; maintain and validate tasks from
-`benchmark-repository/`. Each component documents its own commands and
-boundaries. Docker Compose is invoked with:
+```bash
+git clone --recurse-submodules <repository-url>
+cd ai4sbench
+git submodule update --init --recursive
+```
+
+Develop a submodule on a branch inside that submodule. Commit and push the
+submodule change first, then commit the updated submodule pointer in this
+repository. Do not make long-lived work on a detached submodule commit.
+
+## Run locally
+
+Create `backend/.env` from the documented variable names in
+`backend/.env.example`. Use development values and a local SQLite path; never
+copy production credentials into a commit.
+
+```bash
+cd backend
+uv sync --extra dev --extra aws
+uv run alembic upgrade head
+uv run ai4sbench-api
+```
+
+Run the durable job worker in a second terminal:
+
+```bash
+cd backend
+uv run ai4sbench-jobs
+```
+
+Build the Dashboard after changing React source:
+
+```bash
+cd dashboard-frontend/frontend
+npm ci
+npm run check
+npm run build
+```
+
+The production build writes directly to `backend/control_panel/static/`.
+Commit the generated `index.html` and hashed assets together with the source
+change. The API then serves:
+
+- Dashboard: `http://127.0.0.1:8080/`
+- Website snapshot: `http://127.0.0.1:8080/website`
+- Swagger UI: `http://127.0.0.1:8080/docs`
+- Readiness: `http://127.0.0.1:8080/health/ready`
+
+Docker Compose is also available from the repository root:
 
 ```bash
 docker compose -f backend/compose.yaml up --build
 ```
 
-The root deliberately contains only the project overview and repository-level
-Git configuration. Credentials remain ignored under `backend/.env` and are not
-part of the public benchmark repository.
+## Verify a change
+
+Run backend and frontend verification before committing a release:
+
+```bash
+cd backend
+uv run pytest
+uv run ruff check control_panel tests
+```
+
+```bash
+cd dashboard-frontend/frontend
+npm run check
+npm run build
+```
+
+If a migration is added, run Ruff on that new migration file and run
+`uv run alembic upgrade head` against a disposable SQLite database as well as
+the normal test suite.
+
+## Proposal lifecycle
+
+1. A signed-in contributor previews or submits a Proposal.
+2. The backend validates the request with the same contract used when importing
+   a GitHub Discussion.
+3. The Proposal is rendered as a Discussion in the configured `Task Proposals`
+   category and tracked locally.
+4. Authorized reviewers publish structured review replies. Full Sync reparses
+   the Discussion and review into the local database.
+5. The Website task board reads only `GET /api/v1/public/proposals`.
+
+Dashboard deletion is logical. `DELETE /api/v1/proposals/{proposal_id}` sets a
+`deleted_at` tombstone, hides the Proposal from Dashboard and Website lists,
+and preserves its GitHub Discussion and linked task revisions. Full Sync
+recognizes the tombstone and will not import that Discussion again.
+
+## Production deployment
+
+Production is a Git-based systemd deployment. Application files are not copied
+directly with `scp`: push the reviewed branch, create an SQLite snapshot, pull
+the branch on EC2, run Alembic, restart the API and job services, and verify the
+public routes. See [`EC2_RUNBOOK.md`](EC2_RUNBOOK.md) for the current host,
+commands, rollback boundaries, and verification checklist.
+
+Secrets remain in ignored local `backend/.env` files or the protected production
+environment file. They must never be added to the repository, generated static
+assets, logs, issues, or pull requests.
