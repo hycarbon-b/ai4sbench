@@ -185,7 +185,12 @@ def logout(request: Request) -> Response:
     ),
 )
 def list_proposals(session: SessionDep) -> ProposalListResponse:
-    items = session.scalars(select(Proposal).order_by(Proposal.created_at.desc()).limit(50))
+    items = session.scalars(
+        select(Proposal)
+        .where(Proposal.deleted_at.is_(None))
+        .order_by(Proposal.created_at.desc())
+        .limit(50)
+    )
     return {
         "items": [
             {
@@ -203,6 +208,31 @@ def list_proposals(session: SessionDep) -> ProposalListResponse:
             for item in items
         ]
     }
+
+
+@community_router.delete(
+    "/proposals/{proposal_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a locally tracked proposal",
+    description=(
+        "Administrator-only logical deletion of one local proposal record. Linked task revisions and "
+        "the GitHub Discussion are retained. Later Discussion synchronizations recognize the deletion "
+        "tombstone and do not import the proposal again."
+    ),
+    responses={
+        403: {"description": "Administrator role required."},
+        404: {"description": "Proposal not found."},
+    },
+)
+def delete_proposal(proposal_id: str, session: SessionDep, _user: AdminDep) -> Response:
+    proposal = session.scalar(
+        select(Proposal).where(Proposal.id == proposal_id, Proposal.deleted_at.is_(None))
+    )
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal.deleted_at = datetime.now(UTC)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def proposal_form_values(item: Proposal) -> dict[str, object]:
@@ -291,7 +321,9 @@ def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision
 def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
     proposals = list(
         session.scalars(
-            select(Proposal).where(Proposal.input_valid.is_(True)).order_by(Proposal.updated_at.desc())
+            select(Proposal)
+            .where(Proposal.input_valid.is_(True), Proposal.deleted_at.is_(None))
+            .order_by(Proposal.updated_at.desc())
         )
     )
     revisions = (
@@ -813,7 +845,9 @@ async def publish_proposal_review(
     session: SessionDep,
     user: ReviewerDep,
 ) -> ProposalReviewPublishedResponse:
-    proposal = session.get(Proposal, proposal_id)
+    proposal = session.scalar(
+        select(Proposal).where(Proposal.id == proposal_id, Proposal.deleted_at.is_(None))
+    )
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
     if not proposal.discussion_node_id or not proposal.discussion_url:
@@ -1002,6 +1036,17 @@ async def sync_proposal_discussions(
         if (node.get("category") or {}).get("name") != TASK_PROPOSALS_CATEGORY:
             continue
         scanned_count += 1
+        discussion_node_id = str(node["id"])
+        discussion_url = str(node["url"])
+        existing = session.scalar(
+            select(Proposal).where(Proposal.discussion_node_id == discussion_node_id)
+        )
+        if existing is None:
+            existing = session.scalar(
+                select(Proposal).where(Proposal.discussion_url == discussion_url)
+            )
+        if existing is not None and existing.deleted_at is not None:
+            continue
         form_payload = form_payload_from_discussion(node)
         try:
             submission = validate_proposal_submission(form_payload)
@@ -1044,20 +1089,13 @@ async def sync_proposal_discussions(
             "document": document,
             "input_valid": input_valid,
             "status": (str(review_values["review_decision"]) if review_valid else discussion_status(labels)),
-            "discussion_url": str(node["url"]),
-            "discussion_node_id": str(node["id"]),
+            "discussion_url": discussion_url,
+            "discussion_node_id": discussion_node_id,
             "discussion_number": int(node["number"]),
             "github_created_at": parse_github_time(node.get("createdAt")),
             "github_updated_at": parse_github_time(node.get("updatedAt")),
             **review_values,
         }
-        existing = session.scalar(
-            select(Proposal).where(Proposal.discussion_node_id == values["discussion_node_id"])
-        )
-        if existing is None:
-            existing = session.scalar(
-                select(Proposal).where(Proposal.discussion_url == values["discussion_url"])
-            )
         if existing is None:
             author_id = str(uuid.uuid5(uuid.NAMESPACE_URL, values["discussion_url"]))
             session.add(Proposal(author_id=author_id, **values))
@@ -1082,7 +1120,9 @@ async def sync_proposal_discussions(
 def pull_request_instructions(
     proposal_id: str, request: Request, session: SessionDep, user: UserDep
 ) -> PullRequestInstructionsResponse:
-    proposal = session.get(Proposal, proposal_id)
+    proposal = session.scalar(
+        select(Proposal).where(Proposal.id == proposal_id, Proposal.deleted_at.is_(None))
+    )
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
     if proposal.author_id != str(user.id) and user.role != "admin":

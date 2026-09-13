@@ -164,6 +164,7 @@ class Proposal(Base):
     review_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_input_valid: Mapped[bool] = mapped_column(default=False)
     review_document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

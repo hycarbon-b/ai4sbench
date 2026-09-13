@@ -18,6 +18,7 @@ import {
   ServerCog,
   SquareStack,
   StopCircle,
+  Trash2,
   UploadCloud,
   UserCheck,
   Webhook,
@@ -29,6 +30,7 @@ import {
   createDatabaseSnapshot,
   createProposal,
   databaseSnapshotDownloadUrl,
+  deleteProposal,
   getCurrentUser,
   getGithubAuthorizeUrl,
   getProposalDomains,
@@ -583,6 +585,30 @@ export default function App() {
       setLoading(false);
     }
   };
+  const removeProposal = async (item: Proposal) => {
+    if (
+      !window.confirm(
+        `Delete "${item.title}" from the Dashboard and Website? The GitHub Discussion will remain, and its deletion marker will prevent Full sync from importing it again.`,
+      )
+    )
+      return;
+    setLoading(true);
+    setError("");
+    try {
+      await deleteProposal(item.id);
+      if (proposalResult?.id === item.id) setProposalResult(null);
+      setMessage(`Proposal "${item.title}" marked as deleted.`);
+      await loadOps();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not delete the proposal.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
   const logout = async () => {
     await signOut();
     setUser(null);
@@ -686,6 +712,7 @@ export default function App() {
               proposalReady={canSubmitProposal}
               onProposal={submitProposal}
               onSyncDiscussions={syncDiscussions}
+              onDeleteProposal={removeProposal}
               onResendWebhook={resendWebhook}
               onManageReviewer={manageReviewer}
               loading={loading}
@@ -768,6 +795,7 @@ function AdminPanel({
   proposalReady,
   onProposal,
   onSyncDiscussions,
+  onDeleteProposal,
   onResendWebhook,
   onManageReviewer,
   onSaveDatabaseSnapshot,
@@ -807,6 +835,7 @@ function AdminPanel({
   proposalReady: boolean;
   onProposal: (event: FormEvent<HTMLFormElement>) => void;
   onSyncDiscussions: () => void;
+  onDeleteProposal: (proposal: Proposal) => void;
   onResendWebhook: (delivery: WebhookDelivery) => void;
   onManageReviewer: (
     application: ReviewerApplication,
@@ -901,6 +930,8 @@ function AdminPanel({
           recent={ops.proposals}
           ready={proposalReady}
           onSubmit={onProposal}
+          onDelete={onDeleteProposal}
+          deleting={loading}
         />
       </>
     );
@@ -1646,6 +1677,8 @@ function ProposalPanel({
   recent = [],
   ready,
   onSubmit,
+  onDelete,
+  deleting = false,
 }: {
   proposal: ProposalInput;
   proposalDomains: string[];
@@ -1654,6 +1687,8 @@ function ProposalPanel({
   recent?: Proposal[];
   ready: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onDelete?: (proposal: Proposal) => void;
+  deleting?: boolean;
 }) {
   const selectedDomains = new Set(
     proposal.domain
@@ -1965,8 +2000,8 @@ function ProposalPanel({
       {recent.length > 0 && (
         <div className="mt-4">
           <DataCard
-            title="Recent proposals"
-            description="Latest proposal records persisted by the control plane."
+            title="Proposal records"
+            description="Active local proposals. Deleted records keep a tombstone so Discussion sync cannot restore them."
           >
             <Table
               headers={[
@@ -1976,9 +2011,10 @@ function ProposalPanel({
                 "Status",
                 "Contributor",
                 "Discussion",
+                "",
               ]}
             >
-              {recent.slice(0, 12).map((item) => (
+              {recent.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <span className="font-medium text-slate-100">
@@ -2011,6 +2047,21 @@ function ProposalPanel({
                       </a>
                     ) : (
                       "Pending"
+                    )}
+                  </td>
+                  <td className="text-right">
+                    {onDelete && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => onDelete(item)}
+                        disabled={deleting}
+                        aria-label={`Delete ${item.title}`}
+                      >
+                        <Trash2 className="size-3" />
+                        Delete
+                      </Button>
                     )}
                   </td>
                 </tr>

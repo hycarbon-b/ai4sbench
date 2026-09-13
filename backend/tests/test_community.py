@@ -17,6 +17,7 @@ from control_panel.community import (
 from control_panel.config import Settings
 from control_panel.identity import User, current_active_user, current_optional_user
 from control_panel.main import create_app
+from control_panel.models import Proposal, TaskRevision
 from control_panel.schemas import ProposalReview, ProposalSubmission
 
 
@@ -365,6 +366,107 @@ def test_proposals_from_different_repositories_can_share_a_discussion_number() -
         ):
             assert client.post("/api/v1/proposals", json=proposal_payload()).status_code == 201
             assert client.post("/api/v1/proposals", json=proposal_payload()).status_code == 201
+
+
+def test_admin_soft_delete_hides_proposal_and_sync_respects_tombstone() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "control.sqlite3"
+        app = create_app(
+            Settings(
+                environment="test",
+                database_url=f"sqlite:///{database.as_posix()}",
+                auto_create_schema=True,
+                execution_mode="fake",
+            )
+        )
+        admin = user("admin")
+        app.dependency_overrides[current_active_user] = lambda: admin
+        with TestClient(app) as client:
+            with app.state.session_factory() as session:
+                proposal = Proposal(
+                    author_id=str(admin.id),
+                    author_login=admin.github_login,
+                    title="Proposal to delete",
+                    abstract="A complete local proposal record used to verify administrator deletion.",
+                    domain="Physics",
+                    field="condensed-matter",
+                    task_slug="proposal-to-delete",
+                    evidence="A reproducible reference implementation.",
+                    document=proposal_payload(),
+                    input_valid=True,
+                    status="pending",
+                    discussion_url="https://github.com/example/repo/discussions/41",
+                    discussion_node_id="D_kwDODeleteExample",
+                    discussion_number=41,
+                )
+                session.add(proposal)
+                session.flush()
+                proposal_id = proposal.id
+                revision = TaskRevision(
+                    repo_url="https://github.com/example/tasks",
+                    commit_sha="a" * 40,
+                    task_path="tasks/proposal-to-delete",
+                    resource_requirements={"cpu": 2},
+                    proposal_id=proposal_id,
+                )
+                session.add(revision)
+                session.commit()
+                revision_id = revision.id
+
+            app.dependency_overrides[current_active_user] = lambda: user("member")
+            denied = client.delete(f"/api/v1/proposals/{proposal_id}")
+            assert denied.status_code == 403
+
+            app.dependency_overrides[current_active_user] = lambda: admin
+            deleted = client.delete(f"/api/v1/proposals/{proposal_id}")
+            assert deleted.status_code == 204
+            assert deleted.content == b""
+            assert client.delete(f"/api/v1/proposals/{proposal_id}").status_code == 404
+            assert client.get("/api/v1/proposals").json()["items"] == []
+            assert client.get("/api/v1/public/proposals").json()["items"] == []
+
+            with app.state.session_factory() as session:
+                deleted_proposal = session.get(Proposal, proposal_id)
+                assert deleted_proposal is not None
+                assert deleted_proposal.deleted_at is not None
+                retained_revision = session.get(TaskRevision, revision_id)
+                assert retained_revision is not None
+                assert retained_revision.proposal_id == proposal_id
+
+            discussion = {
+                "id": "D_kwDODeleteExample",
+                "number": 41,
+                "url": "https://github.com/example/repo/discussions/41",
+                "title": "[Task Proposal #41] Proposal to delete",
+                "body": ProposalSubmission.model_validate(proposal_payload()).render_discussion(),
+                "category": {"name": "Task Proposals"},
+                "author": {"login": "admin-github"},
+                "labels": {"nodes": []},
+                "closed": False,
+                "createdAt": "2026-09-13T00:00:00Z",
+                "updatedAt": "2026-09-13T00:00:00Z",
+            }
+            with (
+                patch(
+                    "control_panel.community.github_access_token",
+                    AsyncMock(return_value="test-token"),
+                ),
+                patch(
+                    "control_panel.community.fetch_all_discussions",
+                    AsyncMock(return_value=[discussion]),
+                ),
+            ):
+                synced = client.post("/api/v1/proposals/sync-discussions")
+            assert synced.status_code == 200, synced.text
+            assert synced.json() == {
+                "scanned_count": 1,
+                "created_count": 0,
+                "updated_count": 0,
+                "invalid_count": 0,
+                "reviewed_count": 0,
+                "invalid_review_count": 0,
+            }
+            assert client.get("/api/v1/proposals").json()["items"] == []
 
 
 def test_admin_full_sync_upserts_discussions_without_deleting_records() -> None:
