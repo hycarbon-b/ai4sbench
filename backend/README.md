@@ -68,6 +68,8 @@ snapshot instead of copying application files directly to EC2.
 | `POST /api/v1/proposals/preview` | Public or signed in | Validate and render without writing |
 | `POST /api/v1/proposals` | Signed in | Publish a Discussion and persist the Proposal |
 | `GET /api/v1/proposals` | Public | List active locally tracked Proposals |
+| `GET /api/v1/proposals/{proposal_id}` | Original author | Load all stored form fields for editing |
+| `PUT /api/v1/proposals/{proposal_id}` | Original author | Replace the Proposal and its existing Discussion |
 | `DELETE /api/v1/proposals/{proposal_id}` | Administrator | Set the local deletion tombstone |
 | `POST /api/v1/proposals/sync-discussions` | Administrator | Import or update active Discussion records |
 | `GET /api/v1/public/proposals` | Public | Return valid active task-board records |
@@ -78,6 +80,14 @@ Create, preview, and Discussion sync all pass through the same
 `ProposalSubmission` validation and normalization entry point. Discussion sync
 parses only the configured repository's `Task Proposals` category and upserts by
 GitHub Discussion node ID, falling back to its URL.
+
+Proposal editing is a full replacement using that same current contract. The
+client first reloads the stored form fields for the original author, and the API
+uses that author's GitHub OAuth token to update the original Discussion title
+and canonical Markdown body before committing the normalized fields locally.
+If GitHub rejects the mutation, the local Proposal remains unchanged. Logically
+deleted Proposals and records without a Discussion node identity cannot be
+edited.
 
 Proposal deletion is deliberately local and logical:
 

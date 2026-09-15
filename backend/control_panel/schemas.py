@@ -742,6 +742,35 @@ class ProposalListResponse(BaseModel):
     items: list[ProposalListItemResponse]
 
 
+class ProposalEditValuesResponse(BaseModel):
+    """Unvalidated stored values used to prefill the administrator editor."""
+
+    title: str
+    domain: str
+    field_name: str
+    problem: str
+    solvability: str
+    references: str
+    software: str
+    dataset: str
+    compute: str
+    workflow: str
+    evaluation: str
+    leakage: str
+    name: str
+    affiliation: str
+    github: str
+
+
+class ProposalEditDetailResponse(BaseModel):
+    id: str
+    status: str
+    discussion_url: str | None
+    discussion_number: int | None
+    input_valid: bool
+    input: ProposalEditValuesResponse
+
+
 class ProposalBoardItemResponse(BaseModel):
     """Public Website projection combining proposal, review and latest task revision."""
 
@@ -835,6 +864,15 @@ class ProposalPublishedResponse(ProposalPreviewResponse):
     id: str
     status: str
     discussion_url: str
+
+
+class ProposalUpdatedResponse(BaseModel):
+    id: str
+    status: str
+    discussion_url: str
+    input: ProposalSubmission
+    derived: ProposalDerivedResponse
+    discussion: DiscussionPreviewResponse
 
 
 class ReviewCommentPreviewResponse(BaseModel):

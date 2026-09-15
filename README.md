@@ -117,6 +117,13 @@ the normal test suite.
    the Discussion and review into the local database.
 5. The Website task board reads only `GET /api/v1/public/proposals`.
 
+The signed-in Website author can load an active Proposal with
+`GET /api/v1/proposals/{proposal_id}` and fully replace it with
+`PUT /api/v1/proposals/{proposal_id}`. The update uses the current
+`ProposalSubmission` contract and the original author's GitHub OAuth token to
+edit the Discussion before committing the corresponding local fields, so a
+GitHub failure cannot leave the database showing content that was not published.
+
 Dashboard deletion is logical. `DELETE /api/v1/proposals/{proposal_id}` sets a
 `deleted_at` tombstone, hides the Proposal from Dashboard and Website lists,
 and preserves its GitHub Discussion and linked task revisions. Full Sync

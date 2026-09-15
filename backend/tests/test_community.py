@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -248,6 +249,96 @@ def test_member_can_open_discussion_but_cannot_manage_cloud_profiles() -> None:
             assert denied.status_code == 403
 
 
+def test_author_can_edit_proposal_and_existing_discussion_atomically() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "control.sqlite3"
+        app = create_app(
+            Settings(
+                environment="test",
+                database_url=f"sqlite:///{database.as_posix()}",
+                auto_create_schema=True,
+                execution_mode="fake",
+            )
+        )
+        owner = user("member")
+        app.dependency_overrides[current_active_user] = lambda: owner
+        with (
+            TestClient(app) as client,
+            patch(
+                "control_panel.community.create_github_discussion",
+                AsyncMock(
+                    return_value={
+                        "id": "D_kwDOEdit",
+                        "number": 41,
+                        "url": "https://github.com/example/repo/discussions/41",
+                    }
+                ),
+            ),
+        ):
+            created = client.post("/api/v1/proposals", json=proposal_payload())
+            assert created.status_code == 201, created.text
+            proposal_id = created.json()["id"]
+
+            app.dependency_overrides[current_active_user] = lambda: user("admin")
+            assert client.get(f"/api/v1/proposals/{proposal_id}").status_code == 403
+            assert client.put(f"/api/v1/proposals/{proposal_id}", json=proposal_payload()).status_code == 403
+
+            app.dependency_overrides[current_active_user] = lambda: owner
+            detail = client.get(f"/api/v1/proposals/{proposal_id}")
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["input"]["github"] == "member-github"
+
+            edited = proposal_payload()
+            edited["title"] = "Assimilate a corrected sparse coastal observation network"
+            edited["github"] = "another-user-cannot-be-substituted"
+            edited["affiliation"] = "Corrected Coastal Institute"
+            normalized = validate_proposal_submission(edited, github_login=owner.github_login)
+            github_update = AsyncMock(
+                return_value={
+                    "id": "D_kwDOEdit",
+                    "number": 41,
+                    "url": "https://github.com/example/repo/discussions/41",
+                    "title": normalized.title,
+                    "body": normalized.render_discussion(),
+                    "updatedAt": "2026-09-15T04:05:06Z",
+                }
+            )
+            with patch("control_panel.community.update_github_discussion", github_update):
+                updated = client.put(f"/api/v1/proposals/{proposal_id}", json=edited)
+            assert updated.status_code == 200, updated.text
+            assert updated.json()["input"] == normalized.model_dump(mode="json")
+            assert updated.json()["discussion"] == {
+                "title": normalized.title,
+                "body": normalized.render_discussion(),
+            }
+            assert github_update.await_count == 1
+            assert github_update.await_args.args[2] == "D_kwDOEdit"
+            assert github_update.await_args.args[3] == normalized
+
+            repaired = client.get(f"/api/v1/proposals/{proposal_id}").json()
+            assert repaired["input_valid"] is True
+            assert repaired["input"] == normalized.model_dump(mode="json")
+            board = client.get("/api/v1/public/proposals").json()["items"][0]
+            assert board["title"] == normalized.title
+            tracked = client.get("/api/v1/proposals").json()["items"][0]
+            assert tracked["author_login"] == "member-github"
+
+            rejected = {**edited, "title": "A third version that GitHub must reject atomically"}
+            with patch(
+                "control_panel.community.update_github_discussion",
+                AsyncMock(
+                    side_effect=HTTPException(
+                        status_code=502,
+                        detail="GitHub could not update the proposal discussion",
+                    )
+                ),
+            ):
+                failed = client.put(f"/api/v1/proposals/{proposal_id}", json=rejected)
+            assert failed.status_code == 502
+            unchanged = client.get(f"/api/v1/proposals/{proposal_id}").json()
+            assert unchanged["input"] == normalized.model_dump(mode="json")
+
+
 def test_member_can_preview_exact_submission_without_creating_a_discussion() -> None:
     with tempfile.TemporaryDirectory() as directory:
         database = Path(directory) / "control.sqlite3"
@@ -422,6 +513,8 @@ def test_admin_soft_delete_hides_proposal_and_sync_respects_tombstone() -> None:
             assert deleted.status_code == 204
             assert deleted.content == b""
             assert client.delete(f"/api/v1/proposals/{proposal_id}").status_code == 404
+            assert client.get(f"/api/v1/proposals/{proposal_id}").status_code == 404
+            assert client.put(f"/api/v1/proposals/{proposal_id}", json=proposal_payload()).status_code == 404
             assert client.get("/api/v1/proposals").json()["items"] == []
             assert client.get("/api/v1/public/proposals").json()["items"] == []
 
