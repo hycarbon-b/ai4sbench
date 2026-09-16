@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from test_community import proposal_payload, review_payload
@@ -14,8 +15,8 @@ from control_panel.config import Settings
 from control_panel.identity import User, current_active_user
 from control_panel.job_runner import JobRunner
 from control_panel.main import create_app
-from control_panel.models import WebhookDelivery
-from control_panel.webhooks import WebhookResponseError, enqueue_delivery
+from control_panel.models import Proposal, WebhookDelivery
+from control_panel.webhooks import WebhookResponseError, discord_message_url, enqueue_delivery
 
 
 def github_user(role: str, login: str) -> User:
@@ -29,6 +30,19 @@ def github_user(role: str, login: str) -> User:
         role=role,
         github_login=login,
     )
+
+
+def test_discord_message_url_uses_webhook_guild_metadata() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, json={"guild_id": "guild-123"})
+    )
+    with httpx.Client(transport=transport) as client:
+        message_url = discord_message_url(
+            client,
+            "https://discord.example/api/webhooks/id/token",
+            '{"id":"message-456","channel_id":"thread-789"}',
+        )
+    assert message_url == "https://discord.com/channels/guild-123/thread-789/message-456"
 
 
 def test_proposals_and_reviews_queue_inspectable_discord_deliveries() -> None:
@@ -103,12 +117,43 @@ def test_proposals_and_reviews_queue_inspectable_discord_deliveries() -> None:
 
             with patch(
                 "control_panel.job_runner.send_delivery",
-                return_value=(200, '{"id":"discord-message"}'),
+                side_effect=[
+                    (
+                        200,
+                        '{"id":"discord-message"}',
+                        "https://discord.com/channels/guild/thread/proposal-message",
+                    ),
+                    (
+                        200,
+                        '{"id":"review-message"}',
+                        "https://discord.com/channels/guild/thread/review-message",
+                    ),
+                ],
             ):
                 runner = JobRunner(settings)
                 assert runner.run_once() is True
                 assert runner.run_once() is True
                 runner.engine.dispose()
+
+            with app.state.session_factory() as session:
+                proposal = session.get(Proposal, proposal_id)
+                assert proposal is not None
+            assert (
+                proposal.discord_message_url
+                == "https://discord.com/channels/guild/thread/proposal-message"
+            )
+
+            proposals = client.get("/api/v1/proposals")
+            assert proposals.status_code == 200, proposals.text
+            assert proposals.json()["items"][0]["discord_message_url"] == (
+                "https://discord.com/channels/guild/thread/proposal-message"
+            )
+
+            board = client.get("/api/v1/public/proposals")
+            assert board.status_code == 200, board.text
+            assert board.json()["items"][0]["discord_message_url"] == (
+                "https://discord.com/channels/guild/thread/proposal-message"
+            )
 
             app.dependency_overrides[current_active_user] = lambda: github_user(
                 "admin", "operator"

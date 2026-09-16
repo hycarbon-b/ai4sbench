@@ -139,6 +139,7 @@ class Proposal(Base):
     discussion_url: Mapped[str | None] = mapped_column(String(500))
     discussion_node_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     discussion_number: Mapped[int | None] = mapped_column(Integer)
+    discord_message_url: Mapped[str | None] = mapped_column(String(500))
     github_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     github_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_schema_version: Mapped[str | None] = mapped_column(String(80))

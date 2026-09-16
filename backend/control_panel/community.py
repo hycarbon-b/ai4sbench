@@ -204,6 +204,7 @@ def list_proposals(session: SessionDep) -> ProposalListResponse:
                 "status": item.status,
                 "discussion_url": item.discussion_url,
                 "discussion_number": item.discussion_number,
+                "discord_message_url": item.discord_message_url,
                 "author_login": item.author_login,
                 "input_valid": item.input_valid,
             }
@@ -251,6 +252,7 @@ def proposal_edit_detail(
         "status": proposal.status,
         "discussion_url": proposal.discussion_url,
         "discussion_number": proposal.discussion_number,
+        "discord_message_url": proposal.discord_message_url,
         "input_valid": proposal.input_valid,
         "input": proposal_input_values(proposal),
     }
@@ -354,6 +356,7 @@ def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision
         "status": item.status,
         "discussion_url": item.discussion_url,
         "discussion_number": item.discussion_number,
+        "discord_message_url": item.discord_message_url,
         "input_valid": item.input_valid,
         "created_at": item.created_at,
         "updated_at": item.updated_at,

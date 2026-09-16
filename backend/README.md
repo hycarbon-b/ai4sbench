@@ -120,6 +120,11 @@ them through:
 - `GET /api/v1/webhook-deliveries`
 - `POST /api/v1/webhook-deliveries/{delivery_id}/resend`
 
+After a Proposal-created Discord delivery succeeds, the backend records its
+Discord permalink in `proposals.discord_message_url`. The field is returned by
+Proposal list, edit-detail, and public task-board APIs. Review notifications do
+not overwrite the Proposal link.
+
 `TBCP_WEBSITE_PUBLIC_BASE_URL` controls task-detail links in those messages.
 
 ## Database and migrations

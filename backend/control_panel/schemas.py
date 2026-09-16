@@ -734,6 +734,7 @@ class ProposalListItemResponse(BaseModel):
     status: str
     discussion_url: str | None
     discussion_number: int | None
+    discord_message_url: str | None
     author_login: str | None
     input_valid: bool
 
@@ -767,6 +768,7 @@ class ProposalEditDetailResponse(BaseModel):
     status: str
     discussion_url: str | None
     discussion_number: int | None
+    discord_message_url: str | None
     input_valid: bool
     input: ProposalEditValuesResponse
 
@@ -794,6 +796,7 @@ class ProposalBoardItemResponse(BaseModel):
     status: str
     discussion_url: str | None
     discussion_number: int | None
+    discord_message_url: str | None
     input_valid: bool
     created_at: datetime
     updated_at: datetime
