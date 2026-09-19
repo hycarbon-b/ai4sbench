@@ -31,8 +31,10 @@ def render_worker_bootstrap(
         import queue
         import shlex
         import subprocess
+        import sys
         import tempfile
         import time
+        import traceback
         import threading
         from pathlib import Path
         from urllib.error import HTTPError, URLError
@@ -79,9 +81,23 @@ def render_worker_bootstrap(
             return process.wait()
 
 
+        def log_console(line):
+            # Before claim succeeds there is no session token, so nothing can
+            # be posted to /events yet; stderr reaches the unit's journal on a
+            # real instance, so a claim failure is not silent.
+            print(f"[worker] {line}", file=sys.stderr, flush=True)
+
+
         def main():
             run_id = os.environ["TBCP_RUN_ID"]
-            claim = post(f"/api/v1/worker/runs/{run_id}/claim", {"token": os.environ["TBCP_JOB_TOKEN"]})
+            log_console(f"Claiming run {run_id}")
+            try:
+                claim = post(
+                    f"/api/v1/worker/runs/{run_id}/claim", {"token": os.environ["TBCP_JOB_TOKEN"]}
+                )
+            except Exception:
+                log_console(f"ERROR claim failed: {traceback.format_exc()}")
+                raise
             session_token = claim["session_token"]
             revision = claim["task_revision"]
             config = claim["run"]["config"]["plan_config"]
@@ -113,10 +129,13 @@ def render_worker_bootstrap(
 
             harbor_lines = []
 
-            def record(line):
-                entry = f"[harbor] {line}" if line else "[harbor]"
+            def record(line, prefix="[harbor]"):
+                entry = f"{prefix} {line}" if line else prefix
                 harbor_lines.append(entry)
                 emit(entry)
+
+            def record_worker(line):
+                record(line, prefix="[worker]")
 
             def drain():
                 pending.put(None)
@@ -127,22 +146,25 @@ def render_worker_bootstrap(
                 return output, len(output.encode("utf-8"))
 
             try:
+                record_worker(f"Claimed run {run_id}")
                 with tempfile.TemporaryDirectory(prefix="ai4sbench-") as temporary:
                     workdir = Path(temporary)
-                    emit(f"Cloning pinned revision {revision['commit_sha'][:12]}")
+                    record_worker(f"Cloning pinned revision {revision['commit_sha'][:12]}")
                     clone_command = [
                         "git", "clone", "--filter=blob:none", "--no-checkout", revision["repo_url"], "repo"
                     ]
-                    if run(clone_command, workdir, emit):
+                    if run(clone_command, workdir, record_worker):
                         raise RuntimeError("git clone failed")
                     repo = workdir / "repo"
-                    if run(["git", "fetch", "origin", revision["commit_sha"], "--depth", "1"], repo, emit):
+                    fetch_command = ["git", "fetch", "origin", revision["commit_sha"], "--depth", "1"]
+                    if run(fetch_command, repo, record_worker):
                         raise RuntimeError("git fetch failed")
-                    if run(["git", "sparse-checkout", "init", "--cone"], repo, emit):
+                    if run(["git", "sparse-checkout", "init", "--cone"], repo, record_worker):
                         raise RuntimeError("git sparse-checkout initialization failed")
-                    if run(["git", "sparse-checkout", "set", "--cone", revision["task_path"]], repo, emit):
+                    sparse_set = ["git", "sparse-checkout", "set", "--cone", revision["task_path"]]
+                    if run(sparse_set, repo, record_worker):
                         raise RuntimeError("git sparse-checkout configuration failed")
-                    if run(["git", "checkout", "--detach", "FETCH_HEAD"], repo, emit):
+                    if run(["git", "checkout", "--detach", "FETCH_HEAD"], repo, record_worker):
                         raise RuntimeError("git checkout failed")
                     task = repo / revision["task_path"]
                     if not task.is_dir():
@@ -207,7 +229,12 @@ def render_worker_bootstrap(
                         },
                     )
             except Exception as exc:
-                record(f"ERROR {type(exc).__name__}: {exc}")
+                # A failure before Harbor ever starts must be as fully reported
+                # as a Harbor failure: record the whole traceback, not just
+                # str(exc), through the same [worker]-tagged log.
+                full_traceback = traceback.format_exc()
+                for line in full_traceback.splitlines():
+                    record_worker(line)
                 output, output_bytes = harbor_output()
                 drain()
                 post(
@@ -217,7 +244,8 @@ def render_worker_bootstrap(
                         "state": "failed",
                         "result": {
                             "error": type(exc).__name__,
-                            "message": str(exc)[:500],
+                            "message": str(exc)[:2000],
+                            "traceback": full_traceback[-20000:],
                             "harbor_output": output,
                             "harbor_output_bytes": output_bytes,
                         },
