@@ -106,6 +106,20 @@ If a migration is added, run Ruff on that new migration file and run
 `uv run alembic upgrade head` against a disposable SQLite database as well as
 the normal test suite.
 
+## Continuous integration
+
+Run the repository-wide checks from the repository root:
+
+```powershell
+python scripts/ci.py
+```
+
+The command works from Windows and Linux. It installs locked backend and
+frontend dependencies, runs backend linting and tests, type-checks the
+Dashboard, builds the Dashboard, and confirms committed static assets are
+current. GitHub Actions only provides the Python, uv, and Node runtimes then
+invokes this same script; it contains no separate CI logic.
+
 ## Proposal lifecycle
 
 1. A signed-in contributor previews or submits a Proposal.

@@ -25,9 +25,6 @@ credentials, JWT secrets, job-token secrets, and the full environment file.
 | Python runtime | `/opt/ai4sbench/backend/.venv/bin/python` |
 | Production environment file | `/etc/ai4sbench/control-panel.env` |
 | SQLite database | `/var/lib/ai4sbench/control-panel.sqlite3` |
-| Deployed branch | `codex/switch-benchmark-repository` |
-| Deployed commit | `2bd0827` |
-| Alembic head | `20260913_0014` |
 
 The public Dashboard is reached through its HTTPS domain. Port `8080` is the
 application listener on the instance; it is not the public URL to give to
@@ -260,44 +257,37 @@ not a Docker deployment. Every application update is delivered through Git;
 do not use `scp`, `install`, or ad-hoc file replacement for source or static
 assets.
 
-The instance currently runs `codex/switch-benchmark-repository`. After the
-release is reviewed and merged, the normal long-lived deployment target should
-return to `main`. Always record the exact branch and commit being deployed.
+The long-lived deployment target is `main`. Always record the exact `main`
+commit being deployed; do not deploy an unmerged feature branch.
 
-### 1. Verify and build locally
+### 1. Run the CI gate
 
-From the parent repository:
+The repository's CI contract is `python scripts/ci.py`. It is the only place
+that defines checks: locked dependency installation, backend linting and tests,
+frontend type checking and build, and verification that committed Dashboard
+static assets are current. GitHub Actions only installs the Python, uv, and
+Node runtimes and invokes this script, so the same command can be run from a
+Windows checkout before opening a pull request.
 
-```powershell
-cd backend
-python -m pytest -q
-python -m ruff check control_panel tests
-
-cd ../dashboard-frontend/frontend
-npm run check
-npm run build
-
-cd ../..
-git status --short --branch
-git diff --check
-```
-
-When Dashboard source changes, `npm run build` must update and commit
-`backend/control_panel/static/`. When Website source changes, push the Website
-submodule branch first, update the parent submodule pointer, refresh
-`backend/control_panel/website_dist/`, and commit both. EC2 never builds or
-receives these assets separately.
-
-### 2. Commit and push the reviewed deployment branch
+Merge a reviewed pull request into `main` only after its CI run succeeds. From
+a clean checkout of the exact `main` commit that will be deployed, run:
 
 ```powershell
-$DeployBranch = 'codex/switch-benchmark-repository'
-git push origin $DeployBranch
-git rev-parse --short HEAD
+python scripts/ci.py
 ```
 
-Do not create or merge a pull request as an implicit deployment step. Branch
-review, merge, and deployment are separate actions.
+When Dashboard source changes, CI verifies that `npm run build` has updated and
+committed `backend/control_panel/static/`. EC2 never builds or receives these
+assets separately.
+
+### 2. Record the reviewed `main` commit
+
+```powershell
+git fetch origin
+git rev-parse origin/main
+```
+
+Record this full SHA in the deployment notes before changing the EC2 checkout.
 
 ### 3. Create the pre-deployment database snapshot
 
@@ -314,10 +304,10 @@ On the instance:
 
 ```bash
 sudo -u ai4sbench git -C /opt/ai4sbench status --short --branch
-sudo -u ai4sbench git -C /opt/ai4sbench fetch origin codex/switch-benchmark-repository
-sudo -u ai4sbench git -C /opt/ai4sbench switch codex/switch-benchmark-repository
-sudo -u ai4sbench git -C /opt/ai4sbench merge --ff-only origin/codex/switch-benchmark-repository
-sudo -u ai4sbench git -C /opt/ai4sbench rev-parse --short HEAD
+sudo -u ai4sbench git -C /opt/ai4sbench fetch origin main
+sudo -u ai4sbench git -C /opt/ai4sbench switch main
+sudo -u ai4sbench git -C /opt/ai4sbench merge --ff-only origin/main
+sudo -u ai4sbench git -C /opt/ai4sbench rev-parse HEAD
 ```
 
 The existing untracked `/opt/ai4sbench/repository/` directory is runtime state.
