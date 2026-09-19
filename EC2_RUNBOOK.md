@@ -251,17 +251,39 @@ rm -f /tmp/control-panel-snapshot.sqlite3
 
 ## Deployment procedure
 
-The currently deployed control plane is a direct systemd/Uvicorn deployment,
-not a Docker deployment. For a small, code-only update:
+The control plane remains a direct systemd/Uvicorn deployment, not a Docker
+deployment. Releases are promoted from an exact commit on `main`; do not deploy
+an unmerged feature branch or copy an individual source file as a release.
+
+### CI gate
+
+The repository's CI contract is `python scripts/ci.py`. It is the only place
+that defines checks: locked dependency installation, backend linting and tests,
+frontend type checking and build, and verification that committed Dashboard
+static assets are current. GitHub Actions only installs the Python, uv, and
+Node runtimes and invokes this script, so the same command can be run from a
+Windows checkout before opening a pull request.
+
+Before promotion, merge the reviewed pull request into `main` only after its CI
+run succeeds. From a clean checkout of that exact `main` commit, run:
 
 ```powershell
-scp backend/control_panel/main.py ec2-user@3.237.65.103:/tmp/main.py
-ssh ec2-user@3.237.65.103 "sudo install -o ai4sbench -g ai4sbench -m 664 /tmp/main.py /opt/ai4sbench/backend/control_panel/main.py; sudo rm -f /tmp/main.py; sudo systemctl restart ai4sbench-api.service; sudo systemctl is-active ai4sbench-api.service"
+python scripts/ci.py
 ```
 
-For a broader release, upload only the reviewed files, preserve the existing
-secret environment file, restart the affected unit, and run the health check.
-Do not overwrite the production environment from a repository example file.
+### Production release
+
+1. Record the reviewed `main` commit SHA in the release notes or change ticket.
+2. Take a consistent SQLite backup using the procedure above.
+3. Upload the reviewed release files to `/opt/ai4sbench/backend`, preserving
+   `/etc/ai4sbench/control-panel.env` and `/var/lib/ai4sbench/`.
+4. If migrations changed, run `uv run alembic upgrade head` as the
+   `ai4sbench` service account before restarting the services.
+5. Restart the affected unit or units, then confirm both systemd status and
+   `https://dashboard.ai4sbench.org/health/live`.
+
+Never overwrite the production environment from a repository example file, and
+never substitute an unreviewed branch for the recorded `main` commit.
 
 ## Capacity snapshot
 

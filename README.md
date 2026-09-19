@@ -36,3 +36,17 @@ docker compose -f backend/compose.yaml up --build
 The root deliberately contains only the project overview and repository-level
 Git configuration. Credentials remain ignored under `backend/.env` and are not
 part of the public benchmark repository.
+
+## Continuous integration
+
+Run the repository-wide checks from the repository root:
+
+```powershell
+python scripts/ci.py
+```
+
+The command works from Windows and Linux. It installs locked backend and
+frontend dependencies, runs backend linting and tests, type-checks the
+dashboard, builds the dashboard, and confirms the committed static assets are
+current. GitHub Actions only provides the Python, uv, and Node runtimes then
+invokes this same script; it contains no separate CI logic.
