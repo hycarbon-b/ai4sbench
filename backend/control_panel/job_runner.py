@@ -23,6 +23,7 @@ from .services import (
     handle_terminate,
     mark_job_exhausted,
     reconcile,
+    record_job_attempt_failure,
 )
 from .webhooks import claim_delivery, complete_delivery, fail_delivery, send_delivery
 
@@ -81,12 +82,18 @@ class JobRunner:
         except Exception as exc:
             logger.exception("failed job=%s kind=%s", job.id, job.kind)
             terminal = False
+            error = f"{type(exc).__name__}: {exc}"
             async with self.sessions() as session:
                 current = await session.scalar(select(DatabaseJob).where(DatabaseJob.id == job.id))
                 if current is not None:
                     terminal = current.attempts >= current.max_attempts
-                    await fail(session, current, self.owner, f"{type(exc).__name__}: {exc}")
+                    await fail(session, current, self.owner, error)
                     await session.commit()
+            if job.kind in {"launch_run", "terminate_run"}:
+                async with self.sessions() as session:
+                    current = await session.get(DatabaseJob, job.id)
+                    if current is not None:
+                        await record_job_attempt_failure(session, current, error)
             if terminal:
                 async with self.sessions() as session:
                     current = await session.get(DatabaseJob, job.id)
