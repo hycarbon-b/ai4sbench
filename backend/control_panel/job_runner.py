@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import os
 import signal
@@ -32,96 +33,105 @@ class JobRunner:
     def __init__(self, settings: Settings, provider: EC2Provider | None = None) -> None:
         self.settings = settings
         self.engine = create_database_engine(settings)
-        if settings.auto_create_schema:
-            Base.metadata.create_all(self.engine)
         self.sessions = create_session_factory(self.engine)
         self.provider = provider or provider_from_settings(settings)
         self.owner = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
         self.stopping = False
+        self.initialized = False
+
+    async def initialize(self) -> None:
+        if self.initialized:
+            return
+        if self.settings.auto_create_schema:
+            async with self.engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
+        self.initialized = True
 
     def request_stop(self, *_args: object) -> None:
         self.stopping = True
 
-    def process_one(self) -> bool:
-        with self.sessions() as session:
-            begin_immediate(session)
-            job = claim(session, self.owner, self.settings.job_lease_seconds)
-            session.commit()
+    async def process_one(self) -> bool:
+        async with self.sessions() as session:
+            await begin_immediate(session)
+            job = await claim(session, self.owner, self.settings.job_lease_seconds)
+            await session.commit()
         if job is None:
             return False
 
         try:
             run_id = str(job.payload["run_id"])
-            with self.sessions() as session:
+            async with self.sessions() as session:
                 if job.kind == "launch_run":
-                    handle_launch(session, run_id, self.provider, self.settings)
+                    await handle_launch(session, run_id, self.provider, self.settings)
                 elif job.kind == "terminate_run":
-                    handle_terminate(session, run_id, self.provider)
+                    await handle_terminate(session, run_id, self.provider)
                 else:
                     raise ValueError(f"Unsupported job kind: {job.kind}")
-            with self.sessions() as session:
-                complete(session, job.id, self.owner)
-                session.commit()
+            async with self.sessions() as session:
+                await complete(session, job.id, self.owner)
+                await session.commit()
             logger.info("completed job=%s kind=%s", job.id, job.kind)
         except CapacityError:
-            with self.sessions() as session:
-                current = session.get(DatabaseJob, job.id)
+            async with self.sessions() as session:
+                current = await session.get(DatabaseJob, job.id)
                 if current is not None:
-                    defer(session, current, self.owner)
-                    session.commit()
+                    await defer(session, current, self.owner)
+                    await session.commit()
             logger.info("deferred job=%s because worker capacity is full", job.id)
         except Exception as exc:
             logger.exception("failed job=%s kind=%s", job.id, job.kind)
             terminal = False
-            with self.sessions() as session:
-                current = session.scalar(select(DatabaseJob).where(DatabaseJob.id == job.id))
+            async with self.sessions() as session:
+                current = await session.scalar(select(DatabaseJob).where(DatabaseJob.id == job.id))
                 if current is not None:
                     terminal = current.attempts >= current.max_attempts
-                    fail(session, current, self.owner, f"{type(exc).__name__}: {exc}")
-                    session.commit()
+                    await fail(session, current, self.owner, f"{type(exc).__name__}: {exc}")
+                    await session.commit()
             if terminal:
-                with self.sessions() as session:
-                    current = session.get(DatabaseJob, job.id)
+                async with self.sessions() as session:
+                    current = await session.get(DatabaseJob, job.id)
                     if current is not None:
-                        mark_job_exhausted(session, current)
+                        await mark_job_exhausted(session, current)
         return True
 
-    def process_webhook_one(self) -> bool:
-        with self.sessions() as session:
-            delivery = claim_delivery(session)
-            session.commit()
+    async def process_webhook_one(self) -> bool:
+        async with self.sessions() as session:
+            delivery = await claim_delivery(session)
+            await session.commit()
         if delivery is None:
             return False
 
         try:
-            status_code, body, message_url = send_delivery(delivery)
-            with self.sessions() as session:
-                complete_delivery(session, delivery, status_code, body, message_url)
-                session.commit()
+            status_code, body, message_url = await send_delivery(delivery)
+            async with self.sessions() as session:
+                await complete_delivery(session, delivery, status_code, body, message_url)
+                await session.commit()
             logger.info("completed webhook=%s event=%s", delivery.id, delivery.event_type)
         except Exception as exc:
             logger.exception("failed webhook=%s event=%s", delivery.id, delivery.event_type)
-            with self.sessions() as session:
-                current = session.get(WebhookDelivery, delivery.id)
+            async with self.sessions() as session:
+                current = await session.get(WebhookDelivery, delivery.id)
                 if current is not None:
-                    fail_delivery(
+                    await fail_delivery(
                         session,
                         current,
                         f"{type(exc).__name__}: {exc}",
                         response_status=getattr(exc, "status_code", None),
                         response_body=getattr(exc, "response_body", None),
                     )
-                    session.commit()
+                    await session.commit()
         return True
 
-    def run_once(self) -> bool:
-        with self.sessions() as session:
-            reconcile(session)
-        processed_job = self.process_one()
-        processed_webhook = self.process_webhook_one()
+    async def run_once(self) -> bool:
+        await self.initialize()
+        async with self.sessions() as session:
+            await reconcile(session)
+        processed_job = await self.process_one()
+        processed_webhook = await self.process_webhook_one()
         return processed_job or processed_webhook
 
-    def run_forever(self) -> None:
+    async def run_forever(self) -> None:
+        await self.initialize()
         signal.signal(signal.SIGINT, self.request_stop)
         signal.signal(signal.SIGTERM, self.request_stop)
         last_reconcile = 0.0
@@ -129,16 +139,16 @@ class JobRunner:
         while not self.stopping:
             now = time.monotonic()
             if now - last_reconcile >= 15:
-                with self.sessions() as session:
-                    reconciled = reconcile(session)
+                async with self.sessions() as session:
+                    reconciled = await reconcile(session)
                 if reconciled:
                     logger.warning("timed out runs=%s", reconciled)
                 last_reconcile = now
-            processed_job = self.process_one()
-            processed_webhook = self.process_webhook_one()
+            processed_job = await self.process_one()
+            processed_webhook = await self.process_webhook_one()
             if not processed_job and not processed_webhook:
-                time.sleep(self.settings.queue_poll_seconds)
-        self.engine.dispose()
+                await asyncio.sleep(self.settings.queue_poll_seconds)
+        await self.engine.dispose()
 
 
 def run(argv: list[str] | None = None) -> None:
@@ -148,10 +158,16 @@ def run(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     runner = JobRunner(get_settings())
     if args.once:
-        runner.run_once()
-        runner.engine.dispose()
+
+        async def run_once() -> None:
+            try:
+                await runner.run_once()
+            finally:
+                await runner.engine.dispose()
+
+        asyncio.run(run_once())
     else:
-        runner.run_forever()
+        asyncio.run(runner.run_forever())
 
 
 if __name__ == "__main__":

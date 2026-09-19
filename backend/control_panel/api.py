@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import sqlite3
@@ -12,7 +13,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import Principal, get_principal
 from .config import Settings
@@ -86,7 +87,7 @@ from .services import (
 )
 from .webhooks import resend_delivery
 
-SessionDep = Annotated[Session, Depends(get_session)]
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 AdminDep = Annotated[Principal, Depends(get_principal)]
 
 public_router = APIRouter(tags=["health"])
@@ -96,31 +97,32 @@ SNAPSHOT_NAME_RE = re.compile(r"^ai4sbench-control-panel-\d{8}T\d{6}\.\d{6}Z\.sq
 
 
 @public_router.get("/health/live", response_model=LiveHealthResponse)
-def live() -> LiveHealthResponse:
+async def live() -> LiveHealthResponse:
     return LiveHealthResponse(status="ok", time=datetime.now().astimezone())
 
 
 @public_router.get("/health/ready", response_model=ReadyHealthResponse)
-def ready(session: SessionDep) -> ReadyHealthResponse:
-    session.execute(text("SELECT 1"))
+async def ready(session: SessionDep) -> ReadyHealthResponse:
+    await session.execute(text("SELECT 1"))
     return ReadyHealthResponse(status="ready")
 
 
 @admin_router.get("/settings", tags=["settings"], response_model=SettingsResponse)
-def settings_view(request: Request) -> SettingsResponse:
+async def settings_view(request: Request) -> SettingsResponse:
     return request.app.state.settings.public()
 
 
 @admin_router.get("/dashboard", tags=["dashboard"], response_model=DashboardResponse)
-def dashboard(session: SessionDep) -> DashboardResponse:
-    runs = list(session.scalars(select(Run).order_by(Run.created_at.desc()).limit(8)))
-    plans = list(session.scalars(select(ExecutionPlan).order_by(ExecutionPlan.created_at.desc())))
-    revisions = list(session.scalars(select(TaskRevision).order_by(TaskRevision.created_at.desc())))
+async def dashboard(session: SessionDep) -> DashboardResponse:
+    runs = list(await session.scalars(select(Run).order_by(Run.created_at.desc()).limit(8)))
+    plans = list(await session.scalars(select(ExecutionPlan).order_by(ExecutionPlan.created_at.desc())))
+    revisions = list(await session.scalars(select(TaskRevision).order_by(TaskRevision.created_at.desc())))
     states = ("queued", "provisioning", "running", "succeeded", "failed", "timed_out", "cancelled")
-    counts = {
-        name: session.scalar(select(func.count()).select_from(Run).where(Run.state == name)) or 0
-        for name in states
-    }
+    counts = {}
+    for name in states:
+        counts[name] = (
+            await session.scalar(select(func.count()).select_from(Run).where(Run.state == name)) or 0
+        )
     return {
         "runs": [run_dict(item) for item in runs],
         "plans": [plan_dict(item) for item in plans],
@@ -136,8 +138,8 @@ def dashboard(session: SessionDep) -> DashboardResponse:
     summary="List reviewer applications",
     description="Returns the complete applicant dossiers and administrator decisions, newest first.",
 )
-def list_reviewer_applications(session: SessionDep) -> ReviewerApplicationListResponse:
-    items = session.scalars(select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc()))
+async def list_reviewer_applications(session: SessionDep) -> ReviewerApplicationListResponse:
+    items = await session.scalars(select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc()))
     return {"items": list(items)}
 
 
@@ -148,11 +150,11 @@ def list_reviewer_applications(session: SessionDep) -> ReviewerApplicationListRe
     summary="Get one reviewer application",
     responses={404: {"description": "The reviewer application does not exist."}},
 )
-def get_reviewer_application(
+async def get_reviewer_application(
     application_id: str,
     session: SessionDep,
 ) -> ReviewerApplicationResponse:
-    item = session.get(ReviewerApplication, application_id)
+    item = await session.get(ReviewerApplication, application_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Reviewer application not found")
     return item
@@ -169,13 +171,13 @@ def get_reviewer_application(
     ),
     responses={404: {"description": "The reviewer application does not exist."}},
 )
-def update_reviewer_application(
+async def update_reviewer_application(
     application_id: str,
     body: ReviewerApplicationUpdate,
     session: SessionDep,
     principal: AdminDep,
 ) -> ReviewerApplicationResponse:
-    item = session.get(ReviewerApplication, application_id)
+    item = await session.get(ReviewerApplication, application_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Reviewer application not found")
 
@@ -191,8 +193,8 @@ def update_reviewer_application(
         else:
             item.reviewed_by = principal.subject
             item.reviewed_at = datetime.now(UTC)
-    session.commit()
-    session.refresh(item)
+    await session.commit()
+    await session.refresh(item)
     return item
 
 
@@ -227,9 +229,8 @@ def snapshot_path(snapshot_dir: Path, name: str) -> Path:
     return candidate
 
 
-@admin_router.get("/database-snapshots", tags=["database"], response_model=DatabaseSnapshotListResponse)
-def list_database_snapshots(request: Request, principal: AdminDep) -> DatabaseSnapshotListResponse:
-    _database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
+def _list_database_snapshots(settings: Settings) -> DatabaseSnapshotListResponse:
+    _database_path, snapshot_dir = sqlite_snapshot_paths(settings)
     if not snapshot_dir.is_dir():
         return {"items": []}
     items = [
@@ -240,14 +241,13 @@ def list_database_snapshots(request: Request, principal: AdminDep) -> DatabaseSn
     return {"items": sorted(items, key=lambda item: str(item["created_at"]), reverse=True)}
 
 
-@admin_router.post(
-    "/database-snapshots",
-    status_code=status.HTTP_201_CREATED,
-    tags=["database"],
-    response_model=DatabaseSnapshotResponse,
-)
-def create_database_snapshot(request: Request, principal: AdminDep) -> DatabaseSnapshotResponse:
-    database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
+@admin_router.get("/database-snapshots", tags=["database"], response_model=DatabaseSnapshotListResponse)
+async def list_database_snapshots(request: Request, principal: AdminDep) -> DatabaseSnapshotListResponse:
+    return await asyncio.to_thread(_list_database_snapshots, request.app.state.settings)
+
+
+def _create_database_snapshot(settings: Settings) -> dict[str, object]:
+    database_path, snapshot_dir = sqlite_snapshot_paths(settings)
     if not database_path.is_file():
         raise HTTPException(status_code=503, detail="SQLite database file is unavailable")
     snapshot_dir.mkdir(parents=True, exist_ok=True)
@@ -279,21 +279,31 @@ def create_database_snapshot(request: Request, principal: AdminDep) -> DatabaseS
     return snapshot_dict(destination)
 
 
+@admin_router.post(
+    "/database-snapshots",
+    status_code=status.HTTP_201_CREATED,
+    tags=["database"],
+    response_model=DatabaseSnapshotResponse,
+)
+async def create_database_snapshot(request: Request, principal: AdminDep) -> DatabaseSnapshotResponse:
+    return await asyncio.to_thread(_create_database_snapshot, request.app.state.settings)
+
+
 @admin_router.get(
     "/database-snapshots/{name}/download",
     tags=["database"],
     response_class=FileResponse,
     responses={200: {"content": {"application/vnd.sqlite3": {}}}},
 )
-def download_database_snapshot(name: str, request: Request, principal: AdminDep) -> FileResponse:
+async def download_database_snapshot(name: str, request: Request, principal: AdminDep) -> FileResponse:
     _database_path, snapshot_dir = sqlite_snapshot_paths(request.app.state.settings)
-    path = snapshot_path(snapshot_dir, name)
+    path = await asyncio.to_thread(snapshot_path, snapshot_dir, name)
     return FileResponse(path, media_type="application/vnd.sqlite3", filename=path.name)
 
 
 @admin_router.get("/task-revisions", tags=["tasks"], response_model=TaskRevisionListResponse)
-def list_task_revisions(session: SessionDep) -> TaskRevisionListResponse:
-    items = session.scalars(select(TaskRevision).order_by(TaskRevision.created_at.desc()))
+async def list_task_revisions(session: SessionDep) -> TaskRevisionListResponse:
+    items = await session.scalars(select(TaskRevision).order_by(TaskRevision.created_at.desc()))
     return {"items": [task_dict(item) for item in items]}
 
 
@@ -303,12 +313,12 @@ def list_task_revisions(session: SessionDep) -> TaskRevisionListResponse:
     tags=["tasks"],
     response_model=TaskRevisionResponse,
 )
-def create_task_revision(
+async def create_task_revision(
     body: TaskRevisionCreate,
     session: SessionDep,
     principal: AdminDep,
 ) -> TaskRevisionResponse:
-    return task_dict(upsert_task_revision(session, body.model_dump(), principal))
+    return task_dict(await upsert_task_revision(session, body.model_dump(), principal))
 
 
 @admin_router.post(
@@ -330,7 +340,7 @@ async def sync_task_revision(
         values = await source.sync_revision(body.repo_url, body.ref, body.task_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return task_dict(upsert_task_revision(session, values, principal))
+    return task_dict(await upsert_task_revision(session, values, principal))
 
 
 @admin_router.post(
@@ -350,7 +360,7 @@ async def sync_task_repository(
     source = GitHubTaskSource(token, git_https_proxy=settings.git_https_proxy)
     try:
         snapshot, values = await source.sync_repository(body.repo_url, body.ref)
-        items, created, updated = upsert_task_revisions(session, values, principal)
+        items, created, updated = await upsert_task_revisions(session, values, principal)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
@@ -362,20 +372,22 @@ async def sync_task_repository(
 
 
 @admin_router.get("/plans", tags=["plans"], response_model=PlanListResponse)
-def list_plans(session: SessionDep) -> PlanListResponse:
-    items = session.scalars(select(ExecutionPlan).order_by(ExecutionPlan.created_at.desc()))
+async def list_plans(session: SessionDep) -> PlanListResponse:
+    items = await session.scalars(select(ExecutionPlan).order_by(ExecutionPlan.created_at.desc()))
     return {"items": [plan_dict(item) for item in items]}
 
 
 @admin_router.post("/plans", status_code=status.HTTP_201_CREATED, tags=["plans"], response_model=PlanResponse)
-def post_plan(
+async def post_plan(
     body: PlanCreate,
     request: Request,
     session: SessionDep,
     principal: AdminDep,
 ) -> PlanResponse:
     try:
-        item = create_plan(session, body.task_revision_id, body.config, principal, request.app.state.settings)
+        item = await create_plan(
+            session, body.task_revision_id, body.config, principal, request.app.state.settings
+        )
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConflictError as exc:
@@ -384,9 +396,11 @@ def post_plan(
 
 
 @admin_router.post("/plans/{plan_id}/approve", tags=["plans"], response_model=PlanResponse)
-def post_approve(plan_id: str, body: PlanApprove, session: SessionDep, principal: AdminDep) -> PlanResponse:
+async def post_approve(
+    plan_id: str, body: PlanApprove, session: SessionDep, principal: AdminDep
+) -> PlanResponse:
     try:
-        return plan_dict(approve_plan(session, plan_id, body.lock_version, principal))
+        return plan_dict(await approve_plan(session, plan_id, body.lock_version, principal))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ConflictError as exc:
@@ -394,13 +408,13 @@ def post_approve(plan_id: str, body: PlanApprove, session: SessionDep, principal
 
 
 @admin_router.get("/runs", tags=["runs"], response_model=RunListResponse)
-def list_runs(session: SessionDep) -> RunListResponse:
-    items = session.scalars(select(Run).order_by(Run.created_at.desc()))
+async def list_runs(session: SessionDep) -> RunListResponse:
+    items = await session.scalars(select(Run).order_by(Run.created_at.desc()))
     return {"items": [run_dict(item) for item in items]}
 
 
 @admin_router.post("/runs", tags=["runs"], response_model=CreatedRunResponse)
-def post_run(
+async def post_run(
     body: RunCreate,
     request: Request,
     session: SessionDep,
@@ -408,7 +422,7 @@ def post_run(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> CreatedRunResponse:
     try:
-        item, created = create_run(
+        item, created = await create_run(
             session,
             body.plan_id,
             body.timeout_minutes,
@@ -426,7 +440,7 @@ def post_run(
 
 
 @admin_router.post("/runs/manual", tags=["runs"], response_model=CreatedRunResponse)
-def post_manual_run(
+async def post_manual_run(
     body: ManualRunCreate,
     request: Request,
     session: SessionDep,
@@ -434,7 +448,7 @@ def post_manual_run(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> CreatedRunResponse:
     try:
-        item, created = create_manual_run(
+        item, created = await create_manual_run(
             session,
             body.task_revision_id,
             body.config,
@@ -453,7 +467,7 @@ def post_manual_run(
 
 
 @admin_router.post("/runs/manual-batch", tags=["runs"], response_model=ManualBatchRunResponse)
-def post_manual_batch(
+async def post_manual_batch(
     body: ManualBatchRunCreate,
     request: Request,
     session: SessionDep,
@@ -461,7 +475,7 @@ def post_manual_batch(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> ManualBatchRunResponse:
     try:
-        runs, created = create_manual_batch(
+        runs, created = await create_manual_batch(
             session,
             body.task_revision_ids,
             body.config,
@@ -478,24 +492,26 @@ def post_manual_batch(
 
 
 @admin_router.post("/runs/{run_id}/cancel", tags=["runs"], response_model=RunResponse)
-def post_cancel(run_id: str, session: SessionDep, principal: AdminDep) -> RunResponse:
+async def post_cancel(run_id: str, session: SessionDep, principal: AdminDep) -> RunResponse:
     try:
-        return run_dict(cancel_run(session, run_id, principal))
+        return run_dict(await cancel_run(session, run_id, principal))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @admin_router.get("/runs/{run_id}/events", tags=["runs"], response_model=RunEventListResponse)
-def get_events(run_id: str, session: SessionDep) -> RunEventListResponse:
-    if session.get(Run, run_id) is None:
+async def get_events(run_id: str, session: SessionDep) -> RunEventListResponse:
+    if await session.get(Run, run_id) is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    items = session.scalars(select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.created_at))
+    items = await session.scalars(
+        select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.created_at)
+    )
     return {"items": [event_dict(item) for item in items]}
 
 
 @admin_router.get("/jobs", tags=["operations"], response_model=DatabaseJobListResponse)
-def list_jobs(session: SessionDep) -> DatabaseJobListResponse:
-    items = session.scalars(select(DatabaseJob).order_by(DatabaseJob.created_at.desc()).limit(100))
+async def list_jobs(session: SessionDep) -> DatabaseJobListResponse:
+    items = await session.scalars(select(DatabaseJob).order_by(DatabaseJob.created_at.desc()).limit(100))
     return {
         "items": [
             {
@@ -540,8 +556,10 @@ def webhook_delivery_dict(item: WebhookDelivery) -> dict[str, object]:
     response_model=WebhookDeliveryListResponse,
     summary="List outbound webhook deliveries",
 )
-def list_webhook_deliveries(session: SessionDep) -> WebhookDeliveryListResponse:
-    items = session.scalars(select(WebhookDelivery).order_by(WebhookDelivery.created_at.desc()).limit(100))
+async def list_webhook_deliveries(session: SessionDep) -> WebhookDeliveryListResponse:
+    items = await session.scalars(
+        select(WebhookDelivery).order_by(WebhookDelivery.created_at.desc()).limit(100)
+    )
     return {"items": [webhook_delivery_dict(item) for item in items]}
 
 
@@ -555,22 +573,22 @@ def list_webhook_deliveries(session: SessionDep) -> WebhookDeliveryListResponse:
         409: {"description": "The webhook is currently being sent."},
     },
 )
-def post_resend_webhook_delivery(delivery_id: str, session: SessionDep) -> WebhookDeliveryResponse:
-    delivery = session.get(WebhookDelivery, delivery_id)
+async def post_resend_webhook_delivery(delivery_id: str, session: SessionDep) -> WebhookDeliveryResponse:
+    delivery = await session.get(WebhookDelivery, delivery_id)
     if delivery is None:
         raise HTTPException(status_code=404, detail="Webhook delivery not found")
     try:
-        resend_delivery(session, delivery)
+        await resend_delivery(session, delivery)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    session.commit()
+    await session.commit()
     return webhook_delivery_dict(delivery)
 
 
 @worker_router.post("/runs/{run_id}/claim", response_model=WorkerClaimResponse)
-def worker_claim(run_id: str, body: WorkerClaim, session: SessionDep) -> WorkerClaimResponse:
+async def worker_claim(run_id: str, body: WorkerClaim, session: SessionDep) -> WorkerClaimResponse:
     try:
-        return claim_worker(session, run_id, body.token)
+        return await claim_worker(session, run_id, body.token)
     except WorkerAuthError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -580,9 +598,9 @@ def worker_claim(run_id: str, body: WorkerClaim, session: SessionDep) -> WorkerC
     status_code=status.HTTP_201_CREATED,
     response_model=RunEventResponse,
 )
-def worker_event(run_id: str, body: WorkerEventCreate, session: SessionDep) -> RunEventResponse:
+async def worker_event(run_id: str, body: WorkerEventCreate, session: SessionDep) -> RunEventResponse:
     try:
-        item = create_worker_event(
+        item = await create_worker_event(
             session, run_id, body.session_token, body.event_type, body.message, body.payload
         )
     except WorkerAuthError as exc:
@@ -591,9 +609,9 @@ def worker_event(run_id: str, body: WorkerEventCreate, session: SessionDep) -> R
 
 
 @worker_router.post("/runs/{run_id}/complete", response_model=RunResponse)
-def worker_complete(run_id: str, body: WorkerComplete, session: SessionDep) -> RunResponse:
+async def worker_complete(run_id: str, body: WorkerComplete, session: SessionDep) -> RunResponse:
     try:
-        return run_dict(complete_worker(session, run_id, body.session_token, body.state, body.result))
+        return run_dict(await complete_worker(session, run_id, body.session_token, body.state, body.result))
     except WorkerAuthError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ConflictError as exc:

@@ -35,6 +35,48 @@ def user(role: str) -> User:
     )
 
 
+async def seed_deletable_proposal(factory, admin: User) -> tuple[str, str]:
+    async with factory() as session:
+        proposal = Proposal(
+            author_id=str(admin.id),
+            author_login=admin.github_login,
+            title="Proposal to delete",
+            abstract="A complete local proposal record used to verify administrator deletion.",
+            domain="Physics",
+            field="condensed-matter",
+            task_slug="proposal-to-delete",
+            evidence="A reproducible reference implementation.",
+            document=proposal_payload(),
+            input_valid=True,
+            status="pending",
+            discussion_url="https://github.com/example/repo/discussions/41",
+            discussion_node_id="D_kwDODeleteExample",
+            discussion_number=41,
+        )
+        session.add(proposal)
+        await session.flush()
+        revision = TaskRevision(
+            repo_url="https://github.com/example/tasks",
+            commit_sha="a" * 40,
+            task_path="tasks/proposal-to-delete",
+            resource_requirements={"cpu": 2},
+            proposal_id=proposal.id,
+        )
+        session.add(revision)
+        await session.commit()
+        return proposal.id, revision.id
+
+
+async def assert_proposal_tombstone(factory, proposal_id: str, revision_id: str) -> None:
+    async with factory() as session:
+        deleted_proposal = await session.get(Proposal, proposal_id)
+        assert deleted_proposal is not None
+        assert deleted_proposal.deleted_at is not None
+        retained_revision = await session.get(TaskRevision, revision_id)
+        assert retained_revision is not None
+        assert retained_revision.proposal_id == proposal_id
+
+
 def proposal_payload() -> dict[str, str]:
     return {
         "title": "Assimilate a sparse coastal observation network",
@@ -473,36 +515,9 @@ def test_admin_soft_delete_hides_proposal_and_sync_respects_tombstone() -> None:
         admin = user("admin")
         app.dependency_overrides[current_active_user] = lambda: admin
         with TestClient(app) as client:
-            with app.state.session_factory() as session:
-                proposal = Proposal(
-                    author_id=str(admin.id),
-                    author_login=admin.github_login,
-                    title="Proposal to delete",
-                    abstract="A complete local proposal record used to verify administrator deletion.",
-                    domain="Physics",
-                    field="condensed-matter",
-                    task_slug="proposal-to-delete",
-                    evidence="A reproducible reference implementation.",
-                    document=proposal_payload(),
-                    input_valid=True,
-                    status="pending",
-                    discussion_url="https://github.com/example/repo/discussions/41",
-                    discussion_node_id="D_kwDODeleteExample",
-                    discussion_number=41,
-                )
-                session.add(proposal)
-                session.flush()
-                proposal_id = proposal.id
-                revision = TaskRevision(
-                    repo_url="https://github.com/example/tasks",
-                    commit_sha="a" * 40,
-                    task_path="tasks/proposal-to-delete",
-                    resource_requirements={"cpu": 2},
-                    proposal_id=proposal_id,
-                )
-                session.add(revision)
-                session.commit()
-                revision_id = revision.id
+            proposal_id, revision_id = client.portal.call(
+                seed_deletable_proposal, app.state.session_factory, admin
+            )
 
             app.dependency_overrides[current_active_user] = lambda: user("member")
             denied = client.delete(f"/api/v1/proposals/{proposal_id}")
@@ -518,13 +533,12 @@ def test_admin_soft_delete_hides_proposal_and_sync_respects_tombstone() -> None:
             assert client.get("/api/v1/proposals").json()["items"] == []
             assert client.get("/api/v1/public/proposals").json()["items"] == []
 
-            with app.state.session_factory() as session:
-                deleted_proposal = session.get(Proposal, proposal_id)
-                assert deleted_proposal is not None
-                assert deleted_proposal.deleted_at is not None
-                retained_revision = session.get(TaskRevision, revision_id)
-                assert retained_revision is not None
-                assert retained_revision.proposal_id == proposal_id
+            client.portal.call(
+                assert_proposal_tombstone,
+                app.state.session_factory,
+                proposal_id,
+                revision_id,
+            )
 
             discussion = {
                 "id": "D_kwDODeleteExample",

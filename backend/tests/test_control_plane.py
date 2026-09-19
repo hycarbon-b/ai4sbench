@@ -10,7 +10,8 @@ from unittest.mock import AsyncMock, patch
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_panel.config import Settings
 from control_panel.identity import User, current_active_user
@@ -22,6 +23,51 @@ from control_panel.quick_tunnel import extract_quick_tunnel_url
 from control_panel.services import deterministic_bootstrap_token
 
 JOB_SECRET = "test-job-secret-that-is-long-enough-456"
+
+
+async def control_state(factory, run_id: str) -> tuple[str, str, list[str], int]:
+    async with factory() as session:
+        stored = await session.get(Run, run_id)
+        assert stored is not None
+        jobs = list(await session.scalars(select(DatabaseJob)))
+        audits = list(await session.scalars(select(AuditEvent)))
+        return stored.state, stored.instance_state, [job.state for job in jobs], len(audits)
+
+
+async def release_active_runs(factory) -> int:
+    async with factory() as session:
+        active = list(await session.scalars(select(Run).where(Run.state == "provisioning")))
+        for run in active:
+            run.state = "succeeded"
+            run.instance_state = "terminated"
+        for job in await session.scalars(select(DatabaseJob).where(DatabaseJob.state == "pending")):
+            job.available_at = datetime.now(UTC)
+        await session.commit()
+        return len(active)
+
+
+async def expire_run(factory, run_id: str) -> None:
+    async with factory() as session:
+        stored = await session.get(Run, run_id)
+        assert stored is not None
+        stored.deadline_at = datetime.now(UTC) - timedelta(seconds=1)
+        await session.commit()
+
+
+async def run_state(factory, run_id: str) -> tuple[str, str]:
+    async with factory() as session:
+        stored = await session.get(Run, run_id)
+        assert stored is not None
+        return stored.state, stored.instance_state
+
+
+async def sqlite_pragmas(factory) -> tuple[int, int, str]:
+    async with factory() as session:
+        assert isinstance(session, AsyncSession)
+        foreign_keys = int((await session.execute(text("PRAGMA foreign_keys"))).scalar_one())
+        busy_timeout = int((await session.execute(text("PRAGMA busy_timeout"))).scalar_one())
+        journal_mode = str((await session.execute(text("PRAGMA journal_mode"))).scalar_one())
+        return foreign_keys, busy_timeout, journal_mode
 
 
 class ControlPanelIntegrationTests(unittest.TestCase):
@@ -105,6 +151,15 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             is_verified=True,
             role="admin",
             github_login="test-admin",
+        )
+
+    def test_runtime_uses_one_configured_async_sqlite_engine(self) -> None:
+        self.assertIsInstance(self.app.state.engine, AsyncEngine)
+        self.assertFalse(hasattr(self.app.state, "auth_engine"))
+        self.assertFalse(hasattr(self.app.state, "auth_session_factory"))
+        self.assertEqual(
+            self.client.portal.call(sqlite_pragmas, self.app.state.session_factory),
+            (1, 30_000, "wal"),
         )
 
     def test_swagger_and_openapi_are_available_in_production(self) -> None:
@@ -269,7 +324,7 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertFalse(repeated.json()["created"])
 
         runner = JobRunner(self.settings, self.provider)
-        self.assertTrue(runner.process_one())
+        self.assertTrue(self.client.portal.call(runner.process_one))
         token = deterministic_bootstrap_token(run["id"], self.settings)
         claim = self.client.post(
             f"/api/v1/worker/runs/{run['id']}/claim",
@@ -302,16 +357,16 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(completed.status_code, 200, completed.text)
         self.assertEqual(completed.json()["instance_state"], "terminating")
-        self.assertTrue(runner.process_one())
+        self.assertTrue(self.client.portal.call(runner.process_one))
 
-        with self.app.state.session_factory() as session:
-            stored = session.get(Run, run["id"])
-            self.assertEqual(stored.state, "succeeded")
-            self.assertEqual(stored.instance_state, "terminated")
-            jobs = list(session.scalars(select(DatabaseJob)))
-            self.assertEqual([job.state for job in jobs], ["completed", "completed"])
-            self.assertGreaterEqual(len(list(session.scalars(select(AuditEvent)))), 3)
-        runner.engine.dispose()
+        state, instance_state, jobs, audit_count = self.client.portal.call(
+            control_state, self.app.state.session_factory, run["id"]
+        )
+        self.assertEqual(state, "succeeded")
+        self.assertEqual(instance_state, "terminated")
+        self.assertEqual(jobs, ["completed", "completed"])
+        self.assertGreaterEqual(audit_count, 3)
+        self.client.portal.call(runner.engine.dispose)
 
     def test_queue_accepts_runs_beyond_active_worker_limit(self) -> None:
         plan = self.create_approved_plan()
@@ -364,9 +419,9 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(run["config"]["plan_config"]["instance_type"], "t3.micro")
 
         runner = JobRunner(self.settings, self.provider)
-        self.assertTrue(runner.process_one())
+        self.assertTrue(self.client.portal.call(runner.process_one))
         self.assertEqual(self.provider.launch_configs[run["id"]]["instance_type"], "t3.micro")
-        runner.engine.dispose()
+        self.client.portal.call(runner.engine.dispose)
 
     def test_manual_run_rejects_an_instance_that_cannot_run_the_task(self) -> None:
         revision = self.client.post(
@@ -425,23 +480,16 @@ class ControlPanelIntegrationTests(unittest.TestCase):
 
         runner = JobRunner(self.settings, self.provider)
         for _ in range(5):
-            self.assertTrue(runner.process_one())
+            self.assertTrue(self.client.portal.call(runner.process_one))
         self.assertEqual(len(self.provider.launch_configs), 3)
-        with self.app.state.session_factory() as session:
-            active = list(session.scalars(select(Run).where(Run.state == "provisioning")))
-            self.assertEqual(len(active), 3)
-            for run in active:
-                run.state = "succeeded"
-                run.instance_state = "terminated"
-            for job in session.scalars(select(DatabaseJob).where(DatabaseJob.state == "pending")):
-                job.available_at = datetime.now(UTC)
-            session.commit()
+        active_count = self.client.portal.call(release_active_runs, self.app.state.session_factory)
+        self.assertEqual(active_count, 3)
 
         for _ in range(2):
-            self.assertTrue(runner.process_one())
+            self.assertTrue(self.client.portal.call(runner.process_one))
         self.assertEqual(len(self.provider.launch_configs), 5)
         self.assertTrue(all(config["agent"] == "oracle" for config in self.provider.launch_configs.values()))
-        runner.engine.dispose()
+        self.client.portal.call(runner.engine.dispose)
 
     def test_repository_sync_imports_every_task_at_one_pinned_commit(self) -> None:
         source_result = (
@@ -524,17 +572,13 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             json={"plan_id": plan["id"], "timeout_minutes": 1},
         )
         run_id = response.json()["id"]
-        with self.app.state.session_factory() as session:
-            stored = session.get(Run, run_id)
-            stored.deadline_at = datetime.now(UTC) - timedelta(seconds=1)
-            session.commit()
+        self.client.portal.call(expire_run, self.app.state.session_factory, run_id)
         runner = JobRunner(self.settings, self.provider)
-        runner.run_once()
-        with self.app.state.session_factory() as session:
-            stored = session.get(Run, run_id)
-            self.assertEqual(stored.state, "timed_out")
-            self.assertEqual(stored.instance_state, "terminated")
-        runner.engine.dispose()
+        self.client.portal.call(runner.run_once)
+        state, instance_state = self.client.portal.call(run_state, self.app.state.session_factory, run_id)
+        self.assertEqual(state, "timed_out")
+        self.assertEqual(instance_state, "terminated")
+        self.client.portal.call(runner.engine.dispose)
 
     def test_production_settings_fail_closed(self) -> None:
         with self.assertRaises(ValidationError):

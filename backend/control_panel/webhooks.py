@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import Settings
 from .models import Proposal, WebhookDelivery
@@ -37,8 +37,8 @@ def _discord_url(settings: Settings) -> str:
     return settings.discord_webhook_url.get_secret_value().strip() if settings.discord_webhook_url else ""
 
 
-def enqueue_delivery(
-    session: Session,
+async def enqueue_delivery(
+    session: AsyncSession,
     settings: Settings,
     *,
     event_type: str,
@@ -48,7 +48,7 @@ def enqueue_delivery(
     destination_url = _discord_url(settings)
     if not destination_url:
         return None
-    existing = session.scalar(select(WebhookDelivery).where(WebhookDelivery.dedupe_key == dedupe_key))
+    existing = await session.scalar(select(WebhookDelivery).where(WebhookDelivery.dedupe_key == dedupe_key))
     if existing is not None:
         return existing
     delivery = WebhookDelivery(
@@ -58,12 +58,12 @@ def enqueue_delivery(
         dedupe_key=dedupe_key,
     )
     session.add(delivery)
-    session.flush()
+    await session.flush()
     return delivery
 
 
-def enqueue_proposal_notification(
-    session: Session, settings: Settings, proposal: Proposal, form: dict[str, Any]
+async def enqueue_proposal_notification(
+    session: AsyncSession, settings: Settings, proposal: Proposal, form: dict[str, Any]
 ) -> WebhookDelivery | None:
     website_url = _website_url(settings, proposal.id)
     payload = {
@@ -98,7 +98,7 @@ def enqueue_proposal_notification(
             }
         ],
     }
-    return enqueue_delivery(
+    return await enqueue_delivery(
         session,
         settings,
         event_type="proposal_created",
@@ -107,8 +107,8 @@ def enqueue_proposal_notification(
     )
 
 
-def enqueue_review_notification(
-    session: Session,
+async def enqueue_review_notification(
+    session: AsyncSession,
     settings: Settings,
     proposal: Proposal,
     review: ProposalReview,
@@ -149,7 +149,7 @@ def enqueue_review_notification(
             }
         ],
     }
-    return enqueue_delivery(
+    return await enqueue_delivery(
         session,
         settings,
         event_type="review_published",
@@ -158,29 +158,39 @@ def enqueue_review_notification(
     )
 
 
-def claim_delivery(session: Session) -> WebhookDelivery | None:
+async def claim_delivery(session: AsyncSession) -> WebhookDelivery | None:
     now = utcnow()
-    candidate_id = session.scalar(
+    stale = now - timedelta(minutes=5)
+    candidate_id = await session.scalar(
         select(WebhookDelivery.id)
         .where(
             WebhookDelivery.available_at <= now,
             WebhookDelivery.attempts < WebhookDelivery.max_attempts,
-            WebhookDelivery.state == "pending",
+            or_(
+                WebhookDelivery.state == "pending",
+                (WebhookDelivery.state == "sending") & (WebhookDelivery.updated_at < stale),
+            ),
         )
         .order_by(WebhookDelivery.created_at)
         .limit(1)
     )
     if candidate_id is None:
         return None
-    return session.scalar(
+    return await session.scalar(
         update(WebhookDelivery)
-        .where(WebhookDelivery.id == candidate_id, WebhookDelivery.state == "pending")
+        .where(
+            WebhookDelivery.id == candidate_id,
+            or_(
+                WebhookDelivery.state == "pending",
+                (WebhookDelivery.state == "sending") & (WebhookDelivery.updated_at < stale),
+            ),
+        )
         .values(state="sending", attempts=WebhookDelivery.attempts + 1, updated_at=now)
         .returning(WebhookDelivery)
     )
 
 
-def discord_message_url(client: httpx.Client, destination_url: str, body: str) -> str | None:
+async def discord_message_url(client: httpx.AsyncClient, destination_url: str, body: str) -> str | None:
     """Build a browser message URL from Discord's execute-webhook response.
 
     `wait=true` returns the created message and Forum thread IDs, but not the
@@ -193,7 +203,7 @@ def discord_message_url(client: httpx.Client, destination_url: str, body: str) -
         message = json.loads(body)
         message_id = str(message.get("id") or "").strip()
         channel_id = str(message.get("channel_id") or "").strip()
-        webhook = client.get(destination_url)
+        webhook = await client.get(destination_url)
         webhook.raise_for_status()
         guild_id = str(webhook.json().get("guild_id") or "").strip()
     except (KeyError, TypeError, ValueError, httpx.HTTPError):
@@ -203,14 +213,14 @@ def discord_message_url(client: httpx.Client, destination_url: str, body: str) -
     return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
 
 
-def send_delivery(delivery: WebhookDelivery) -> tuple[int, str, str | None]:
+async def send_delivery(delivery: WebhookDelivery) -> tuple[int, str, str | None]:
     separator = "&" if "?" in delivery.destination_url else "?"
-    with httpx.Client(timeout=15) as client:
-        response = client.post(f"{delivery.destination_url}{separator}wait=true", json=delivery.payload)
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(f"{delivery.destination_url}{separator}wait=true", json=delivery.payload)
         body = response.text[:20_000]
         if response.is_error:
             raise WebhookResponseError(response.status_code, body)
-        message_url = discord_message_url(client, delivery.destination_url, body)
+        message_url = await discord_message_url(client, delivery.destination_url, body)
     return response.status_code, body, message_url
 
 
@@ -221,15 +231,15 @@ def proposal_id_from_delivery(delivery: WebhookDelivery) -> str | None:
     return delivery.dedupe_key.removeprefix(prefix) or None
 
 
-def complete_delivery(
-    session: Session,
+async def complete_delivery(
+    session: AsyncSession,
     delivery: WebhookDelivery,
     status_code: int,
     body: str,
     message_url: str | None,
 ) -> None:
     now = utcnow()
-    session.execute(
+    await session.execute(
         update(WebhookDelivery)
         .where(WebhookDelivery.id == delivery.id, WebhookDelivery.state == "sending")
         .values(
@@ -243,15 +253,15 @@ def complete_delivery(
     )
     proposal_id = proposal_id_from_delivery(delivery)
     if proposal_id and message_url:
-        session.execute(
+        await session.execute(
             update(Proposal)
             .where(Proposal.id == proposal_id)
             .values(discord_message_url=message_url, updated_at=now)
         )
 
 
-def fail_delivery(
-    session: Session,
+async def fail_delivery(
+    session: AsyncSession,
     delivery: WebhookDelivery,
     error: str,
     *,
@@ -260,7 +270,7 @@ def fail_delivery(
 ) -> None:
     terminal = delivery.attempts >= delivery.max_attempts
     delay = min(300, 2 ** max(0, delivery.attempts - 1))
-    session.execute(
+    await session.execute(
         update(WebhookDelivery)
         .where(WebhookDelivery.id == delivery.id, WebhookDelivery.state == "sending")
         .values(
@@ -274,7 +284,7 @@ def fail_delivery(
     )
 
 
-def resend_delivery(session: Session, delivery: WebhookDelivery) -> WebhookDelivery:
+async def resend_delivery(session: AsyncSession, delivery: WebhookDelivery) -> WebhookDelivery:
     if delivery.state == "sending":
         raise ValueError("A webhook delivery is already in progress")
     delivery.state = "pending"
@@ -284,5 +294,5 @@ def resend_delivery(session: Session, delivery: WebhookDelivery) -> WebhookDeliv
     delivery.response_status = None
     delivery.response_body = None
     delivery.sent_at = None
-    session.flush()
+    await session.flush()
     return delivery

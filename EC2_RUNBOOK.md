@@ -57,7 +57,7 @@ Two systemd units run the control plane:
 
 | Unit | Command | Purpose |
 | --- | --- | --- |
-| `ai4sbench-api.service` | `python -m uvicorn control_panel.main:app --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *` | HTTP API, Dashboard static assets, GitHub OAuth, proposal submission |
+| `ai4sbench-api.service` | `python -m uvicorn control_panel.main:create_app --factory --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *` | HTTP API, Dashboard static assets, GitHub OAuth, proposal submission |
 | `ai4sbench-jobs.service` | `python -m control_panel.job_runner` | Database-backed background job runner |
 
 Both units currently run as `ai4sbench:ai4sbench` with working directory
