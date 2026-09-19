@@ -5,9 +5,11 @@ import os
 import queue
 import shlex
 import subprocess
+import sys
 import tempfile
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
@@ -19,6 +21,7 @@ from .harbor_result import terminal_state
 from .quick_tunnel import DebugState, start_debug_server, start_quick_tunnel
 
 HARBOR_PREFIX = "[harbor]"
+WORKER_PREFIX = "[worker]"
 EVENT_MESSAGE_LIMIT = 4000
 
 
@@ -151,13 +154,24 @@ class HarborRecorder:
         self._emit = emit
         self._lines: list[str] = []
 
-    def write(self, line: str) -> None:
-        entry = f"{HARBOR_PREFIX} {line}" if line else HARBOR_PREFIX
+    def write(self, line: str, *, prefix: str = HARBOR_PREFIX) -> None:
+        entry = f"{prefix} {line}" if line else prefix
         self._lines.append(entry)
         with suppress(OSError):
             self._handle.write(f"{entry}\n")
             self._handle.flush()
         self._emit(entry)
+
+    def write_worker(self, line: str) -> None:
+        """Record a line from the worker's own bootstrap phase.
+
+        Everything before Harbor is launched — the git clone/fetch/checkout of
+        the pinned task, and quick-tunnel setup — goes through this so a
+        failure there is captured with the same completeness as a Harbor
+        failure, just tagged ``[worker]`` instead of ``[harbor]`` so the two
+        are distinguishable in the combined log.
+        """
+        self.write(line, prefix=WORKER_PREFIX)
 
     def text(self) -> str:
         return "\n".join(self._lines)
@@ -238,11 +252,30 @@ def harbor_invocation(command: list[str], config: dict[str, Any]) -> dict[str, A
     }
 
 
+def log_console(line: str) -> None:
+    """Best-effort local record for the window before a session token exists.
+
+    Before ``claim`` succeeds there is no session token, so nothing can be
+    posted to ``/events`` yet.  Writing to stderr is the only channel
+    available; on a real instance this reaches the unit's journal, so a
+    claim failure is not silent even though it never reaches the Dashboard.
+    """
+    print(f"{WORKER_PREFIX} {line}", file=sys.stderr, flush=True)
+
+
 def main() -> None:
     base_url = os.environ["TBCP_API_BASE_URL"]
     run_id = os.environ["TBCP_RUN_ID"]
     bootstrap_token = os.environ["TBCP_JOB_TOKEN"]
-    claim = post(base_url, f"/api/v1/worker/runs/{run_id}/claim", {"token": bootstrap_token})
+    log_console(f"Claiming run {run_id}")
+    try:
+        claim = post(base_url, f"/api/v1/worker/runs/{run_id}/claim", {"token": bootstrap_token})
+    except Exception:
+        # No session token exists yet, so a claim failure cannot be reported
+        # through the events/complete API; log everything available locally
+        # instead of losing it.
+        log_console(f"ERROR claim failed: {traceback.format_exc()}")
+        raise
     session_token = claim["session_token"]
     revision = claim["task_revision"]
     config = claim["run"]["config"]["plan_config"]
@@ -257,6 +290,7 @@ def main() -> None:
     debug_server = None
     tunnel_process = None
     try:
+        recorder.write_worker(f"Claimed run {run_id}")
         if os.getenv("TBCP_ENABLE_QUICK_TUNNEL", "0").lower() in {"1", "true", "yes", "on"}:
             debug_server, debug_target = start_debug_server(debug_state)
 
@@ -274,29 +308,30 @@ def main() -> None:
 
             tunnel_process = start_quick_tunnel(debug_target, debug_state, publish_tunnel)
             if tunnel_process is None:
-                emit("cloudflared is not installed; continuing without a public debug endpoint")
+                recorder.write_worker(
+                    "cloudflared is not installed; continuing without a public debug endpoint"
+                )
 
-        emit(f"Cloning pinned revision {revision['commit_sha'][:12]}")
+        recorder.write_worker(f"Cloning pinned revision {revision['commit_sha'][:12]}")
         if (
             run_command(
                 ["git", "clone", "--filter=blob:none", "--no-checkout", revision["repo_url"], "repo"],
                 workdir,
-                emit,
+                recorder.write_worker,
             )
             != 0
         ):
             raise RuntimeError("git clone failed")
         repo = workdir / "repo"
-        if run_command(["git", "fetch", "origin", revision["commit_sha"], "--depth", "1"], repo, emit) != 0:
+        fetch_command = ["git", "fetch", "origin", revision["commit_sha"], "--depth", "1"]
+        if run_command(fetch_command, repo, recorder.write_worker) != 0:
             raise RuntimeError("git fetch of pinned revision failed")
-        if run_command(["git", "sparse-checkout", "init", "--cone"], repo, emit) != 0:
+        if run_command(["git", "sparse-checkout", "init", "--cone"], repo, recorder.write_worker) != 0:
             raise RuntimeError("git sparse-checkout initialization failed")
-        if (
-            run_command(["git", "sparse-checkout", "set", "--cone", revision["task_path"]], repo, emit)
-            != 0
-        ):
+        sparse_set_command = ["git", "sparse-checkout", "set", "--cone", revision["task_path"]]
+        if run_command(sparse_set_command, repo, recorder.write_worker) != 0:
             raise RuntimeError("git sparse-checkout configuration failed")
-        if run_command(["git", "checkout", "--detach", "FETCH_HEAD"], repo, emit) != 0:
+        if run_command(["git", "checkout", "--detach", "FETCH_HEAD"], repo, recorder.write_worker) != 0:
             raise RuntimeError("git checkout failed")
         task = repo / revision["task_path"]
         if not task.is_dir():
@@ -344,9 +379,21 @@ def main() -> None:
             {"session_token": session_token, "state": state, "result": result},
         )
     except Exception as exc:
-        recorder.write(f"ERROR {type(exc).__name__}: {exc}")
+        # A failure before Harbor ever starts (a bad clone, a missing task
+        # path, a launch error) must be as fully reported as a Harbor
+        # failure: the whole traceback is recorded, not just str(exc), and it
+        # goes through the same recorder so it is part of harbor_output too.
+        full_traceback = traceback.format_exc()
+        for line in full_traceback.splitlines():
+            recorder.write(line, prefix=WORKER_PREFIX)
         debug_state.status = "failed"
-        failure = recorder.attach({"error": type(exc).__name__, "message": str(exc)[:500]})
+        failure = recorder.attach(
+            {
+                "error": type(exc).__name__,
+                "message": str(exc)[:2000],
+                "traceback": full_traceback[-20000:],
+            }
+        )
         with suppress(Exception):
             events.close(timeout_seconds=30.0)
         with suppress(Exception):

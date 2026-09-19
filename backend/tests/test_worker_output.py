@@ -25,6 +25,7 @@ from control_panel.bootstrap import render_worker_bootstrap
 from control_panel.config import Settings
 from control_panel.providers import Boto3EC2Provider
 from control_panel.worker import (
+    WORKER_PREFIX,
     EventStream,
     HarborRecorder,
     harbor_command,
@@ -146,6 +147,20 @@ class HarborRecorderTests(unittest.TestCase):
             recorder.close()
         self.assertEqual(len(result["harbor_output"].splitlines()), 2000)
         self.assertGreater(result["harbor_output_bytes"], 4000)
+
+    def test_write_worker_tags_a_line_with_the_worker_prefix_not_harbor(self) -> None:
+        streamed: list[str] = []
+        with tempfile.TemporaryDirectory() as temporary:
+            recorder = HarborRecorder(Path(temporary) / "harbor.log", streamed.append)
+            recorder.write_worker("Cloning pinned revision abc123")
+            recorder.write("trial 1 started")
+            result = recorder.attach()
+            recorder.close()
+        self.assertEqual(streamed[0], f"{WORKER_PREFIX} Cloning pinned revision abc123")
+        self.assertEqual(streamed[1], "[harbor] trial 1 started")
+        # Worker-phase and Harbor-phase lines share one recorder, so a failure
+        # before Harbor ever runs is still part of the same harbor_output text.
+        self.assertIn("[worker] Cloning pinned revision abc123", result["harbor_output"])
 
 
 class RunCommandTests(unittest.TestCase):
@@ -356,9 +371,20 @@ class InlineBootstrapTests(unittest.TestCase):
 
     def test_the_inline_worker_prefixes_and_returns_the_full_harbor_output(self) -> None:
         source = self.worker_source()
-        self.assertIn('f"[harbor] {line}"', source)
+        self.assertIn('def record(line, prefix="[harbor]"):', source)
         self.assertIn('result["harbor_output"]', source)
         self.assertIn("stdin=subprocess.DEVNULL", source)
+
+    def test_the_inline_worker_reports_pre_harbor_failures_completely(self) -> None:
+        source = self.worker_source()
+        # The clone/fetch/checkout phase logs through [worker], not [harbor],
+        # and a failure there still carries the full traceback and log.
+        self.assertIn("def record_worker(line):", source)
+        self.assertIn('record(line, prefix="[worker]")', source)
+        self.assertIn("traceback.format_exc()", source)
+        self.assertIn('"traceback": full_traceback[-20000:]', source)
+        self.assertIn("def log_console(line):", source)
+        self.assertIn("ERROR claim failed", source)
 
 
 class CIContractTests(unittest.TestCase):
@@ -374,6 +400,128 @@ class CIContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         for flag in ("--base-ami-id", "--repo-url", "--security-group-id", "--commit-sha"):
             self.assertIn(flag, result.stdout)
+
+
+class MainFailureReportingTests(unittest.TestCase):
+    """A failure before Harbor ever runs must be reported as completely as one after.
+
+    ``main()`` clones the pinned task, then launches Harbor.  These tests
+    force a failure in the clone/fetch step -- before any Harbor line exists
+    -- and check that the completion payload still carries the full
+    ``[worker]``-tagged log and a full traceback, not just ``str(exc)``.
+    """
+
+    def run_main(self, commit_sha: str) -> dict:
+        import control_panel.worker as worker_module
+
+        posted: list[tuple[str, dict]] = []
+
+        def fake_post(base_url, path, value, **kwargs):
+            posted.append((path, value))
+            if path.endswith("/claim"):
+                return {
+                    "session_token": "session-token",
+                    "task_revision": {
+                        "repo_url": str(self.repo),
+                        "commit_sha": commit_sha,
+                        "task_path": "tasks/demo",
+                    },
+                    "run": {
+                        "id": "run-1",
+                        "config": {
+                            "plan_config": {
+                                "agent": "oracle",
+                                "n_concurrent": 1,
+                                "n_attempts": 1,
+                                "environment": "docker",
+                            }
+                        },
+                    },
+                }
+            return {}
+
+        env = {
+            "TBCP_API_BASE_URL": "https://control.example",
+            "TBCP_RUN_ID": "run-1",
+            "TBCP_JOB_TOKEN": "bootstrap-token",
+            "TBCP_ENABLE_QUICK_TUNNEL": "0",
+        }
+        with patch("control_panel.worker.post", side_effect=fake_post), patch.dict(
+            "os.environ", env, clear=False
+        ), self.assertRaises(RuntimeError):
+            worker_module.main()
+
+        complete_path, complete_body = next(item for item in posted if item[0].endswith("/complete"))
+        self.assertTrue(complete_path.endswith("/complete"))
+        return complete_body
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.repo = Path(self.temp_dir.name) / "origin"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.test"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.name", "test"], cwd=self.repo, check=True)
+        (self.repo / "readme.txt").write_text("demo\n", encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "demo"], cwd=self.repo, check=True)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_a_failed_git_fetch_reports_state_failed_with_the_full_worker_log(self) -> None:
+        # A commit that does not exist in the repo makes `git fetch` fail,
+        # before any [harbor] line is ever produced.
+        body = self.run_main(commit_sha="0" * 40)
+        self.assertEqual(body["state"], "failed")
+        result = body["result"]
+        self.assertEqual(result["error"], "RuntimeError")
+        self.assertIn("git fetch of pinned revision failed", result["message"])
+        self.assertIn("Traceback", result["traceback"])
+        self.assertIn("RuntimeError: git fetch of pinned revision failed", result["traceback"])
+        output = result["harbor_output"]
+        self.assertIn("[worker] Cloning pinned revision", output)
+        self.assertIn("[worker] fatal:", output.lower() + output)  # git's own stderr is captured
+        self.assertIn("[worker] Traceback", output)
+        # No line is silently missing: everything git wrote plus the raised
+        # exception's full traceback are both in the one persisted log.
+        self.assertTrue(all(line.startswith(("[worker]", "[harbor]")) for line in output.splitlines()))
+
+    def test_a_missing_task_path_is_reported_with_the_full_worker_log(self) -> None:
+        body = self.run_main(commit_sha=self._head())
+        result = body["result"]
+        self.assertEqual(result["error"], "RuntimeError")
+        self.assertIn("Pinned task path does not exist", result["message"])
+        self.assertIn("Pinned task path does not exist", result["traceback"])
+
+    def _head(self) -> str:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=self.repo, check=True, text=True, capture_output=True
+        ).stdout.strip()
+
+    def test_a_claim_failure_is_logged_locally_before_any_session_token_exists(self) -> None:
+        import io
+
+        import control_panel.worker as worker_module
+
+        def failing_post(base_url, path, value, **kwargs):
+            raise OSError("control plane unreachable")
+
+        env = {
+            "TBCP_API_BASE_URL": "https://control.example",
+            "TBCP_RUN_ID": "run-1",
+            "TBCP_JOB_TOKEN": "bootstrap-token",
+        }
+        captured = io.StringIO()
+        with patch("control_panel.worker.post", side_effect=failing_post), patch.dict(
+            "os.environ", env, clear=False
+        ), patch("sys.stderr", captured), self.assertRaises(OSError):
+            worker_module.main()
+        # There is no session token yet, so /events cannot be used; the
+        # failure still has to be visible somewhere (the unit's journal on a
+        # real instance) rather than disappearing silently.
+        self.assertIn("[worker] ERROR claim failed", captured.getvalue())
+        self.assertIn("control plane unreachable", captured.getvalue())
 
 
 if __name__ == "__main__":
