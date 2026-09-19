@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -8,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select, text, update
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import Principal
 from .config import Settings
@@ -49,8 +50,8 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def begin_immediate(session: Session) -> None:
-    session.execute(text("BEGIN IMMEDIATE"))
+async def begin_immediate(session: AsyncSession) -> None:
+    await session.execute(text("BEGIN IMMEDIATE"))
 
 
 def task_dict(item: TaskRevision) -> dict[str, Any]:
@@ -115,7 +116,7 @@ def event_dict(item: RunEvent) -> dict[str, Any]:
 
 
 def add_event(
-    session: Session,
+    session: AsyncSession,
     run_id: str,
     event_type: str,
     message: str,
@@ -132,7 +133,7 @@ def add_event(
 
 
 def add_audit(
-    session: Session,
+    session: AsyncSession,
     principal: Principal,
     action: str,
     resource_type: str,
@@ -150,8 +151,10 @@ def add_audit(
     )
 
 
-def upsert_task_revision(session: Session, values: dict[str, Any], principal: Principal) -> TaskRevision:
-    begin_immediate(session)
+async def upsert_task_revision(
+    session: AsyncSession, values: dict[str, Any], principal: Principal
+) -> TaskRevision:
+    await begin_immediate(session)
     link_values = {
         field: values[field] for field in ("proposal_id", "pull_request_url", "release") if field in values
     }
@@ -162,7 +165,7 @@ def upsert_task_revision(session: Session, values: dict[str, Any], principal: Pr
         "resource_requirements": values["resource_requirements"],
         **link_values,
     }
-    item = session.scalar(
+    item = await session.scalar(
         select(TaskRevision).where(
             TaskRevision.repo_url == task_values["repo_url"],
             TaskRevision.commit_sha == task_values["commit_sha"],
@@ -172,7 +175,7 @@ def upsert_task_revision(session: Session, values: dict[str, Any], principal: Pr
     if item is None:
         item = TaskRevision(**task_values)
         session.add(item)
-        session.flush()
+        await session.flush()
         add_audit(session, principal, "task_revision.created", "task_revision", item.id)
     else:
         changed = False
@@ -186,16 +189,16 @@ def upsert_task_revision(session: Session, values: dict[str, Any], principal: Pr
                 changed = True
         if changed:
             add_audit(session, principal, "task_revision.updated", "task_revision", item.id)
-    session.commit()
-    session.refresh(item)
+    await session.commit()
+    await session.refresh(item)
     return item
 
 
-def upsert_task_revisions(
-    session: Session, values_list: list[dict[str, Any]], principal: Principal
+async def upsert_task_revisions(
+    session: AsyncSession, values_list: list[dict[str, Any]], principal: Principal
 ) -> tuple[list[TaskRevision], int, int]:
     """Upsert a repository snapshot in one SQLite transaction."""
-    begin_immediate(session)
+    await begin_immediate(session)
     created = 0
     updated = 0
     items: list[TaskRevision] = []
@@ -213,7 +216,7 @@ def upsert_task_revisions(
                 "resource_requirements": values["resource_requirements"],
                 **link_values,
             }
-            item = session.scalar(
+            item = await session.scalar(
                 select(TaskRevision).where(
                     TaskRevision.repo_url == task_values["repo_url"],
                     TaskRevision.commit_sha == task_values["commit_sha"],
@@ -223,7 +226,7 @@ def upsert_task_revisions(
             if item is None:
                 item = TaskRevision(**task_values)
                 session.add(item)
-                session.flush()
+                await session.flush()
                 add_audit(session, principal, "task_revision.created", "task_revision", item.id)
                 created += 1
             else:
@@ -239,12 +242,12 @@ def upsert_task_revisions(
                     add_audit(session, principal, "task_revision.updated", "task_revision", item.id)
                     updated += 1
             items.append(item)
-        session.commit()
+        await session.commit()
     except Exception:
-        session.rollback()
+        await session.rollback()
         raise
     for item in items:
-        session.refresh(item)
+        await session.refresh(item)
     return items, created, updated
 
 
@@ -301,8 +304,8 @@ def resolve_instance_config(config: PlanConfig, revision: TaskRevision, settings
     return resolved
 
 
-def create_plan(
-    session: Session,
+async def create_plan(
+    session: AsyncSession,
     task_revision_id: str,
     config: PlanConfig,
     principal: Principal,
@@ -310,29 +313,29 @@ def create_plan(
 ) -> ExecutionPlan:
     if config.instance_type and config.instance_type not in settings.ec2_allowed_instance_types:
         raise ConflictError("Instance type is not allowlisted")
-    revision = session.get(TaskRevision, task_revision_id)
+    revision = await session.get(TaskRevision, task_revision_id)
     if revision is None:
         raise NotFoundError("Task revision not found")
     config = resolve_instance_config(config, revision, settings)
     item = ExecutionPlan(task_revision_id=revision.id, config=config.model_dump(mode="json"))
     session.add(item)
-    session.flush()
+    await session.flush()
     add_audit(session, principal, "plan.created", "plan", item.id)
-    session.commit()
-    return session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == item.id))  # type: ignore[return-value]
+    await session.commit()
+    return await session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == item.id))  # type: ignore[return-value]
 
 
-def approve_plan(
-    session: Session,
+async def approve_plan(
+    session: AsyncSession,
     plan_id: str,
     lock_version: int,
     principal: Principal,
 ) -> ExecutionPlan:
-    begin_immediate(session)
-    plan = session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == plan_id))
+    await begin_immediate(session)
+    plan = await session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == plan_id))
     if plan is None:
         raise NotFoundError("Plan not found")
-    result = session.execute(
+    result = await session.execute(
         update(ExecutionPlan)
         .where(
             ExecutionPlan.id == plan_id,
@@ -347,15 +350,15 @@ def approve_plan(
         )
     )
     if result.rowcount != 1:
-        session.rollback()
+        await session.rollback()
         raise ConflictError("Plan changed or is already approved")
     add_audit(session, principal, "plan.approved", "plan", plan_id)
-    session.commit()
-    return session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == plan_id))  # type: ignore[return-value]
+    await session.commit()
+    return await session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == plan_id))  # type: ignore[return-value]
 
 
-def create_run(
-    session: Session,
+async def create_run(
+    session: AsyncSession,
     plan_id: str,
     timeout_minutes: int,
     idempotency_key: str,
@@ -364,17 +367,17 @@ def create_run(
 ) -> tuple[Run, bool]:
     if not idempotency_key or len(idempotency_key) > 200:
         raise ConflictError("A valid Idempotency-Key header is required")
-    begin_immediate(session)
-    existing = session.scalar(select(Run).where(Run.idempotency_key == idempotency_key))
+    await begin_immediate(session)
+    existing = await session.scalar(select(Run).where(Run.idempotency_key == idempotency_key))
     if existing:
-        session.commit()
+        await session.commit()
         return existing, False
-    plan = session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == plan_id))
+    plan = await session.scalar(select(ExecutionPlan).where(ExecutionPlan.id == plan_id))
     if plan is None:
-        session.rollback()
+        await session.rollback()
         raise NotFoundError("Plan not found")
     if plan.state != "approved":
-        session.rollback()
+        await session.rollback()
         raise ConflictError("Only approved plans can start a run")
     revision_snapshot = task_dict(plan.task_revision)
     revision_snapshot["created_at"] = plan.task_revision.created_at.isoformat()
@@ -392,16 +395,16 @@ def create_run(
         deadline_at=utcnow() + timedelta(minutes=timeout_minutes),
     )
     session.add(item)
-    session.flush()
-    enqueue(session, "launch_run", {"run_id": item.id}, f"launch:{item.id}")
+    await session.flush()
+    await enqueue(session, "launch_run", {"run_id": item.id}, f"launch:{item.id}")
     add_event(session, item.id, "run_queued", "Run was committed to the database queue")
     add_audit(session, principal, "run.created", "run", item.id, {"idempotency_key": idempotency_key})
-    session.commit()
-    return session.scalar(select(Run).where(Run.id == item.id)), True  # type: ignore[return-value]
+    await session.commit()
+    return await session.scalar(select(Run).where(Run.id == item.id)), True  # type: ignore[return-value]
 
 
-def create_manual_run(
-    session: Session,
+async def create_manual_run(
+    session: AsyncSession,
     task_revision_id: str,
     config: PlanConfig,
     timeout_minutes: int,
@@ -421,14 +424,14 @@ def create_manual_run(
     if config.instance_type and config.instance_type not in settings.ec2_allowed_instance_types:
         raise ConflictError("Instance type is not allowlisted")
 
-    begin_immediate(session)
-    existing = session.scalar(select(Run).where(Run.idempotency_key == idempotency_key))
+    await begin_immediate(session)
+    existing = await session.scalar(select(Run).where(Run.idempotency_key == idempotency_key))
     if existing:
-        session.commit()
+        await session.commit()
         return existing, False
-    revision = session.get(TaskRevision, task_revision_id)
+    revision = await session.get(TaskRevision, task_revision_id)
     if revision is None:
-        session.rollback()
+        await session.rollback()
         raise NotFoundError("Task revision not found")
     config = resolve_instance_config(config, revision, settings)
     approved_at = utcnow()
@@ -441,7 +444,7 @@ def create_manual_run(
         approved_at=approved_at,
     )
     session.add(plan)
-    session.flush()
+    await session.flush()
     revision_snapshot = task_dict(revision)
     revision_snapshot["created_at"] = revision.created_at.isoformat()
     snapshot = {
@@ -459,17 +462,17 @@ def create_manual_run(
         deadline_at=approved_at + timedelta(minutes=timeout_minutes),
     )
     session.add(run)
-    session.flush()
-    enqueue(session, "launch_run", {"run_id": run.id}, f"launch:{run.id}")
+    await session.flush()
+    await enqueue(session, "launch_run", {"run_id": run.id}, f"launch:{run.id}")
     add_event(session, run.id, "run_queued", "Manual run was committed to the database queue")
     add_audit(session, principal, "plan.manual_approved", "plan", plan.id)
     add_audit(session, principal, "run.manual_created", "run", run.id, {"idempotency_key": idempotency_key})
-    session.commit()
-    return session.scalar(select(Run).where(Run.id == run.id)), True  # type: ignore[return-value]
+    await session.commit()
+    return await session.scalar(select(Run).where(Run.id == run.id)), True  # type: ignore[return-value]
 
 
-def create_manual_batch(
-    session: Session,
+async def create_manual_batch(
+    session: AsyncSession,
     task_revision_ids: list[str],
     config: PlanConfig,
     timeout_minutes: int,
@@ -485,12 +488,14 @@ def create_manual_batch(
     if config.instance_type and config.instance_type not in settings.ec2_allowed_instance_types:
         raise ConflictError("Instance type is not allowlisted")
 
-    begin_immediate(session)
-    revisions = list(session.scalars(select(TaskRevision).where(TaskRevision.id.in_(task_revision_ids))))
+    await begin_immediate(session)
+    revisions = list(
+        await session.scalars(select(TaskRevision).where(TaskRevision.id.in_(task_revision_ids)))
+    )
     revision_by_id = {item.id: item for item in revisions}
     missing = [item for item in task_revision_ids if item not in revision_by_id]
     if missing:
-        session.rollback()
+        await session.rollback()
         raise NotFoundError("One or more task revisions were not found")
 
     approved_at = utcnow()
@@ -501,7 +506,7 @@ def create_manual_batch(
             revision = revision_by_id[revision_id]
             per_task_config = resolve_instance_config(config, revision, settings)
             run_key = "batch-" + hashlib.sha256(f"{idempotency_key}:{revision.id}".encode()).hexdigest()
-            existing = session.scalar(select(Run).where(Run.idempotency_key == run_key))
+            existing = await session.scalar(select(Run).where(Run.idempotency_key == run_key))
             if existing:
                 runs.append(existing)
                 continue
@@ -515,7 +520,7 @@ def create_manual_batch(
                 approved_at=approved_at,
             )
             session.add(plan)
-            session.flush()
+            await session.flush()
             revision_snapshot = task_dict(revision)
             revision_snapshot["created_at"] = revision.created_at.isoformat()
             snapshot = {
@@ -533,24 +538,24 @@ def create_manual_batch(
                 deadline_at=approved_at + timedelta(minutes=timeout_minutes),
             )
             session.add(run)
-            session.flush()
-            enqueue(session, "launch_run", {"run_id": run.id}, f"launch:{run.id}")
+            await session.flush()
+            await enqueue(session, "launch_run", {"run_id": run.id}, f"launch:{run.id}")
             add_event(session, run.id, "run_queued", "Batch run was committed to the database queue")
             add_audit(session, principal, "plan.manual_approved", "plan", plan.id)
             add_audit(session, principal, "run.batch_created", "run", run.id)
             runs.append(run)
             created += 1
-        session.commit()
+        await session.commit()
     except Exception:
-        session.rollback()
+        await session.rollback()
         raise
-    return [session.scalar(select(Run).where(Run.id == run.id)) for run in runs], created  # type: ignore[return-value]
+    return [await session.scalar(select(Run).where(Run.id == run.id)) for run in runs], created  # type: ignore[return-value]
 
 
-def claim_worker(session: Session, run_id: str, token: str) -> dict[str, Any]:
-    begin_immediate(session)
-    credential = session.get(WorkerCredential, run_id)
-    run = session.get(Run, run_id)
+async def claim_worker(session: AsyncSession, run_id: str, token: str) -> dict[str, Any]:
+    await begin_immediate(session)
+    credential = await session.get(WorkerCredential, run_id)
+    run = await session.get(Run, run_id)
     digest = hashlib.sha256(token.encode()).hexdigest()
     if (
         credential is None
@@ -559,7 +564,7 @@ def claim_worker(session: Session, run_id: str, token: str) -> dict[str, Any]:
         or run.state != "provisioning"
         or not secrets.compare_digest(credential.bootstrap_token_hash, digest)
     ):
-        session.rollback()
+        await session.rollback()
         raise WorkerAuthError("Job token is invalid, already used, or run is not claimable")
     session_token = secrets.token_urlsafe(32)
     credential.session_token_hash = hashlib.sha256(session_token.encode()).hexdigest()
@@ -573,13 +578,13 @@ def claim_worker(session: Session, run_id: str, token: str) -> dict[str, Any]:
         "task_revision": run.config_snapshot["task_revision"],
         "session_token": session_token,
     }
-    session.commit()
+    await session.commit()
     return response
 
 
-def validate_worker_session(session: Session, run_id: str, token: str) -> Run:
-    credential = session.get(WorkerCredential, run_id)
-    run = session.get(Run, run_id)
+async def validate_worker_session(session: AsyncSession, run_id: str, token: str) -> Run:
+    credential = await session.get(WorkerCredential, run_id)
+    run = await session.get(Run, run_id)
     digest = hashlib.sha256(token.encode()).hexdigest()
     if (
         credential is None
@@ -591,33 +596,33 @@ def validate_worker_session(session: Session, run_id: str, token: str) -> Run:
     return run
 
 
-def create_worker_event(
-    session: Session,
+async def create_worker_event(
+    session: AsyncSession,
     run_id: str,
     token: str,
     event_type: str,
     message: str,
     payload: dict[str, Any],
 ) -> RunEvent:
-    validate_worker_session(session, run_id, token)
+    await validate_worker_session(session, run_id, token)
     item = RunEvent(run_id=run_id, event_type=event_type, message=message, payload=payload)
     session.add(item)
-    session.commit()
-    session.refresh(item)
+    await session.commit()
+    await session.refresh(item)
     return item
 
 
-def complete_worker(
-    session: Session,
+async def complete_worker(
+    session: AsyncSession,
     run_id: str,
     token: str,
     state: str,
     result: dict[str, Any],
 ) -> Run:
-    begin_immediate(session)
-    run = validate_worker_session(session, run_id, token)
+    await begin_immediate(session)
+    run = await validate_worker_session(session, run_id, token)
     if run.state != "running":
-        session.rollback()
+        await session.rollback()
         raise ConflictError("Run is not running")
     run.state = state
     run.result = result
@@ -625,19 +630,19 @@ def complete_worker(
     run.version += 1
     add_event(session, run_id, "runner_completed", f"Harbor runner exited as {state}", result)
     if run.instance_id:
-        enqueue(session, "terminate_run", {"run_id": run.id}, f"terminate:{run.id}")
-    session.commit()
-    return session.scalar(select(Run).where(Run.id == run.id))  # type: ignore[return-value]
+        await enqueue(session, "terminate_run", {"run_id": run.id}, f"terminate:{run.id}")
+    await session.commit()
+    return await session.scalar(select(Run).where(Run.id == run.id))  # type: ignore[return-value]
 
 
-def cancel_run(session: Session, run_id: str, principal: Principal) -> Run:
-    begin_immediate(session)
-    run = session.get(Run, run_id)
+async def cancel_run(session: AsyncSession, run_id: str, principal: Principal) -> Run:
+    await begin_immediate(session)
+    run = await session.get(Run, run_id)
     if run is None:
-        session.rollback()
+        await session.rollback()
         raise NotFoundError("Run not found")
     if run.state in TERMINAL_STATES:
-        session.commit()
+        await session.commit()
         return run
     run.state = "cancelled"
     run.instance_state = "terminating" if run.instance_id else "terminated"
@@ -645,9 +650,9 @@ def cancel_run(session: Session, run_id: str, principal: Principal) -> Run:
     add_event(session, run.id, "run_cancelled", "Run was cancelled by an administrator")
     add_audit(session, principal, "run.cancelled", "run", run.id)
     if run.instance_id:
-        enqueue(session, "terminate_run", {"run_id": run.id}, f"terminate:{run.id}")
-    session.commit()
-    return session.scalar(select(Run).where(Run.id == run.id))  # type: ignore[return-value]
+        await enqueue(session, "terminate_run", {"run_id": run.id}, f"terminate:{run.id}")
+    await session.commit()
+    return await session.scalar(select(Run).where(Run.id == run.id))  # type: ignore[return-value]
 
 
 def deterministic_bootstrap_token(run_id: str, settings: Settings) -> str:
@@ -659,26 +664,28 @@ def deterministic_bootstrap_token(run_id: str, settings: Settings) -> str:
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
-def handle_launch(session: Session, run_id: str, provider: EC2Provider, settings: Settings) -> None:
-    begin_immediate(session)
-    run = session.get(Run, run_id)
+async def handle_launch(
+    session: AsyncSession, run_id: str, provider: EC2Provider, settings: Settings
+) -> None:
+    await begin_immediate(session)
+    run = await session.get(Run, run_id)
     if run is None:
-        session.rollback()
+        await session.rollback()
         raise NotFoundError("Run not found")
     if run.instance_id or run.state not in {"queued", "provisioning"}:
-        session.commit()
+        await session.commit()
         return
     active = (
-        session.scalar(
+        await session.scalar(
             select(func.count()).select_from(Run).where(Run.id != run_id, Run.state.in_(ACTIVE_STATES))
         )
         or 0
     )
     if active >= settings.max_active_runs:
-        session.rollback()
+        await session.rollback()
         raise CapacityError("Worker capacity is full")
     token = deterministic_bootstrap_token(run_id, settings)
-    credential = session.get(WorkerCredential, run_id)
+    credential = await session.get(WorkerCredential, run_id)
     if credential is None:
         session.add(
             WorkerCredential(
@@ -690,15 +697,15 @@ def handle_launch(session: Session, run_id: str, provider: EC2Provider, settings
     run.instance_state = "pending"
     add_event(session, run_id, "launch_started", "EC2 launch request started")
     config = dict(run.config_snapshot["plan_config"])
-    session.commit()
+    await session.commit()
 
-    instance_id = provider.launch(run_id, token, config)
+    instance_id = await asyncio.to_thread(provider.launch, run_id, token, config)
 
-    begin_immediate(session)
-    run = session.get(Run, run_id)
+    await begin_immediate(session)
+    run = await session.get(Run, run_id)
     if run is None:
-        session.rollback()
-        provider.terminate(instance_id)
+        await session.rollback()
+        await asyncio.to_thread(provider.terminate, instance_id)
         return
     run.instance_id = instance_id
     run.instance_state = "pending"
@@ -710,40 +717,40 @@ def handle_launch(session: Session, run_id: str, provider: EC2Provider, settings
         "Worker instance was created",
         {"instance_id": instance_id},
     )
-    session.commit()
+    await session.commit()
 
 
-def handle_terminate(session: Session, run_id: str, provider: EC2Provider) -> None:
-    begin_immediate(session)
-    run = session.get(Run, run_id)
+async def handle_terminate(session: AsyncSession, run_id: str, provider: EC2Provider) -> None:
+    await begin_immediate(session)
+    run = await session.get(Run, run_id)
     if run is None:
-        session.rollback()
+        await session.rollback()
         raise NotFoundError("Run not found")
     instance_id = run.instance_id
-    session.commit()
+    await session.commit()
     if instance_id:
-        provider.terminate(instance_id)
-    begin_immediate(session)
-    run = session.get(Run, run_id)
+        await asyncio.to_thread(provider.terminate, instance_id)
+    await begin_immediate(session)
+    run = await session.get(Run, run_id)
     if run is None:
-        session.rollback()
+        await session.rollback()
         return
     run.instance_state = "terminated"
     run.version += 1
     add_event(session, run_id, "instance_terminated", "Worker instance was terminated")
-    session.commit()
+    await session.commit()
 
 
-def reconcile(session: Session) -> int:
+async def reconcile(session: AsyncSession) -> int:
     now = utcnow()
-    begin_immediate(session)
+    await begin_immediate(session)
     expired = list(
-        session.scalars(
+        await session.scalars(
             select(Run).where(Run.state.in_({"queued", "provisioning", "running"}), Run.deadline_at <= now)
         )
     )
     if not expired:
-        session.commit()
+        await session.commit()
         return 0
     for run in expired:
         run.state = "timed_out"
@@ -751,14 +758,14 @@ def reconcile(session: Session) -> int:
         run.version += 1
         add_event(session, run.id, "run_timed_out", "Run exceeded its approved deadline")
         if run.instance_id:
-            enqueue(session, "terminate_run", {"run_id": run.id}, f"terminate:{run.id}")
-    session.commit()
+            await enqueue(session, "terminate_run", {"run_id": run.id}, f"terminate:{run.id}")
+    await session.commit()
     return len(expired)
 
 
-def mark_job_exhausted(session: Session, job: DatabaseJob) -> None:
+async def mark_job_exhausted(session: AsyncSession, job: DatabaseJob) -> None:
     run_id = str(job.payload.get("run_id", ""))
-    run = session.get(Run, run_id)
+    run = await session.get(Run, run_id)
     if run is None:
         return
     if job.kind == "launch_run" and run.state in {"queued", "provisioning"}:
@@ -769,4 +776,4 @@ def mark_job_exhausted(session: Session, job: DatabaseJob) -> None:
     elif job.kind == "terminate_run":
         run.instance_state = "termination_failed"
         add_event(session, run.id, "terminate_failed", "EC2 termination retries were exhausted")
-    session.commit()
+    await session.commit()

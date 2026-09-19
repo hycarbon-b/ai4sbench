@@ -9,7 +9,6 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from httpx_oauth.clients.github import GitHubOAuth2
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -17,7 +16,7 @@ from .api import admin_router, public_router, worker_router
 from .community import community_router
 from .config import Settings, get_settings
 from .database import Base, create_database_engine, create_session_factory
-from .identity import AuthBase, build_auth, create_auth_engine
+from .identity import build_auth
 from .providers import EC2Provider, provider_from_settings
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -87,19 +86,14 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     resolved = settings or get_settings()
     engine = create_database_engine(resolved)
     session_factory = create_session_factory(engine)
-    auth_engine = create_auth_engine(resolved)
-    auth_session_factory = async_sessionmaker(auth_engine, expire_on_commit=False)
-    if resolved.auto_create_schema:
-        Base.metadata.create_all(engine)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         if resolved.auto_create_schema:
-            async with auth_engine.begin() as connection:
-                await connection.run_sync(AuthBase.metadata.create_all)
+            async with engine.begin() as connection:
+                await connection.run_sync(Base.metadata.create_all)
         yield
-        engine.dispose()
-        await auth_engine.dispose()
+        await engine.dispose()
 
     app = FastAPI(
         title="AI4S-Bench Control Plane API",
@@ -123,8 +117,6 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.state.settings = resolved
     app.state.engine = engine
     app.state.session_factory = session_factory
-    app.state.auth_engine = auth_engine
-    app.state.auth_session_factory = auth_session_factory
     app.state.provider = provider or provider_from_settings(resolved)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(resolved.allowed_hosts))
     if resolved.cors_origins:
@@ -196,14 +188,11 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
     return app
 
 
-app = create_app()
-
-
 def run() -> None:
     import uvicorn
 
     settings = get_settings()
-    uvicorn.run("control_panel.main:app", host=settings.host, port=settings.port, factory=False)
+    uvicorn.run("control_panel.main:create_app", host=settings.host, port=settings.port, factory=True)
 
 
 if __name__ == "__main__":

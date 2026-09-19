@@ -14,38 +14,25 @@ from fastapi_users.db import (
     SQLAlchemyUserDatabase,
 )
 from sqlalchemy import String
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .config import Settings, get_settings
+from .database import Base
 
 
-class AuthBase(DeclarativeBase):
+class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     pass
 
 
-class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, AuthBase):
-    pass
-
-
-class User(SQLAlchemyBaseUserTableUUID, AuthBase):
+class User(SQLAlchemyBaseUserTableUUID, Base):
     role: Mapped[str] = mapped_column(String(16), default="member", nullable=False)
     github_login: Mapped[str | None] = mapped_column(String(100), unique=True)
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship("OAuthAccount", lazy="joined")
 
 
-def async_database_url(database_url: str) -> str:
-    if database_url.startswith("sqlite:///"):
-        return database_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
-    raise ValueError("GitHub user authentication currently requires SQLite")
-
-
-def create_auth_engine(settings: Settings) -> AsyncEngine:
-    return create_async_engine(async_database_url(settings.database_url), future=True)
-
-
 async def get_auth_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
-    factory: async_sessionmaker[AsyncSession] = request.app.state.auth_session_factory
+    factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
     async with factory() as session:
         yield session
 

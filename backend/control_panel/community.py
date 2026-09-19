@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import get_session
 from .identity import OAuthAccount, User, current_active_user, current_optional_user
@@ -43,12 +43,12 @@ from .schemas import (
 from .webhooks import enqueue_proposal_notification, enqueue_review_notification
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
-SessionDep = Annotated[Session, Depends(get_session)]
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 UserDep = Annotated[User, Depends(current_active_user)]
 OptionalUserDep = Annotated[User | None, Depends(current_optional_user)]
 
 
-def user_can_review(request: Request, user: User, session: Session) -> bool:
+async def user_can_review(request: Request, user: User, session: AsyncSession) -> bool:
     settings = request.app.state.settings
     allowed = {login.lower() for login in (*settings.admin_github_logins, *settings.reviewer_github_logins)}
     login = (user.github_login or "").lower()
@@ -56,7 +56,7 @@ def user_can_review(request: Request, user: User, session: Session) -> bool:
         return True
     if not login:
         return False
-    approved_application = session.scalar(
+    approved_application = await session.scalar(
         select(ReviewerApplication.id)
         .where(
             ReviewerApplication.status == "approved",
@@ -67,13 +67,13 @@ def user_can_review(request: Request, user: User, session: Session) -> bool:
     return approved_application is not None
 
 
-def user_dict(request: Request, user: User, session: Session) -> dict[str, object]:
+async def user_dict(request: Request, user: User, session: AsyncSession) -> dict[str, object]:
     return {
         "id": str(user.id),
         "email": user.email,
         "github_login": user.github_login or "",
         "role": user.role,
-        "can_review": user_can_review(request, user, session),
+        "can_review": await user_can_review(request, user, session),
     }
 
 
@@ -86,8 +86,8 @@ def require_admin(user: UserDep) -> User:
 AdminDep = Annotated[User, Depends(require_admin)]
 
 
-def require_reviewer(request: Request, user: UserDep, session: SessionDep) -> User:
-    if not user_can_review(request, user, session):
+async def require_reviewer(request: Request, user: UserDep, session: SessionDep) -> User:
+    if not await user_can_review(request, user, session):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Configured proposal reviewer required",
@@ -106,7 +106,7 @@ ReviewerDep = Annotated[User, Depends(require_reviewer)]
     ),
 )
 async def me(request: Request, user: UserDep, session: SessionDep) -> AuthenticatedUserResponse:
-    return user_dict(request, user, session)
+    return await user_dict(request, user, session)
 
 
 @community_router.get(
@@ -114,7 +114,7 @@ async def me(request: Request, user: UserDep, session: SessionDep) -> Authentica
     summary="Read public GitHub-login availability",
     description="Returns only whether GitHub OAuth is configured; no credential values are exposed.",
 )
-def auth_config(request: Request) -> AuthConfigResponse:
+async def auth_config(request: Request) -> AuthConfigResponse:
     settings = request.app.state.settings
     return {
         "github_login_enabled": bool(settings.github_oauth_client_id and settings.github_oauth_client_secret)
@@ -127,7 +127,7 @@ def auth_config(request: Request) -> AuthConfigResponse:
     description="Provides the shared multi-select options for the Website and Dashboard proposal forms.",
     response_model=ProposalDomainListResponse,
 )
-def proposal_domains() -> ProposalDomainListResponse:
+async def proposal_domains() -> ProposalDomainListResponse:
     return {"items": list(PROPOSAL_DOMAIN_OPTIONS)}
 
 
@@ -143,7 +143,7 @@ def proposal_domains() -> ProposalDomainListResponse:
     ),
     responses={422: {"description": "The application does not match the Website reviewer schema."}},
 )
-def create_reviewer_application(
+async def create_reviewer_application(
     body: ReviewerApplicationSubmission,
     session: SessionDep,
     user: OptionalUserDep,
@@ -154,7 +154,7 @@ def create_reviewer_application(
         submitted_by_login=user.github_login if user else None,
     )
     session.add(item)
-    session.commit()
+    await session.commit()
     return ReviewerApplicationCreatedResponse.model_validate(item, from_attributes=True)
 
 
@@ -164,7 +164,7 @@ def create_reviewer_application(
     summary="Sign out of the Website session",
     description="Clears the local control-plane cookie. It does not revoke the user's GitHub authorization.",
 )
-def logout(request: Request) -> Response:
+async def logout(request: Request) -> Response:
     """Clear only the local control-panel session; GitHub authorization is left intact."""
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     settings = request.app.state.settings
@@ -186,12 +186,9 @@ def logout(request: Request) -> Response:
         "Publicly lists the 50 newest locally tracked proposal Discussions without their full form content."
     ),
 )
-def list_proposals(session: SessionDep) -> ProposalListResponse:
-    items = session.scalars(
-        select(Proposal)
-        .where(Proposal.deleted_at.is_(None))
-        .order_by(Proposal.created_at.desc())
-        .limit(50)
+async def list_proposals(session: SessionDep) -> ProposalListResponse:
+    items = await session.scalars(
+        select(Proposal).where(Proposal.deleted_at.is_(None)).order_by(Proposal.created_at.desc()).limit(50)
     )
     return {
         "items": [
@@ -213,8 +210,8 @@ def list_proposals(session: SessionDep) -> ProposalListResponse:
     }
 
 
-def active_proposal(session: Session, proposal_id: str) -> Proposal:
-    proposal = session.scalar(
+async def active_proposal(session: AsyncSession, proposal_id: str) -> Proposal:
+    proposal = await session.scalar(
         select(Proposal).where(Proposal.id == proposal_id, Proposal.deleted_at.is_(None))
     )
     if proposal is None:
@@ -222,8 +219,8 @@ def active_proposal(session: Session, proposal_id: str) -> Proposal:
     return proposal
 
 
-def owned_active_proposal(session: Session, proposal_id: str, user: User) -> Proposal:
-    proposal = active_proposal(session, proposal_id)
+async def owned_active_proposal(session: AsyncSession, proposal_id: str, user: User) -> Proposal:
+    proposal = await active_proposal(session, proposal_id)
     if proposal.author_id != str(user.id):
         raise HTTPException(status_code=403, detail="Only the proposal author can edit this proposal")
     return proposal
@@ -243,10 +240,10 @@ def owned_active_proposal(session: Session, proposal_id: str, user: User) -> Pro
         404: {"description": "Proposal not found or logically deleted."},
     },
 )
-def proposal_edit_detail(
+async def proposal_edit_detail(
     proposal_id: str, session: SessionDep, user: UserDep
 ) -> ProposalEditDetailResponse:
-    proposal = owned_active_proposal(session, proposal_id, user)
+    proposal = await owned_active_proposal(session, proposal_id, user)
     return {
         "id": proposal.id,
         "status": proposal.status,
@@ -272,10 +269,10 @@ def proposal_edit_detail(
         404: {"description": "Proposal not found."},
     },
 )
-def delete_proposal(proposal_id: str, session: SessionDep, _user: AdminDep) -> Response:
-    proposal = active_proposal(session, proposal_id)
+async def delete_proposal(proposal_id: str, session: SessionDep, _user: AdminDep) -> Response:
+    proposal = await active_proposal(session, proposal_id)
     proposal.deleted_at = datetime.now(UTC)
-    session.commit()
+    await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -310,10 +307,12 @@ def proposal_input_values(item: Proposal) -> dict[str, str]:
     }
 
 
-def revision_run_results(session: Session, revision: TaskRevision | None) -> list[dict[str, object]]:
+async def revision_run_results(
+    session: AsyncSession, revision: TaskRevision | None
+) -> list[dict[str, object]]:
     if revision is None:
         return []
-    runs = session.scalars(
+    runs = await session.scalars(
         select(Run)
         .join(ExecutionPlan, Run.plan_id == ExecutionPlan.id)
         .where(ExecutionPlan.task_revision_id == revision.id)
@@ -333,7 +332,9 @@ def revision_run_results(session: Session, revision: TaskRevision | None) -> lis
     ]
 
 
-def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision | None) -> dict[str, object]:
+async def proposal_board_item(
+    session: AsyncSession, item: Proposal, revision: TaskRevision | None
+) -> dict[str, object]:
     form = proposal_input_values(item)
     return {
         "id": item.id,
@@ -374,7 +375,7 @@ def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision
         "revision_pull_request_url": revision.pull_request_url if revision else None,
         "revision_release": revision.release if revision else None,
         "revision_created_at": revision.created_at if revision else None,
-        "revision_agent_results": revision_run_results(session, revision),
+        "revision_agent_results": await revision_run_results(session, revision),
     }
 
 
@@ -388,9 +389,9 @@ def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision
         "task revision. The route is public and reads only the local database."
     ),
 )
-def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
+async def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
     proposals = list(
-        session.scalars(
+        await session.scalars(
             select(Proposal)
             .where(Proposal.input_valid.is_(True), Proposal.deleted_at.is_(None))
             .order_by(Proposal.updated_at.desc())
@@ -398,7 +399,7 @@ def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
     )
     revisions = (
         list(
-            session.scalars(
+            await session.scalars(
                 select(TaskRevision)
                 .where(TaskRevision.proposal_id.in_([item.id for item in proposals]))
                 .order_by(TaskRevision.created_at.desc())
@@ -412,7 +413,9 @@ def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
         if revision.proposal_id:
             latest_revisions.setdefault(revision.proposal_id, revision)
     return {
-        "items": [proposal_board_item(session, item, latest_revisions.get(item.id)) for item in proposals]
+        "items": [
+            await proposal_board_item(session, item, latest_revisions.get(item.id)) for item in proposals
+        ]
     }
 
 
@@ -480,7 +483,7 @@ async def refresh_github_access_token(request: Request, user: User) -> str:
     if response.status_code >= 400 or not access_token:
         raise HTTPException(status_code=401, detail="GitHub authorization expired; sign in again")
     expires_in = payload.get("expires_in")
-    async with request.app.state.auth_session_factory() as session:
+    async with request.app.state.session_factory() as session:
         persisted = await session.get(OAuthAccount, github_account.id)
         if persisted is None:
             raise HTTPException(status_code=401, detail="GitHub account is not linked")
@@ -875,9 +878,7 @@ async def preview_proposal(
                 name for name, field in ProposalSubmission.model_fields.items() if field.is_required()
             ],
         }
-    submission = validate_proposal_submission(
-        body, github_login=user.github_login if user else None
-    )
+    submission = validate_proposal_submission(body, github_login=user.github_login if user else None)
     return {
         **proposal_preview(submission),
         "github_identity_source": "authenticated" if user else "form",
@@ -894,7 +895,9 @@ async def preview_proposal(
         "The endpoint has no side effects."
     ),
 )
-def preview_proposal_review(body: ProposalReview, _user: ReviewerDep) -> ProposalReviewPreviewResponse:
+async def preview_proposal_review(
+    body: ProposalReview, _user: ReviewerDep
+) -> ProposalReviewPreviewResponse:
     return {
         "input": body,
         "comment": {"body": body.render_comment()},
@@ -960,7 +963,7 @@ async def publish_proposal_review(
     session: SessionDep,
     user: ReviewerDep,
 ) -> ProposalReviewPublishedResponse:
-    proposal = active_proposal(session, proposal_id)
+    proposal = await active_proposal(session, proposal_id)
     if not proposal.discussion_node_id or not proposal.discussion_url:
         raise HTTPException(status_code=409, detail="Proposal has no GitHub Discussion identity")
 
@@ -986,14 +989,14 @@ async def publish_proposal_review(
         "body": rendered,
     }
     proposal.status = body.review_decision
-    enqueue_review_notification(
+    await enqueue_review_notification(
         session,
         request.app.state.settings,
         proposal,
         body,
         proposal.review_reviewer_login,
     )
-    session.commit()
+    await session.commit()
     return {
         "proposal_id": proposal.id,
         "discussion_url": proposal.discussion_url,
@@ -1042,14 +1045,14 @@ async def create_proposal(
         discussion_number=int(discussion["number"]),
     )
     session.add(item)
-    session.flush()
-    enqueue_proposal_notification(
+    await session.flush()
+    await enqueue_proposal_notification(
         session,
         request.app.state.settings,
         item,
         submission.model_dump(mode="json"),
     )
-    session.commit()
+    await session.commit()
     return {
         "id": item.id,
         "status": item.status,
@@ -1082,7 +1085,7 @@ async def update_proposal(
     session: SessionDep,
     user: UserDep,
 ) -> ProposalUpdatedResponse:
-    proposal = owned_active_proposal(session, proposal_id, user)
+    proposal = await owned_active_proposal(session, proposal_id, user)
     if not proposal.discussion_node_id or not proposal.discussion_url:
         raise HTTPException(status_code=409, detail="Proposal has no GitHub Discussion identity")
 
@@ -1109,7 +1112,7 @@ async def update_proposal(
     proposal.github_updated_at = parse_github_time(str(discussion.get("updatedAt") or "")) or datetime.now(
         UTC
     )
-    session.commit()
+    await session.commit()
     return {
         "id": proposal.id,
         "status": proposal.status,
@@ -1209,13 +1212,11 @@ async def sync_proposal_discussions(
         scanned_count += 1
         discussion_node_id = str(node["id"])
         discussion_url = str(node["url"])
-        existing = session.scalar(
+        existing = await session.scalar(
             select(Proposal).where(Proposal.discussion_node_id == discussion_node_id)
         )
         if existing is None:
-            existing = session.scalar(
-                select(Proposal).where(Proposal.discussion_url == discussion_url)
-            )
+            existing = await session.scalar(select(Proposal).where(Proposal.discussion_url == discussion_url))
         if existing is not None and existing.deleted_at is not None:
             continue
         form_payload = form_payload_from_discussion(node)
@@ -1276,7 +1277,7 @@ async def sync_proposal_discussions(
             for key, value in values.items():
                 setattr(existing, key, value)
             updated_count += 1
-    session.commit()
+    await session.commit()
     return {
         "scanned_count": scanned_count,
         "created_count": created_count,
@@ -1288,10 +1289,10 @@ async def sync_proposal_discussions(
 
 
 @community_router.get("/proposals/{proposal_id}/pull-request", response_model=PullRequestInstructionsResponse)
-def pull_request_instructions(
+async def pull_request_instructions(
     proposal_id: str, request: Request, session: SessionDep, user: UserDep
 ) -> PullRequestInstructionsResponse:
-    proposal = active_proposal(session, proposal_id)
+    proposal = await active_proposal(session, proposal_id)
     if proposal.author_id != str(user.id) and user.role != "admin":
         raise HTTPException(
             status_code=403, detail="Only the proposal author or an administrator can open its PR guide"
@@ -1306,8 +1307,8 @@ def pull_request_instructions(
 
 
 @community_router.get("/cloud-profiles", response_model=CloudProfileListResponse)
-def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> CloudProfileListResponse:
-    items = session.scalars(select(CloudProfile).order_by(CloudProfile.name))
+async def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> CloudProfileListResponse:
+    items = await session.scalars(select(CloudProfile).order_by(CloudProfile.name))
     return {
         "items": [
             {
@@ -1325,10 +1326,10 @@ def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> CloudProfileLis
 @community_router.post(
     "/cloud-profiles", status_code=status.HTTP_201_CREATED, response_model=CloudProfileResponse
 )
-def create_cloud_profile(
+async def create_cloud_profile(
     body: CloudProfileCreate, session: SessionDep, user: AdminDep
 ) -> CloudProfileResponse:
-    if session.scalar(select(CloudProfile).where(CloudProfile.name == body.name)):
+    if await session.scalar(select(CloudProfile).where(CloudProfile.name == body.name)):
         raise HTTPException(status_code=409, detail="Cloud profile name already exists")
     item = CloudProfile(
         name=body.name,
@@ -1338,7 +1339,7 @@ def create_cloud_profile(
         created_by=user.github_login or user.email,
     )
     session.add(item)
-    session.commit()
+    await session.commit()
     return {
         "id": item.id,
         "name": item.name,

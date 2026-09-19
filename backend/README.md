@@ -129,8 +129,14 @@ not overwrite the Proposal link.
 
 ## Database and migrations
 
-Production uses SQLite with foreign keys, WAL, and a busy timeout enabled by the
-application. Schema changes require an Alembic migration:
+The running API and job runner use one SQLAlchemy `AsyncEngine` and one
+`async_sessionmaker` for both application data and authentication. SQLite
+foreign keys, WAL, and the busy timeout are therefore identical for every
+runtime database connection. Blocking provider SDK calls run in worker threads;
+HTTP integrations use async clients. Alembic remains a synchronous command-line
+tool because it runs before the services start.
+
+Schema changes require an Alembic migration:
 
 ```bash
 cd backend

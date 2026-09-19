@@ -28,4 +28,4 @@ RUN uv sync --frozen --no-dev --extra aws && mkdir -p /var/lib/ai4sbench && chow
 
 USER ai4sbench
 EXPOSE 8080
-CMD ["uvicorn", "control_panel.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
+CMD ["uvicorn", "control_panel.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
