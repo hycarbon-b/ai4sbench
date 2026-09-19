@@ -91,6 +91,18 @@ type View =
   | "snapshots"
   | "reviewers"
   | "proposals";
+const views: View[] = [
+  "overview",
+  "tasks",
+  "plans",
+  "runs",
+  "jobs",
+  "webhooks",
+  "cloud",
+  "snapshots",
+  "reviewers",
+  "proposals",
+];
 type Config = {
   agent: string;
   model: string;
@@ -186,7 +198,7 @@ const bytes = (value: number) => {
 };
 const when = (value?: string | null) =>
   value
-    ? new Intl.DateTimeFormat(undefined, {
+    ? new Intl.DateTimeFormat("en-GB", {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(new Date(value))
@@ -215,6 +227,7 @@ export default function App() {
   const [loginPending, setLoginPending] = useState(false);
   const [ops, setOps] = useState<Ops>(emptyOps);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [repo, setRepo] = useState(
@@ -252,7 +265,7 @@ export default function App() {
 
   const loadOps = async () => {
     if (!isAdmin) return;
-    setLoading(true);
+    setRefreshing(true);
     setError("");
     try {
       const [
@@ -266,8 +279,7 @@ export default function App() {
         webhooks,
         profiles,
         snapshots,
-      ] =
-        await Promise.all([
+      ] = await Promise.allSettled([
           api<Dashboard>("/api/v1/dashboard"),
           api<{ items: Proposal[] }>("/api/v1/proposals"),
           api<{ items: ReviewerApplication[] }>("/api/v1/reviewer-applications"),
@@ -279,18 +291,41 @@ export default function App() {
           api<{ items: CloudProfile[] }>("/api/v1/cloud-profiles"),
           api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots"),
         ]);
-      setOps({
+      const failed = [
         dashboard,
-        proposals: proposals.items,
-        reviewers: reviewers.items,
-        tasks: tasks.items,
-        plans: plans.items,
-        runs: runs.items,
-        jobs: jobs.items,
-        webhooks: webhooks.items,
-        profiles: profiles.items,
-        snapshots: snapshots.items,
-      });
+        proposals,
+        reviewers,
+        tasks,
+        plans,
+        runs,
+        jobs,
+        webhooks,
+        profiles,
+        snapshots,
+      ].filter((result) => result.status === "rejected");
+      setOps((current) => ({
+        dashboard:
+          dashboard.status === "fulfilled" ? dashboard.value : current.dashboard,
+        proposals:
+          proposals.status === "fulfilled" ? proposals.value.items : current.proposals,
+        reviewers:
+          reviewers.status === "fulfilled" ? reviewers.value.items : current.reviewers,
+        tasks: tasks.status === "fulfilled" ? tasks.value.items : current.tasks,
+        plans: plans.status === "fulfilled" ? plans.value.items : current.plans,
+        runs: runs.status === "fulfilled" ? runs.value.items : current.runs,
+        jobs: jobs.status === "fulfilled" ? jobs.value.items : current.jobs,
+        webhooks:
+          webhooks.status === "fulfilled" ? webhooks.value.items : current.webhooks,
+        profiles:
+          profiles.status === "fulfilled" ? profiles.value.items : current.profiles,
+        snapshots:
+          snapshots.status === "fulfilled" ? snapshots.value.items : current.snapshots,
+      }));
+      if (failed.length) {
+        setError(
+          `${failed.length} control-plane section${failed.length === 1 ? "" : "s"} could not refresh. Existing data is still shown.`,
+        );
+      }
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -298,7 +333,7 @@ export default function App() {
           : "Could not load the control-plane data.",
       );
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -307,7 +342,14 @@ export default function App() {
       try {
         const next = await getCurrentUser();
         setUser(next);
-        setView("proposals");
+        const requested = window.location.hash.slice(1);
+        setView(
+          views.includes(requested as View)
+            ? (requested as View)
+            : next.role === "admin"
+              ? "overview"
+              : "proposals",
+        );
       } catch {
         setUser(null);
       } finally {
@@ -323,6 +365,18 @@ export default function App() {
   useEffect(() => {
     void loadOps();
   }, [isAdmin]);
+  useEffect(() => {
+    const onHashChange = () => {
+      const requested = window.location.hash.slice(1);
+      if (views.includes(requested as View)) setView(requested as View);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+  useEffect(() => {
+    if (!checked) return;
+    if (window.location.hash !== `#${view}`) window.location.hash = view;
+  }, [checked, view]);
 
   const login = async () => {
     setLoginPending(true);
@@ -433,6 +487,7 @@ export default function App() {
   };
 
   const cancel = async (runId: string) => {
+    if (!window.confirm(`Cancel run ${short(runId)}? The worker will be terminated if it has started.`)) return;
     try {
       await api<Run>(`/api/v1/runs/${runId}/cancel`, { method: "POST" });
       setMessage(`Run ${short(runId)} is being cancelled.`);
@@ -644,10 +699,10 @@ export default function App() {
                 variant="outline"
                 size="sm"
                 onClick={() => void loadOps()}
-                disabled={loading}
+                disabled={refreshing}
               >
                 <RefreshCw
-                  className={`size-3 ${loading ? "animate-spin" : ""}`}
+                  className={`size-3 ${refreshing ? "animate-spin" : ""}`}
                 />
                 Refresh
               </Button>
@@ -1221,7 +1276,7 @@ function LaunchPanel({
             ]}
           />
           <div className="flex justify-end">
-            <Button type="submit">
+            <Button type="submit" disabled={!selected.length}>
               <Play className="size-3" />
               Queue run
             </Button>
@@ -1540,14 +1595,14 @@ function CloudPanel({
   return (
     <>
       <Title
-        eyebrow="Cloud resources"
-        title="EC2 execution allocations"
-        description="Profiles capture operational limits. AWS credentials, OAuth secrets, and worker tokens remain outside the UI."
+        eyebrow="Cloud profiles"
+        title="Saved EC2 allocation profiles"
+        description="Profiles record non-secret operating constraints. They do not select instances for a run automatically."
       />
       <div className="grid gap-5 xl:grid-cols-[1fr_.9fr]">
         <DataCard
           title="Saved allocation profiles"
-          description="Non-secret constraints used by operators."
+          description="Named constraints for operators; credentials and worker tokens remain server-side."
         >
           <div className="space-y-3">
             {profiles.map((profile) => (
@@ -1571,7 +1626,7 @@ function CloudPanel({
         </DataCard>
         <Card>
           <CardHeader>
-            <CardTitle>Save allocation profile</CardTitle>
+            <CardTitle>Save cloud profile</CardTitle>
             <CardDescription>
               Use this for a named operating envelope, not secrets.
             </CardDescription>
@@ -1593,7 +1648,7 @@ function CloudPanel({
               </Field>
               <Button type="submit">
                 <CloudCog className="size-4" />
-                Save profile
+                Save cloud profile
               </Button>
             </form>
           </CardContent>
@@ -2129,6 +2184,7 @@ function ReviewerApplicationsPanel({
             key={state}
             type="button"
             onClick={() => setFilter(state)}
+            aria-pressed={filter === state}
             className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide transition-colors ${
               filter === state
                 ? "border-sky-400/50 bg-sky-400/10 text-sky-200"
@@ -2151,7 +2207,16 @@ function ReviewerApplicationsPanel({
             {filtered.map((application) => (
               <TableRow
                 key={application.id}
+                role="button"
+                tabIndex={0}
+                aria-selected={selected?.id === application.id}
                 onClick={() => setSelectedId(application.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedId(application.id);
+                  }
+                }}
                 className={`cursor-pointer ${
                   selected?.id === application.id
                     ? "bg-sky-400/10 hover:bg-sky-400/10"
@@ -2262,15 +2327,27 @@ function ReviewerApplicationsPanel({
                     <Button
                       type="button"
                       disabled={loading}
-                      onClick={() => onUpdate(selected, { ...draft, status: "approved" })}
+                      onClick={() => {
+                        if (window.confirm(`Approve ${selected.name} as a reviewer?`)) {
+                          onUpdate(selected, { ...draft, status: "approved" });
+                        }
+                      }}
                     >
                       <CheckCircle2 className="size-4" /> Approve
                     </Button>
                     <Button
                       type="button"
                       variant="destructive"
-                      disabled={loading}
-                      onClick={() => onUpdate(selected, { ...draft, status: "rejected" })}
+                      disabled={loading || !notes.trim()}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Reject ${selected.name}? The administrator notes will be saved as the decision rationale.`,
+                          )
+                        ) {
+                          onUpdate(selected, { ...draft, status: "rejected" });
+                        }
+                      }}
                     >
                       Reject
                     </Button>
@@ -2285,6 +2362,11 @@ function ReviewerApplicationsPanel({
                       </Button>
                     )}
                   </div>
+                  {!notes.trim() && (
+                    <p className="text-xs text-slate-500">
+                      Add administrator notes before rejecting an application.
+                    </p>
+                  )}
                   {selected.reviewed_by && (
                     <p className="text-xs text-slate-500">
                       Last decision by {selected.reviewed_by} · {when(selected.reviewed_at)}
@@ -2313,33 +2395,47 @@ function Sidebar({
 }) {
   const items: Array<[View, string, typeof Activity]> = admin
     ? [
+        ["overview", "Operations", Activity],
         ["proposals", "Task proposals", Send],
         ["reviewers", "Reviewer applications", UserCheck],
-        ["overview", "Operations", Activity],
         ["tasks", "Task library", Database],
         ["plans", "Execution plans", SquareStack],
         ["runs", "Run queue", Rocket],
         ["jobs", "Worker jobs", ServerCog],
         ["webhooks", "Discord webhooks", Webhook],
-        ["cloud", "Cloud resources", CloudCog],
+        ["cloud", "Cloud profiles", CloudCog],
         ["snapshots", "Database snapshots", History],
       ]
     : [["proposals", "Task proposals", Send]];
+  const groups: Array<{
+    label: string;
+    items: Array<[View, string, typeof Activity]>;
+  }> = admin
+    ? [
+        { label: "Manage", items: items.slice(0, 3) },
+        { label: "Benchmark", items: items.slice(3, 6) },
+        { label: "System", items: items.slice(6) },
+      ]
+    : [{ label: "Contribute", items }];
   return (
     <aside>
       <div className="sticky top-20 border border-slate-800 bg-slate-950/60 p-2">
-        <p className="mb-2 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-sky-300">
-          {admin ? "Control plane" : "Contribute"}
-        </p>
-        {items.map(([id, label, Icon]) => (
-          <button
-            key={id}
-            onClick={() => onChange(id)}
-            className={`mb-0.5 flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs ${active === id ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-900 hover:text-white"}`}
-          >
-            <Icon className="size-3.5" />
-            {label}
-          </button>
+        {groups.map(({ label: group, items: groupItems }) => (
+          <div key={group} className="mb-2 last:mb-0">
+            <p className="mb-1 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-sky-300">
+              {group}
+            </p>
+            {groupItems.map(([id, label, Icon]) => (
+              <button
+                key={id}
+                onClick={() => onChange(id)}
+                className={`mb-0.5 flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs ${active === id ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-900 hover:text-white"}`}
+              >
+                <Icon className="size-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
         ))}
         <a
           href="https://github.com/AI4S-Bench/ai4s-benchmark"
@@ -2403,7 +2499,7 @@ function Notice({
       className={`flex justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${error ? "border-rose-400/30 bg-rose-400/10 text-rose-100" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"}`}
     >
       <span>{error || message}</span>
-      <button onClick={onClose}>×</button>
+      <button type="button" onClick={onClose} aria-label="Dismiss notification">×</button>
     </div>
   );
 }
@@ -2457,11 +2553,15 @@ function Metric({
   );
 }
 function Status({ state }: { state: string }) {
-  const tone = ["succeeded", "approved", "running", "enabled", "valid", "completed"].includes(state)
+  const tone = ["succeeded", "approved", "enabled", "valid", "completed"].includes(state)
     ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
-    : ["failed", "launch_failed", "termination_failed", "invalid"].includes(state)
+    : ["running", "provisioning", "sending", "leased"].includes(state)
+      ? "border-sky-400/30 bg-sky-400/10 text-sky-200"
+    : ["failed", "launch_failed", "termination_failed", "invalid", "rejected"].includes(state)
       ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
-      : "border-amber-400/30 bg-amber-400/10 text-amber-100";
+      : ["cancelled", "disabled", "expired"].includes(state)
+        ? "border-slate-600 bg-slate-800 text-slate-300"
+        : "border-amber-400/30 bg-amber-400/10 text-amber-100";
   return <Badge className={tone}>{state.replaceAll("_", " ")}</Badge>;
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
