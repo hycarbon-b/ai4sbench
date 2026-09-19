@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     )
     ec2_ami_id: str = ""
     ec2_bootstrap_mode: Literal["amazon_linux_2023", "baked_ami"] = "amazon_linux_2023"
+    # Recorded by scripts/build_worker_ami.py so a run can be traced back to
+    # the worker source baked into TBCP_EC2_AMI_ID.
+    ec2_worker_ami_commit: str = ""
     ec2_instance_type: str = "m7i-flex.xlarge"
     ec2_allowed_instance_types: tuple[str, ...] = (
         "t3.micro",
@@ -138,6 +141,8 @@ class Settings(BaseSettings):
             "execution_mode": self.execution_mode,
             "aws_region": self.aws_region,
             "ec2_ami_id": self.ec2_ami_id,
+            "ec2_bootstrap_mode": self.ec2_bootstrap_mode,
+            "ec2_worker_ami_commit": self.ec2_worker_ami_commit,
             "ec2_instance_type": self.ec2_instance_type,
             "ec2_allowed_instance_types": list(self.ec2_allowed_instance_types),
             "ec2_instance_resources": self.ec2_instance_resources,

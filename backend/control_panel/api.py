@@ -586,9 +586,11 @@ async def post_resend_webhook_delivery(delivery_id: str, session: SessionDep) ->
 
 
 @worker_router.post("/runs/{run_id}/claim", response_model=WorkerClaimResponse)
-async def worker_claim(run_id: str, body: WorkerClaim, session: SessionDep) -> WorkerClaimResponse:
+async def worker_claim(
+    run_id: str, body: WorkerClaim, request: Request, session: SessionDep
+) -> WorkerClaimResponse:
     try:
-        return await claim_worker(session, run_id, body.token)
+        return await claim_worker(session, run_id, body.token, request.app.state.settings)
     except WorkerAuthError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 

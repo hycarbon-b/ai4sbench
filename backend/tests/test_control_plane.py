@@ -368,6 +368,97 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(audit_count, 3)
         self.client.portal.call(runner.engine.dispose)
 
+    def test_worker_lifecycle_records_the_image_version_and_full_harbor_output(self) -> None:
+        """Cover the baked-image run path end to end against the fake provider.
+
+        Enqueue, launch, claim, stream `[harbor]` output, complete, terminate.
+        The claim must record which worker image ran, and the completion payload
+        must carry the whole Harbor log so the Dashboard can show it even if
+        individual real-time events were lost.
+        """
+        plan = self.create_approved_plan()
+        response = self.client.post(
+            "/api/v1/runs",
+            headers={**self.headers, "Idempotency-Key": str(uuid.uuid4())},
+            json={"plan_id": plan["id"], "timeout_minutes": 180},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        run = response.json()
+
+        runner = JobRunner(self.settings, self.provider)
+        self.assertTrue(self.client.portal.call(runner.process_one))
+        claim = self.client.post(
+            f"/api/v1/worker/runs/{run['id']}/claim",
+            json={"token": deterministic_bootstrap_token(run["id"], self.settings)},
+        )
+        self.assertEqual(claim.status_code, 200, claim.text)
+        session_token = claim.json()["session_token"]
+
+        harbor_lines = [
+            "[harbor] $ harbor run -p tasks/example -a oracle",
+            "[harbor] stdin=disabled",
+            "[harbor] trial 1 started",
+            "[harbor] trial 1 completed",
+            "[harbor] exit_code=0",
+        ]
+        for line in harbor_lines:
+            event = self.client.post(
+                f"/api/v1/worker/runs/{run['id']}/events",
+                json={
+                    "session_token": session_token,
+                    "event_type": "runner_log",
+                    "message": line,
+                    "payload": {},
+                },
+            )
+            self.assertEqual(event.status_code, 201, event.text)
+
+        output = "\n".join(harbor_lines)
+        completed = self.client.post(
+            f"/api/v1/worker/runs/{run['id']}/complete",
+            json={
+                "session_token": session_token,
+                "state": "succeeded",
+                "result": {
+                    "exit_code": 0,
+                    "runner": "harbor",
+                    "job_name": f"run-{run['id']}",
+                    "harbor_output": output,
+                    "harbor_output_bytes": len(output.encode("utf-8")),
+                    "harbor": {
+                        "n_total_trials": 1,
+                        "stats": {
+                            "n_completed_trials": 1,
+                            "n_errored_trials": 0,
+                            "n_running_trials": 0,
+                            "n_pending_trials": 0,
+                            "n_cancelled_trials": 0,
+                        },
+                    },
+                },
+            },
+        )
+        self.assertEqual(completed.status_code, 200, completed.text)
+        self.assertEqual(completed.json()["result"]["harbor_output"], output)
+        self.assertTrue(self.client.portal.call(runner.process_one))
+
+        events = self.client.get(f"/api/v1/runs/{run['id']}/events", headers=self.headers)
+        self.assertEqual(events.status_code, 200, events.text)
+        items = events.json()["items"]
+        logs = [item["message"] for item in items if item["event_type"] == "runner_log"]
+        self.assertEqual(logs, harbor_lines)
+        self.assertTrue(all(line.startswith("[harbor]") for line in logs))
+
+        claimed = next(item for item in items if item["event_type"] == "worker_claimed")
+        self.assertEqual(claimed["payload"]["bootstrap_mode"], self.settings.ec2_bootstrap_mode)
+
+        state, instance_state, _, _ = self.client.portal.call(
+            control_state, self.app.state.session_factory, run["id"]
+        )
+        self.assertEqual((state, instance_state), ("succeeded", "terminated"))
+        self.assertEqual(self.provider.describe(self.provider.run_instances[run["id"]]), "terminated")
+        self.client.portal.call(runner.engine.dispose)
+
     def test_queue_accepts_runs_beyond_active_worker_limit(self) -> None:
         plan = self.create_approved_plan()
         first = self.client.post(

@@ -35,7 +35,7 @@ def test_worker_bootstrap_installs_the_compose_cli_plugin() -> None:
     assert "docker buildx version" in bootstrap
     assert 'glob("*/exception.txt")' in bootstrap
     assert "def post(path, value, attempts=6, timeout_seconds=30)" in bootstrap
-    assert "threading.Thread(target=send_event, daemon=True).start()" in bootstrap
+    assert "threading.Thread(target=send_events, daemon=True)" in bootstrap
     assert "AI4SBENCH_TRIAL_EXCEPTIONS=" in bootstrap
     assert '["git", "sparse-checkout", "init", "--cone"]' in bootstrap
     assert '["git", "sparse-checkout", "set", "--cone", revision["task_path"]]' in bootstrap

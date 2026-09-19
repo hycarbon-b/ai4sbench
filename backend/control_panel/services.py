@@ -552,7 +552,9 @@ async def create_manual_batch(
     return [await session.scalar(select(Run).where(Run.id == run.id)) for run in runs], created  # type: ignore[return-value]
 
 
-async def claim_worker(session: AsyncSession, run_id: str, token: str) -> dict[str, Any]:
+async def claim_worker(
+    session: AsyncSession, run_id: str, token: str, settings: Settings | None = None
+) -> dict[str, Any]:
     await begin_immediate(session)
     credential = await session.get(WorkerCredential, run_id)
     run = await session.get(Run, run_id)
@@ -572,7 +574,17 @@ async def claim_worker(session: AsyncSession, run_id: str, token: str) -> dict[s
     run.state = "running"
     run.instance_state = "running"
     run.version += 1
-    add_event(session, run_id, "worker_claimed", "Worker claimed the one-time job")
+    # Record the worker image the run started from.  Because the worker source
+    # is baked into the AMI, this is what makes a control-plane/worker version
+    # mismatch diagnosable after the instance is gone.
+    claimed_payload: dict[str, Any] = {"instance_id": run.instance_id}
+    if settings is not None:
+        claimed_payload |= {
+            "bootstrap_mode": settings.ec2_bootstrap_mode,
+            "worker_ami": settings.ec2_ami_id,
+            "worker_ami_commit": settings.ec2_worker_ami_commit,
+        }
+    add_event(session, run_id, "worker_claimed", "Worker claimed the one-time job", claimed_payload)
     response = {
         "run": {"id": run.id, "config": run.config_snapshot},
         "task_revision": run.config_snapshot["task_revision"],

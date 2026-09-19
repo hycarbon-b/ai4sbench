@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .ami_build import WORKER_ENTRYPOINT
 from .bootstrap import render_worker_bootstrap
 from .config import Settings
 
@@ -55,6 +56,14 @@ class Boto3EC2Provider:
         self.client = boto3.client("ec2", region_name=settings.aws_region, **credentials)
 
     def _user_data(self, run_id: str, worker_token: str) -> str:
+        """Return the launch user data for the configured bootstrap mode.
+
+        ``baked_ami`` is the production path: the image already carries Docker,
+        Harbor, and the worker package, so user data only injects the run-scoped
+        values and executes the preinstalled entry point.  No software is
+        installed while a run is being provisioned.  ``amazon_linux_2023``
+        remains available for development against a stock public image.
+        """
         if self.settings.ec2_bootstrap_mode == "amazon_linux_2023":
             return render_worker_bootstrap(self.settings.worker_api_base_url, run_id, worker_token)
         return "\n".join(
@@ -65,7 +74,7 @@ class Boto3EC2Provider:
                 f"export TBCP_RUN_ID={shlex.quote(run_id)}",
                 f"export TBCP_JOB_TOKEN={shlex.quote(worker_token)}",
                 f"export TBCP_ENABLE_QUICK_TUNNEL={'1' if self.settings.enable_quick_tunnel else '0'}",
-                "exec /opt/ai4sbench/.venv/bin/ai4sbench-worker",
+                f"exec {WORKER_ENTRYPOINT}",
             )
         )
 
@@ -81,7 +90,11 @@ class Boto3EC2Provider:
             {"Key": "Name", "Value": f"ai4sbench-{run_id[:8]}"},
             {"Key": "ai4sbench:managed", "Value": "true"},
             {"Key": "ai4sbench:run-id", "Value": run_id},
+            {"Key": "ai4sbench:worker-ami", "Value": self.settings.ec2_ami_id},
+            {"Key": "ai4sbench:bootstrap-mode", "Value": self.settings.ec2_bootstrap_mode},
         ]
+        if self.settings.ec2_worker_ami_commit:
+            tags.append({"Key": "ai4sbench:worker-commit", "Value": self.settings.ec2_worker_ami_commit})
         request: dict[str, Any] = {
             "ClientToken": run_id,
             "ImageId": self.settings.ec2_ami_id,
