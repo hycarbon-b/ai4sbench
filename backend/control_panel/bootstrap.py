@@ -28,6 +28,8 @@ def render_worker_bootstrap(
         """\
         import json
         import os
+        import queue
+        import shlex
         import subprocess
         import tempfile
         import time
@@ -63,11 +65,17 @@ def render_worker_bootstrap(
 
         def run(command, cwd, emit):
             process = subprocess.Popen(
-                command, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+                command,
+                cwd=cwd,
+                text=True,
+                errors="replace",
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
             assert process.stdout is not None
             for line in process.stdout:
-                emit(line.rstrip())
+                emit(line.rstrip("\\r\\n"))
             return process.wait()
 
 
@@ -77,36 +85,46 @@ def render_worker_bootstrap(
             session_token = claim["session_token"]
             revision = claim["task_revision"]
             config = claim["run"]["config"]["plan_config"]
-            event_lock = threading.Lock()
-            event_in_flight = False
+            pending = queue.Queue()
 
-            def emit(message):
-                nonlocal event_in_flight
-                with event_lock:
-                    if event_in_flight:
-                        return
-                    event_in_flight = True
-
-                def send_event():
-                    nonlocal event_in_flight
+            def send_events():
+                while (message := pending.get()) is not None:
                     try:
                         post(
                             f"/api/v1/worker/runs/{run_id}/events",
                             {
                                 "session_token": session_token,
                                 "event_type": "runner_log",
-                                "message": message[:4000],
+                                "message": message,
                                 "payload": {},
                             },
-                            attempts=1,
-                            timeout_seconds=5,
+                            attempts=3,
+                            timeout_seconds=10,
                         )
                     except OSError:
                         pass
-                    with event_lock:
-                        event_in_flight = False
 
-                threading.Thread(target=send_event, daemon=True).start()
+            sender = threading.Thread(target=send_events, daemon=True)
+            sender.start()
+
+            def emit(message):
+                for index in range(0, max(len(message), 1), 4000):
+                    pending.put(message[index : index + 4000])
+
+            harbor_lines = []
+
+            def record(line):
+                entry = f"[harbor] {line}" if line else "[harbor]"
+                harbor_lines.append(entry)
+                emit(entry)
+
+            def drain():
+                pending.put(None)
+                sender.join(120)
+
+            def harbor_output():
+                output = "\\n".join(harbor_lines)
+                return output, len(output.encode("utf-8"))
 
             try:
                 with tempfile.TemporaryDirectory(prefix="ai4sbench-") as temporary:
@@ -139,18 +157,25 @@ def render_worker_bootstrap(
                     ]
                     if config.get("model"):
                         command.extend(["-m", config["model"]])
-                    emit("Launching Harbor task")
-                    exit_code = run(command, repo, emit)
+                    record(f"$ {shlex.join(command)}")
+                    record("stdin=disabled")
+                    exit_code = run(command, repo, record)
+                    record(f"exit_code={exit_code}")
                     result = {"exit_code": exit_code, "runner": "harbor", "job_name": job_name}
                     result_file = jobs_dir / job_name / "result.json"
                     if result_file.is_file():
                         result["harbor"] = json.loads(result_file.read_text(encoding="utf-8"))
+                        record("result.json was read")
+                    else:
+                        record("result.json is missing")
                     trial_exceptions = {
                         path.parent.name: path.read_text(encoding="utf-8", errors="replace")[-12000:]
                         for path in sorted((jobs_dir / job_name).glob("*/exception.txt"))
                     }
                     if trial_exceptions:
                         result["trial_exceptions"] = trial_exceptions
+                        for trial in trial_exceptions:
+                            record(f"ERROR trial {trial} recorded an exception")
                         print(
                             "AI4SBENCH_TRIAL_EXCEPTIONS="
                             + json.dumps(
@@ -171,6 +196,8 @@ def render_worker_bootstrap(
                         and stats.get("n_pending_trials") == 0
                         and stats.get("n_cancelled_trials") == 0
                     )
+                    result["harbor_output"], result["harbor_output_bytes"] = harbor_output()
+                    drain()
                     post(
                         f"/api/v1/worker/runs/{run_id}/complete",
                         {
@@ -180,12 +207,20 @@ def render_worker_bootstrap(
                         },
                     )
             except Exception as exc:
+                record(f"ERROR {type(exc).__name__}: {exc}")
+                output, output_bytes = harbor_output()
+                drain()
                 post(
                     f"/api/v1/worker/runs/{run_id}/complete",
                     {
                         "session_token": session_token,
                         "state": "failed",
-                        "result": {"error": type(exc).__name__, "message": str(exc)[:500]},
+                        "result": {
+                            "error": type(exc).__name__,
+                            "message": str(exc)[:500],
+                            "harbor_output": output,
+                            "harbor_output_bytes": output_bytes,
+                        },
                     },
                 )
                 raise

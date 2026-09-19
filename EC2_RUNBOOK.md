@@ -185,6 +185,64 @@ access only to `root` and the `ai4sbench` service group, then restart the two
 services. Use an IAM user or assumed role with narrowly scoped permissions;
 never use the AWS root account's access keys.
 
+## Worker image (baked AMI)
+
+Production workers boot from a pre-installed AMI rather than installing Docker,
+Harbor, and the worker package at launch time. `TBCP_EC2_BOOTSTRAP_MODE` selects
+between the two launch paths:
+
+| Mode | Launch behavior |
+| --- | --- |
+| `baked_ami` | Production. User data only exports `TBCP_API_BASE_URL`, `TBCP_RUN_ID`, `TBCP_JOB_TOKEN` and execs the preinstalled `/opt/ai4sbench/.venv/bin/ai4sbench-worker`. No package installation happens while a run is being provisioned. |
+| `amazon_linux_2023` | Development/fallback only. Installs Docker, Compose, Buildx, and Harbor from a stock Amazon Linux 2023 AMI at launch. Kept so the control plane still works without a maintained worker AMI; do not use in production. |
+
+### Building a new worker AMI
+
+Run from a deployment operator's machine with EC2 create permissions (not from
+the control-plane service account):
+
+```powershell
+python scripts/build_worker_ami.py `
+  --base-ami-id ami-<amazon-linux-2023> `
+  --subnet-id subnet-05c29d44238b8de28 `
+  --security-group-id sg-0f6ebf5b304d4903e `
+  --repo-url https://github.com/hycarbon-b/ai4sbench.git
+```
+
+The script launches a temporary builder instance, installs pinned Docker,
+Compose, Buildx, and Harbor versions, installs the worker at the current (or
+`--commit-sha`-pinned) commit, runs a smoke check (`docker info`, `docker
+compose version`, `docker buildx version`, `harbor --version`, worker import),
+stops the instance, registers the AMI, waits for it to become `available`, and
+terminates the builder instance. It never writes a job token, run ID, or AWS
+credential into the image; `control_panel.ami_build.assert_image_is_runtime_free`
+enforces that at build time.
+
+The AMI is tagged with `ai4sbench:worker-commit` and `ai4sbench:harbor-version`.
+After a successful build, record in the deployment notes:
+
+```text
+control-plane commit: <git rev-parse HEAD>
+worker AMI ID: ami-...
+worker AMI commit: <commit the AMI was built from>
+harbor version: 0.20.0
+```
+
+Then update the environment file and restart:
+
+```text
+TBCP_EC2_BOOTSTRAP_MODE=baked_ami
+TBCP_EC2_AMI_ID=<new ami id>
+TBCP_EC2_WORKER_AMI_COMMIT=<commit the AMI was built from>
+```
+
+Because the worker package is baked into the image, a worker code change has
+no effect in production until a new AMI is built and `TBCP_EC2_AMI_ID` is
+updated. Every EC2 instance the provider launches is tagged with
+`ai4sbench:worker-ami` and `ai4sbench:worker-commit`, and the `worker_claimed`
+run event records the same values, so a run can be traced back to the exact
+worker image it executed after the instance has been terminated.
+
 Verify the credential source without printing a key:
 
 ```bash
