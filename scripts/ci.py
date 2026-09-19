@@ -59,7 +59,7 @@ def main() -> None:
     for command in ("git", "uv", NPM):
         require(command)
 
-    run("uv", "sync", "--locked", "--extra", "dev", cwd=BACKEND)
+    run("uv", "sync", "--locked", "--extra", "dev", "--extra", "aws", cwd=BACKEND)
     run("uv", "run", "ruff", "check", "control_panel", "tests", cwd=BACKEND)
     run("uv", "run", "pytest", cwd=BACKEND)
 
