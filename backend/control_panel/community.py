@@ -26,6 +26,7 @@ from .schemas import (
     CloudProfileResponse,
     ProposalBoardListResponse,
     ProposalDomainListResponse,
+    ProposalEditDetailResponse,
     ProposalListResponse,
     ProposalPreviewResponse,
     ProposalPublishedResponse,
@@ -34,6 +35,7 @@ from .schemas import (
     ProposalReviewPublishedResponse,
     ProposalSubmission,
     ProposalSyncResponse,
+    ProposalUpdatedResponse,
     PullRequestInstructionsResponse,
     ReviewerApplicationCreatedResponse,
     ReviewerApplicationSubmission,
@@ -185,7 +187,12 @@ def logout(request: Request) -> Response:
     ),
 )
 def list_proposals(session: SessionDep) -> ProposalListResponse:
-    items = session.scalars(select(Proposal).order_by(Proposal.created_at.desc()).limit(50))
+    items = session.scalars(
+        select(Proposal)
+        .where(Proposal.deleted_at.is_(None))
+        .order_by(Proposal.created_at.desc())
+        .limit(50)
+    )
     return {
         "items": [
             {
@@ -197,6 +204,7 @@ def list_proposals(session: SessionDep) -> ProposalListResponse:
                 "status": item.status,
                 "discussion_url": item.discussion_url,
                 "discussion_number": item.discussion_number,
+                "discord_message_url": item.discord_message_url,
                 "author_login": item.author_login,
                 "input_valid": item.input_valid,
             }
@@ -205,10 +213,101 @@ def list_proposals(session: SessionDep) -> ProposalListResponse:
     }
 
 
+def active_proposal(session: Session, proposal_id: str) -> Proposal:
+    proposal = session.scalar(
+        select(Proposal).where(Proposal.id == proposal_id, Proposal.deleted_at.is_(None))
+    )
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return proposal
+
+
+def owned_active_proposal(session: Session, proposal_id: str, user: User) -> Proposal:
+    proposal = active_proposal(session, proposal_id)
+    if proposal.author_id != str(user.id):
+        raise HTTPException(status_code=403, detail="Only the proposal author can edit this proposal")
+    return proposal
+
+
+@community_router.get(
+    "/proposals/{proposal_id}",
+    response_model=ProposalEditDetailResponse,
+    summary="Get one authored proposal for editing",
+    description=(
+        "Returns all stored Website form values to the signed-in user who originally published the "
+        "Proposal. Invalid stored values are returned without request validation so the author can "
+        "repair them before updating."
+    ),
+    responses={
+        403: {"description": "Only the original Proposal author may read the editable values."},
+        404: {"description": "Proposal not found or logically deleted."},
+    },
+)
+def proposal_edit_detail(
+    proposal_id: str, session: SessionDep, user: UserDep
+) -> ProposalEditDetailResponse:
+    proposal = owned_active_proposal(session, proposal_id, user)
+    return {
+        "id": proposal.id,
+        "status": proposal.status,
+        "discussion_url": proposal.discussion_url,
+        "discussion_number": proposal.discussion_number,
+        "discord_message_url": proposal.discord_message_url,
+        "input_valid": proposal.input_valid,
+        "input": proposal_input_values(proposal),
+    }
+
+
+@community_router.delete(
+    "/proposals/{proposal_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a locally tracked proposal",
+    description=(
+        "Administrator-only logical deletion of one local proposal record. Linked task revisions and "
+        "the GitHub Discussion are retained. Later Discussion synchronizations recognize the deletion "
+        "tombstone and do not import the proposal again."
+    ),
+    responses={
+        403: {"description": "Administrator role required."},
+        404: {"description": "Proposal not found."},
+    },
+)
+def delete_proposal(proposal_id: str, session: SessionDep, _user: AdminDep) -> Response:
+    proposal = active_proposal(session, proposal_id)
+    proposal.deleted_at = datetime.now(UTC)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 def proposal_form_values(item: Proposal) -> dict[str, object]:
     document = item.document or {}
     candidate = document.get("form_payload") if isinstance(document, dict) else None
     return candidate if isinstance(candidate, dict) else document
+
+
+def proposal_input_values(item: Proposal) -> dict[str, str]:
+    form = proposal_form_values(item)
+    fallbacks: dict[str, str] = {
+        "title": item.title,
+        "domain": item.domain,
+        "field_name": item.field,
+        "problem": item.abstract,
+        "solvability": "",
+        "references": item.evidence,
+        "software": "",
+        "dataset": "",
+        "compute": "",
+        "workflow": "",
+        "evaluation": "",
+        "leakage": "",
+        "name": item.author_login or "",
+        "affiliation": "",
+        "github": item.author_login or "",
+    }
+    return {
+        field: str(form.get(field) if form.get(field) is not None else fallback)
+        for field, fallback in fallbacks.items()
+    }
 
 
 def revision_run_results(session: Session, revision: TaskRevision | None) -> list[dict[str, object]]:
@@ -235,7 +334,7 @@ def revision_run_results(session: Session, revision: TaskRevision | None) -> lis
 
 
 def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision | None) -> dict[str, object]:
-    form = proposal_form_values(item)
+    form = proposal_input_values(item)
     return {
         "id": item.id,
         "title": str(form.get("title") or item.title),
@@ -257,6 +356,7 @@ def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision
         "status": item.status,
         "discussion_url": item.discussion_url,
         "discussion_number": item.discussion_number,
+        "discord_message_url": item.discord_message_url,
         "input_valid": item.input_valid,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
@@ -291,7 +391,9 @@ def proposal_board_item(session: Session, item: Proposal, revision: TaskRevision
 def public_proposal_board(session: SessionDep) -> ProposalBoardListResponse:
     proposals = list(
         session.scalars(
-            select(Proposal).where(Proposal.input_valid.is_(True)).order_by(Proposal.updated_at.desc())
+            select(Proposal)
+            .where(Proposal.input_valid.is_(True), Proposal.deleted_at.is_(None))
+            .order_by(Proposal.updated_at.desc())
         )
     )
     revisions = (
@@ -408,7 +510,7 @@ def markdown_section(body: str, heading: str, fallback: str = "") -> str:
 
 
 def markdown_subsection(body: str, heading: str, fallback: str = "") -> str:
-    match = re.search(rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^##?\s|\Z)", body or "")
+    match = re.search(rf"(?ims)^###\s*{re.escape(heading)}\s*$\n+(.+?)(?=^#{{2,3}}\s|\Z)", body or "")
     return match.group(1).strip() if match else fallback
 
 
@@ -603,6 +705,22 @@ def validation_errors_for_document(error: ValidationError) -> list[dict[str, Any
     return json.loads(error.json(include_url=False))
 
 
+def validate_proposal_submission(
+    value: ProposalSubmission | dict[str, object], *, github_login: str | None = None
+) -> ProposalSubmission:
+    """Validate and normalize proposal input through one shared contract.
+
+    Create, preview and Discussion sync all call this function. Publishing may
+    replace the form GitHub value with the authenticated account before the
+    complete payload is validated again.
+    """
+
+    payload = value.model_dump(mode="json") if isinstance(value, ProposalSubmission) else dict(value)
+    if github_login:
+        payload["github"] = github_login
+    return ProposalSubmission.model_validate(payload)
+
+
 def discussion_status(labels: list[str]) -> str:
     if any(label.startswith("proposal-approved") for label in labels):
         return "approved"
@@ -660,6 +778,51 @@ async def create_github_discussion(
     }
 
 
+async def update_github_discussion(
+    request: Request,
+    user: User,
+    discussion_node_id: str,
+    submission: ProposalSubmission,
+) -> dict[str, object]:
+    payload = {
+        "query": (
+            "mutation($input: UpdateDiscussionInput!) { "
+            "updateDiscussion(input: $input) { "
+            "discussion { id number url title body updatedAt } } }"
+        ),
+        "variables": {
+            "input": {
+                "discussionId": discussion_node_id,
+                "title": submission.title,
+                "body": submission.render_discussion(),
+            }
+        },
+    }
+    token = await github_access_token(request, user)
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            "https://api.github.com/graphql",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        )
+        if response.status_code == 401:
+            token = await refresh_github_access_token(request, user)
+            response = await client.post(
+                "https://api.github.com/graphql",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+    response_payload = response.json()
+    if response.status_code == 401:
+        raise HTTPException(status_code=401, detail="GitHub authorization expired; sign in again")
+    if response.status_code >= 400 or response_payload.get("errors"):
+        raise HTTPException(status_code=502, detail="GitHub could not update the proposal discussion")
+    return dict(response_payload["data"]["updateDiscussion"]["discussion"])
+
+
 def proposal_preview(submission: ProposalSubmission) -> dict[str, object]:
     """Return the exact normalized submission and Discussion content.
 
@@ -712,7 +875,9 @@ async def preview_proposal(
                 name for name, field in ProposalSubmission.model_fields.items() if field.is_required()
             ],
         }
-    submission = body.with_github_identity(user.github_login) if user else body
+    submission = validate_proposal_submission(
+        body, github_login=user.github_login if user else None
+    )
     return {
         **proposal_preview(submission),
         "github_identity_source": "authenticated" if user else "form",
@@ -795,9 +960,7 @@ async def publish_proposal_review(
     session: SessionDep,
     user: ReviewerDep,
 ) -> ProposalReviewPublishedResponse:
-    proposal = session.get(Proposal, proposal_id)
-    if proposal is None:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = active_proposal(session, proposal_id)
     if not proposal.discussion_node_id or not proposal.discussion_url:
         raise HTTPException(status_code=409, detail="Proposal has no GitHub Discussion identity")
 
@@ -860,7 +1023,7 @@ async def publish_proposal_review(
 async def create_proposal(
     body: ProposalSubmission, request: Request, session: SessionDep, user: UserDep
 ) -> ProposalPublishedResponse:
-    submission = body.with_github_identity(user.github_login)
+    submission = validate_proposal_submission(body, github_login=user.github_login)
     discussion = await create_github_discussion(request, user, submission)
     item = Proposal(
         author_id=str(user.id),
@@ -891,6 +1054,66 @@ async def create_proposal(
         "id": item.id,
         "status": item.status,
         "discussion_url": item.discussion_url,
+        **proposal_preview(submission),
+    }
+
+
+@community_router.put(
+    "/proposals/{proposal_id}",
+    response_model=ProposalUpdatedResponse,
+    summary="Update an authored proposal and its GitHub Discussion",
+    description=(
+        "Author-only full replacement using the current Website proposal contract. The original "
+        "author's GitHub OAuth token updates the existing Discussion title and canonical Markdown "
+        "body first; local fields are committed only after GitHub accepts the mutation."
+    ),
+    responses={
+        401: {"description": "GitHub authorization expired."},
+        403: {"description": "Only the original Proposal author may update it."},
+        404: {"description": "Proposal not found or logically deleted."},
+        409: {"description": "Proposal has no GitHub Discussion identity."},
+        502: {"description": "GitHub did not accept the Discussion update."},
+    },
+)
+async def update_proposal(
+    proposal_id: str,
+    body: ProposalSubmission,
+    request: Request,
+    session: SessionDep,
+    user: UserDep,
+) -> ProposalUpdatedResponse:
+    proposal = owned_active_proposal(session, proposal_id, user)
+    if not proposal.discussion_node_id or not proposal.discussion_url:
+        raise HTTPException(status_code=409, detail="Proposal has no GitHub Discussion identity")
+
+    submission = validate_proposal_submission(body, github_login=user.github_login)
+    discussion = await update_github_discussion(
+        request,
+        user,
+        proposal.discussion_node_id,
+        submission,
+    )
+    proposal.author_login = user.github_login
+    proposal.title = submission.title
+    proposal.abstract = submission.problem
+    proposal.domain = submission.domain
+    proposal.field = submission.field_slug
+    proposal.task_slug = submission.task_slug
+    proposal.evidence = submission.references
+    proposal.document = submission.model_dump(mode="json")
+    proposal.input_valid = True
+    proposal.discussion_node_id = str(discussion.get("id") or proposal.discussion_node_id)
+    if discussion.get("number") is not None:
+        proposal.discussion_number = int(discussion["number"])
+    proposal.discussion_url = str(discussion.get("url") or proposal.discussion_url)
+    proposal.github_updated_at = parse_github_time(str(discussion.get("updatedAt") or "")) or datetime.now(
+        UTC
+    )
+    session.commit()
+    return {
+        "id": proposal.id,
+        "status": proposal.status,
+        "discussion_url": proposal.discussion_url,
         **proposal_preview(submission),
     }
 
@@ -984,9 +1207,20 @@ async def sync_proposal_discussions(
         if (node.get("category") or {}).get("name") != TASK_PROPOSALS_CATEGORY:
             continue
         scanned_count += 1
+        discussion_node_id = str(node["id"])
+        discussion_url = str(node["url"])
+        existing = session.scalar(
+            select(Proposal).where(Proposal.discussion_node_id == discussion_node_id)
+        )
+        if existing is None:
+            existing = session.scalar(
+                select(Proposal).where(Proposal.discussion_url == discussion_url)
+            )
+        if existing is not None and existing.deleted_at is not None:
+            continue
         form_payload = form_payload_from_discussion(node)
         try:
-            submission = ProposalSubmission.model_validate(form_payload)
+            submission = validate_proposal_submission(form_payload)
             input_valid = True
             document = submission.model_dump(mode="json")
             title = submission.title
@@ -1026,20 +1260,13 @@ async def sync_proposal_discussions(
             "document": document,
             "input_valid": input_valid,
             "status": (str(review_values["review_decision"]) if review_valid else discussion_status(labels)),
-            "discussion_url": str(node["url"]),
-            "discussion_node_id": str(node["id"]),
+            "discussion_url": discussion_url,
+            "discussion_node_id": discussion_node_id,
             "discussion_number": int(node["number"]),
             "github_created_at": parse_github_time(node.get("createdAt")),
             "github_updated_at": parse_github_time(node.get("updatedAt")),
             **review_values,
         }
-        existing = session.scalar(
-            select(Proposal).where(Proposal.discussion_node_id == values["discussion_node_id"])
-        )
-        if existing is None:
-            existing = session.scalar(
-                select(Proposal).where(Proposal.discussion_url == values["discussion_url"])
-            )
         if existing is None:
             author_id = str(uuid.uuid5(uuid.NAMESPACE_URL, values["discussion_url"]))
             session.add(Proposal(author_id=author_id, **values))
@@ -1064,9 +1291,7 @@ async def sync_proposal_discussions(
 def pull_request_instructions(
     proposal_id: str, request: Request, session: SessionDep, user: UserDep
 ) -> PullRequestInstructionsResponse:
-    proposal = session.get(Proposal, proposal_id)
-    if proposal is None:
-        raise HTTPException(status_code=404, detail="Proposal not found")
+    proposal = active_proposal(session, proposal_id)
     if proposal.author_id != str(user.id) and user.role != "admin":
         raise HTTPException(
             status_code=403, detail="Only the proposal author or an administrator can open its PR guide"

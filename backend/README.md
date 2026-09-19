@@ -1,14 +1,16 @@
 # ai4sbench control plane
 
-This directory is the private control-plane service. It owns FastAPI APIs,
-GitHub OAuth, Proposal-to-Discussion creation, SQLite state, durable database
-jobs, EC2 lifecycle management, worker callbacks, migrations, and operator
-infrastructure.
+This directory contains the private FastAPI control plane. It owns GitHub
+OAuth, Proposal-to-Discussion publishing and synchronization, structured
+reviews, SQLite state, database-backed jobs, EC2 lifecycle management, worker
+callbacks, migrations, and operator APIs.
 
-`data/` and `.env` are local operator state. They are ignored by Git and must
-not be copied into `benchmark-repository/`.
+`data/`, `.env`, credentials, OAuth tokens, and SQLite files are operator state.
+They are ignored by Git and must not be copied into either public submodule.
 
-## Development
+## Development setup
+
+Use Python 3.12 or newer and `uv`:
 
 ```bash
 cd backend
@@ -17,57 +19,146 @@ uv run alembic upgrade head
 uv run ai4sbench-api
 ```
 
-In a second terminal:
+Start the background job runner separately:
 
 ```bash
 cd backend
 uv run ai4sbench-jobs
 ```
 
-Build the dashboard before starting the API when changing its source:
+Configuration is loaded from `backend/.env` with the variable names documented
+in `.env.example`. For local work, use `TBCP_ENVIRONMENT=development`, a local
+SQLite URL, and `TBCP_EXECUTION_MODE=fake` unless an EC2 test is intentional.
+Production secrets do not belong in a development commit or terminal capture.
+
+Useful routes after startup:
+
+| Route | Purpose |
+| --- | --- |
+| `/docs` | Swagger UI with request and response schemas |
+| `/health/live` | Process liveness |
+| `/health/ready` | Database readiness |
+| `/` | Committed Dashboard build |
+| `/website` | Committed Website build |
+
+## Dashboard and Website assets
+
+Build Dashboard source before starting the API when React code changes:
 
 ```bash
 cd dashboard-frontend/frontend
 npm ci
+npm run check
 npm run build
 ```
 
-The generated assets are served from `backend/control_panel/static/`.
+Vite writes the build directly to `backend/control_panel/static/`. Commit the
+source, `static/index.html`, and hashed assets in the same parent-repository
+commit.
 
-## Containers
+The public Website is maintained in the `ai4s-bench-website` submodule. Prepare
+and push its own branch first, update the parent submodule pointer, then replace
+`control_panel/website_dist/` with the reviewed Website build. Commit the
+snapshot instead of copying application files directly to EC2.
 
-Run from the project root so Docker can access both backend and dashboard build
-contexts:
+## Proposal, review, and synchronization APIs
+
+| Method and route | Access | Behavior |
+| --- | --- | --- |
+| `POST /api/v1/proposals/preview` | Public or signed in | Validate and render without writing |
+| `POST /api/v1/proposals` | Signed in | Publish a Discussion and persist the Proposal |
+| `GET /api/v1/proposals` | Public | List active locally tracked Proposals |
+| `GET /api/v1/proposals/{proposal_id}` | Original author | Load all stored form fields for editing |
+| `PUT /api/v1/proposals/{proposal_id}` | Original author | Replace the Proposal and its existing Discussion |
+| `DELETE /api/v1/proposals/{proposal_id}` | Administrator | Set the local deletion tombstone |
+| `POST /api/v1/proposals/sync-discussions` | Administrator | Import or update active Discussion records |
+| `GET /api/v1/public/proposals` | Public | Return valid active task-board records |
+| `POST /api/v1/proposals/reviews/preview` | Reviewer | Render a structured review reply |
+| `POST /api/v1/proposals/{proposal_id}/reviews` | Reviewer | Publish and persist a structured review |
+
+Create, preview, and Discussion sync all pass through the same
+`ProposalSubmission` validation and normalization entry point. Discussion sync
+parses only the configured repository's `Task Proposals` category and upserts by
+GitHub Discussion node ID, falling back to its URL.
+
+Proposal editing is a full replacement using that same current contract. The
+client first reloads the stored form fields for the original author, and the API
+uses that author's GitHub OAuth token to update the original Discussion title
+and canonical Markdown body before committing the normalized fields locally.
+If GitHub rejects the mutation, the local Proposal remains unchanged. Logically
+deleted Proposals and records without a Discussion node identity cannot be
+edited.
+
+Proposal deletion is deliberately local and logical:
+
+- `deleted_at` is set; the Proposal row is retained.
+- Dashboard and Website list queries exclude the row.
+- Review and pull-request-guide routes treat it as not found.
+- Linked task revisions, plans, runs, jobs, and webhook history remain intact.
+- The GitHub Discussion is not deleted.
+- Full Sync sees the tombstone and skips the Discussion, so it cannot recreate
+  or update the deleted Proposal.
+
+The Website task board combines each active valid Proposal with its latest valid
+structured review reply and latest linked task revision. Review comments are
+accepted only from administrators, approved reviewer applicants, or GitHub
+logins configured in `TBCP_REVIEWER_GITHUB_LOGINS`.
+
+## Reviewer applications and Discord deliveries
+
+The Website reviewer form submits to `POST /api/v1/reviewers`.
+Administrators manage records through:
+
+- `GET /api/v1/reviewer-applications`
+- `PATCH /api/v1/reviewer-applications/{application_id}`
+
+An approved application grants review access only when it has a GitHub
+username. `TBCP_DISCORD_WEBHOOK_URL` enables queued Proposal and review
+notifications. The job runner sends them, while administrators inspect or retry
+them through:
+
+- `GET /api/v1/webhook-deliveries`
+- `POST /api/v1/webhook-deliveries/{delivery_id}/resend`
+
+After a Proposal-created Discord delivery succeeds, the backend records its
+Discord permalink in `proposals.discord_message_url`. The field is returned by
+Proposal list, edit-detail, and public task-board APIs. Review notifications do
+not overwrite the Proposal link.
+
+`TBCP_WEBSITE_PUBLIC_BASE_URL` controls task-detail links in those messages.
+
+## Database and migrations
+
+Production uses SQLite with foreign keys, WAL, and a busy timeout enabled by the
+application. Schema changes require an Alembic migration:
+
+```bash
+cd backend
+uv run alembic upgrade head
+uv run alembic current
+```
+
+Create a consistent backup from the Dashboard's **Database snapshots** page or
+`POST /api/v1/database-snapshots` before migrations, bulk sync, or other data
+changes. Do not treat a raw copy of the live WAL database file as a consistent
+backup.
+
+## Tests and containers
+
+```bash
+cd backend
+uv run pytest
+uv run ruff check control_panel tests
+```
+
+Run Ruff explicitly on every new migration file as part of its review.
+
+Run the complete local stack from the repository root with:
 
 ```bash
 docker compose -f backend/compose.yaml up --build
 ```
 
-The public Website snapshot is committed under `control_panel/website_dist` and
-served at `/website`. Refresh that directory manually from the Website
-submodule whenever a new static release is prepared.
-
-The public task repository is configured through `TBCP_GITHUB_REPOSITORY` and
-is intentionally external to this service's private data directory.
-
-The Website task board reads `GET /api/v1/public/proposals`. Each item combines
-the stored proposal, its latest valid structured review reply, and its latest
-linked task revision. Review comments are accepted only from administrators or
-GitHub logins configured by `TBCP_REVIEWER_GITHUB_LOGINS`. Reviewers can render
-the canonical reply with `POST /api/v1/proposals/reviews/preview` and publish it
-beneath a Discussion with `POST /api/v1/proposals/{proposal_id}/reviews`.
-
-The Website reviewer form submits its versioned dossier to the public
-`POST /api/v1/reviewers` endpoint. Administrators list and inspect applications
-with `GET /api/v1/reviewer-applications`, then update the GitHub identity,
-private notes, or decision with
-`PATCH /api/v1/reviewer-applications/{application_id}`. An approved application
-with a GitHub username grants the same review permission as the configured
-`TBCP_REVIEWER_GITHUB_LOGINS` allowlist.
-
-Set `TBCP_DISCORD_WEBHOOK_URL` to enqueue Discord notifications for newly
-published proposals and reviews. `TBCP_WEBSITE_PUBLIC_BASE_URL` controls the
-task-detail link in those messages. The existing `ai4sbench-jobs` process sends
-the queued deliveries. Administrators can inspect the full destination, JSON
-payload, response and retry state at `GET /api/v1/webhook-deliveries`, or queue a
-delivery again with `POST /api/v1/webhook-deliveries/{delivery_id}/resend`.
+The public benchmark repository is selected through
+`TBCP_GITHUB_REPOSITORY`. It remains external to the control plane's private
+data directory.

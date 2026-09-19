@@ -227,9 +227,6 @@ class ProposalSubmission(BaseModel):
     def task_slug(self) -> str:
         return self.slugify(self.title)
 
-    def with_github_identity(self, github_login: str | None) -> ProposalSubmission:
-        return self.model_copy(update={"github": github_login or self.github})
-
     def render_discussion(self) -> str:
         return "\n".join(
             (
@@ -737,12 +734,43 @@ class ProposalListItemResponse(BaseModel):
     status: str
     discussion_url: str | None
     discussion_number: int | None
+    discord_message_url: str | None
     author_login: str | None
     input_valid: bool
 
 
 class ProposalListResponse(BaseModel):
     items: list[ProposalListItemResponse]
+
+
+class ProposalEditValuesResponse(BaseModel):
+    """Unvalidated stored values used to prefill the administrator editor."""
+
+    title: str
+    domain: str
+    field_name: str
+    problem: str
+    solvability: str
+    references: str
+    software: str
+    dataset: str
+    compute: str
+    workflow: str
+    evaluation: str
+    leakage: str
+    name: str
+    affiliation: str
+    github: str
+
+
+class ProposalEditDetailResponse(BaseModel):
+    id: str
+    status: str
+    discussion_url: str | None
+    discussion_number: int | None
+    discord_message_url: str | None
+    input_valid: bool
+    input: ProposalEditValuesResponse
 
 
 class ProposalBoardItemResponse(BaseModel):
@@ -768,6 +796,7 @@ class ProposalBoardItemResponse(BaseModel):
     status: str
     discussion_url: str | None
     discussion_number: int | None
+    discord_message_url: str | None
     input_valid: bool
     created_at: datetime
     updated_at: datetime
@@ -838,6 +867,15 @@ class ProposalPublishedResponse(ProposalPreviewResponse):
     id: str
     status: str
     discussion_url: str
+
+
+class ProposalUpdatedResponse(BaseModel):
+    id: str
+    status: str
+    discussion_url: str
+    input: ProposalSubmission
+    derived: ProposalDerivedResponse
+    discussion: DiscussionPreviewResponse
 
 
 class ReviewCommentPreviewResponse(BaseModel):

@@ -1,6 +1,6 @@
 # AI4S-Bench Dashboard EC2 runbook
 
-Last verified: 2026-08-30 (Asia/Shanghai)
+Last verified: 2026-09-13 (Asia/Shanghai)
 
 This document records the current production control-plane deployment. It is
 safe to commit because it intentionally excludes private keys, GitHub OAuth
@@ -11,7 +11,7 @@ credentials, JWT secrets, job-token secrets, and the full environment file.
 | Item | Current value |
 | --- | --- |
 | Public Dashboard | `https://dashboard.ai4sbench.org` |
-| Health endpoint | `https://dashboard.ai4sbench.org/health/live` |
+| Readiness endpoint | `https://dashboard.ai4sbench.org/health/ready` |
 | AWS region | `us-east-1` |
 | EC2 instance ID | `i-0ad6edfa737560f25` |
 | Instance type | `t3.micro` |
@@ -20,6 +20,7 @@ credentials, JWT secrets, job-token secrets, and the full environment file.
 | OS | Amazon Linux 2023, Linux `6.18.41-94.142.amzn2023.x86_64` |
 | Application listener | `0.0.0.0:8080` (Uvicorn) |
 | Service account | `ai4sbench` |
+| Git checkout | `/opt/ai4sbench` |
 | Application directory | `/opt/ai4sbench/backend` |
 | Python runtime | `/opt/ai4sbench/backend/.venv/bin/python` |
 | Production environment file | `/etc/ai4sbench/control-panel.env` |
@@ -94,15 +95,15 @@ sudo journalctl -u ai4sbench-jobs.service -n 100 --no-pager
 sudo systemctl is-active ai4sbench-api.service ai4sbench-jobs.service
 ```
 
-After an API restart, verify both the local listener and public route:
+After an API restart, verify both the local listener and readiness route:
 
 ```bash
 sudo ss -ltnp | grep ':8080'
-curl -fsS http://127.0.0.1:8080/health/live
+curl -fsS http://127.0.0.1:8080/health/ready
 ```
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/health/live
+Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/health/ready
 ```
 
 ## Current application configuration
@@ -119,8 +120,13 @@ credentials.
 | CORS origins | `https://ai4s-bench.github.io`, `https://ai4sbench.org`, `http://198.18.0.1:3000` |
 | Database URL | `sqlite:////var/lib/ai4sbench/control-panel.sqlite3` |
 | Auto-create schema | `false` |
-| Proposal GitHub repository | `hycarbon-b/ai4sbench-benchmark` |
+| Proposal GitHub repository | `AI4S-Bench/ai4s-benchmark` |
 | GitHub OAuth callback | `https://dashboard.ai4sbench.org/auth/github/callback` |
+
+Because the proposal repository is organization-owned, the Dashboard OAuth App
+must be approved for the `AI4S-Bench` organization when OAuth App access
+restrictions are enabled. Without that approval, GitHub accepts sign-in and
+public reads but rejects `createDiscussion` mutations made with user tokens.
 
 ### CORS verification
 
@@ -220,59 +226,171 @@ Expected output: `ok`.
 
 ### Create and download a consistent backup
 
-Run this on the EC2 instance. The destination directory should be access-limited
-and backed up according to the project's retention policy.
+Before a migration, Full Sync, or other material database operation, open the
+Dashboard's **Database snapshots** page and select **Save SQLite snapshot**.
+The same authenticated operation is available at:
 
-```bash
-sudo -u ai4sbench /opt/ai4sbench/backend/.venv/bin/python - <<'PY'
-import sqlite3
-
-source = sqlite3.connect('/var/lib/ai4sbench/control-panel.sqlite3')
-destination = sqlite3.connect('/tmp/control-panel-snapshot.sqlite3')
-source.backup(destination)
-destination.close()
-source.close()
-PY
-sudo chown ec2-user:ec2-user /tmp/control-panel-snapshot.sqlite3
+```text
+POST /api/v1/database-snapshots
 ```
 
-Download it from the local machine:
+The application uses SQLite's online backup API and writes an immutable file to:
 
-```powershell
-scp ec2-user@3.237.65.103:/tmp/control-panel-snapshot.sqlite3 .
+```text
+/var/lib/ai4sbench/cache/sqlite-snapshots/
 ```
 
-After confirming the download and any required off-site backup, remove the
-temporary server-side copy:
+The Dashboard lists and downloads these files through:
 
-```bash
-rm -f /tmp/control-panel-snapshot.sqlite3
+```text
+GET /api/v1/database-snapshots
+GET /api/v1/database-snapshots/{name}/download
 ```
+
+Record the generated snapshot name in the deployment notes. Do not copy the
+live database and its WAL directly, and do not place a snapshot in Git.
 
 ## Deployment procedure
 
 The currently deployed control plane is a direct systemd/Uvicorn deployment,
-not a Docker deployment. For a small, code-only update:
+not a Docker deployment. Every application update is delivered through Git;
+do not use `scp`, `install`, or ad-hoc file replacement for source or static
+assets.
+
+The long-lived deployment target is `main`. Always record the exact `main`
+commit being deployed; do not deploy an unmerged feature branch.
+
+### 1. Run the CI gate
+
+The repository's CI contract is `python scripts/ci.py`. It is the only place
+that defines checks: locked dependency installation, backend linting and tests,
+frontend type checking and build, and verification that committed Dashboard
+static assets are current. GitHub Actions only installs the Python, uv, and
+Node runtimes and invokes this script, so the same command can be run from a
+Windows checkout before opening a pull request.
+
+Merge a reviewed pull request into `main` only after its CI run succeeds. From
+a clean checkout of the exact `main` commit that will be deployed, run:
 
 ```powershell
-scp backend/control_panel/main.py ec2-user@3.237.65.103:/tmp/main.py
-ssh ec2-user@3.237.65.103 "sudo install -o ai4sbench -g ai4sbench -m 664 /tmp/main.py /opt/ai4sbench/backend/control_panel/main.py; sudo rm -f /tmp/main.py; sudo systemctl restart ai4sbench-api.service; sudo systemctl is-active ai4sbench-api.service"
+python scripts/ci.py
 ```
 
-For a broader release, upload only the reviewed files, preserve the existing
-secret environment file, restart the affected unit, and run the health check.
-Do not overwrite the production environment from a repository example file.
+When Dashboard source changes, CI verifies that `npm run build` has updated and
+committed `backend/control_panel/static/`. EC2 never builds or receives these
+assets separately.
+
+### 2. Record the reviewed `main` commit
+
+```powershell
+git fetch origin
+git rev-parse origin/main
+```
+
+Record this full SHA in the deployment notes before changing the EC2 checkout.
+
+### 3. Create the pre-deployment database snapshot
+
+Use the Dashboard snapshot action described above and record the returned file
+name before changing the checkout or running Alembic.
+
+### 4. Inspect and fast-forward the EC2 checkout
+
+```powershell
+ssh ec2-user@3.237.65.103
+```
+
+On the instance:
+
+```bash
+sudo -u ai4sbench git -C /opt/ai4sbench status --short --branch
+sudo -u ai4sbench git -C /opt/ai4sbench fetch origin main
+sudo -u ai4sbench git -C /opt/ai4sbench switch main
+sudo -u ai4sbench git -C /opt/ai4sbench merge --ff-only origin/main
+sudo -u ai4sbench git -C /opt/ai4sbench rev-parse HEAD
+```
+
+The existing untracked `/opt/ai4sbench/repository/` directory is runtime state.
+Leave it in place. Stop if tracked files are modified or if an unexpected
+untracked path would collide with the deployment; never clean or reset the
+checkout automatically.
+
+### 5. Apply migrations
+
+The production environment file is root-readable and must not be printed.
+Load it only for the migration process:
+
+```bash
+sudo bash -c '
+  set -a
+  . /etc/ai4sbench/control-panel.env
+  set +a
+  cd /opt/ai4sbench/backend
+  sudo -E -u ai4sbench .venv/bin/python -m alembic upgrade head
+  sudo -E -u ai4sbench .venv/bin/python -m alembic current
+'
+```
+
+Review every new migration before running it. Do not use `alembic downgrade`
+as a generic rollback; restore decisions depend on whether the release changed
+data and must use the recorded snapshot when necessary.
+
+### 6. Restart services
+
+```bash
+sudo systemctl restart ai4sbench-api.service ai4sbench-jobs.service
+sudo systemctl is-active ai4sbench-api.service ai4sbench-jobs.service
+```
+
+Both commands must report `active`.
+
+### 7. Verify locally and publicly
+
+```bash
+curl -fsS http://127.0.0.1:8080/health/ready
+sudo -u ai4sbench git -C /opt/ai4sbench rev-parse --short HEAD
+sudo journalctl \
+  -u ai4sbench-api.service \
+  -u ai4sbench-jobs.service \
+  --since '10 minutes ago' \
+  --no-pager -p warning
+```
+
+From the operator machine, verify:
+
+```powershell
+Invoke-RestMethod https://dashboard.ai4sbench.org/health/ready
+Invoke-RestMethod https://dashboard.ai4sbench.org/openapi.json
+Invoke-RestMethod https://dashboard.ai4sbench.org/api/v1/public/proposals
+```
+
+Also confirm that the Dashboard HTML references the newly committed hashed
+asset, expected Swagger routes are present, and Proposal counts match the
+pre-deployment snapshot unless the release intentionally changed data.
+
+### Proposal deletion and synchronization
+
+`DELETE /api/v1/proposals/{proposal_id}` is administrator-only logical
+deletion. It sets `proposals.deleted_at`, hides the record from Dashboard and
+Website list APIs, and preserves the GitHub Discussion and task-revision link.
+Full Sync matches deleted Discussions by node ID or URL and skips them, so a
+deleted Proposal does not reappear. Do not delete the GitHub Discussion as part
+of this operation.
+
+The protected `/etc/ai4sbench/control-panel.env` is not replaced during a code
+deployment. Environment changes are a separate reviewed operation followed by
+a service restart and CORS/OAuth verification.
 
 ## Capacity snapshot
 
-Verified 2026-08-30:
+Verified 2026-09-13:
 
 | Resource | Observed state |
 | --- | --- |
-| Root filesystem | 20 GB total; approximately 2.5 GB used; 18 GB available |
-| Memory | approximately 913 MiB total; approximately 375 MiB available |
+| Root filesystem | 20 GB total; approximately 2.8 GB used; 18 GB available |
+| Memory | approximately 913 MiB total; approximately 335 MiB available |
 | Swap | none |
-| Database file | approximately 220 KB |
+| Database file | approximately 680 KiB |
 
 The host is a `t3.micro` with no swap. Monitor memory before adding workers,
 large synchronizations, or resource-intensive background jobs.

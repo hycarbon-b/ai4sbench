@@ -6,13 +6,19 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from control_panel.community import form_payload_from_discussion, review_payload_from_comment
+from control_panel.community import (
+    form_payload_from_discussion,
+    review_payload_from_comment,
+    validate_proposal_submission,
+)
 from control_panel.config import Settings
 from control_panel.identity import User, current_active_user, current_optional_user
 from control_panel.main import create_app
+from control_panel.models import Proposal, TaskRevision
 from control_panel.schemas import ProposalReview, ProposalSubmission
 
 
@@ -91,7 +97,12 @@ def review_payload() -> dict[str, object]:
 
 
 def test_form_contract_renders_and_round_trips_through_a_discussion() -> None:
-    submission = ProposalSubmission.model_validate(proposal_payload())
+    source = proposal_payload()
+    source["workflow"] = (
+        "Execute the deterministic workflow, preserve every intermediate artifact, and publish "
+        "the complete verifier-ready output bundle. "
+    ) * 15
+    submission = validate_proposal_submission(source)
     rendered = submission.render_discussion()
     payload = form_payload_from_discussion(
         {
@@ -100,11 +111,8 @@ def test_form_contract_renders_and_round_trips_through_a_discussion() -> None:
             "body": rendered,
         }
     )
-    imported = ProposalSubmission.model_validate(payload)
-    assert imported.domain == "Earth Sciences"
-    assert imported.field_name == "Coastal oceanography"
-    assert imported.github == "scientist"
-    assert imported.task_slug == "assimilate-a-sparse-coastal-observation-network"
+    imported = validate_proposal_submission(payload)
+    assert imported == submission
 
 
 def test_review_contract_renders_and_round_trips_through_a_discussion_reply() -> None:
@@ -241,6 +249,96 @@ def test_member_can_open_discussion_but_cannot_manage_cloud_profiles() -> None:
             assert denied.status_code == 403
 
 
+def test_author_can_edit_proposal_and_existing_discussion_atomically() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "control.sqlite3"
+        app = create_app(
+            Settings(
+                environment="test",
+                database_url=f"sqlite:///{database.as_posix()}",
+                auto_create_schema=True,
+                execution_mode="fake",
+            )
+        )
+        owner = user("member")
+        app.dependency_overrides[current_active_user] = lambda: owner
+        with (
+            TestClient(app) as client,
+            patch(
+                "control_panel.community.create_github_discussion",
+                AsyncMock(
+                    return_value={
+                        "id": "D_kwDOEdit",
+                        "number": 41,
+                        "url": "https://github.com/example/repo/discussions/41",
+                    }
+                ),
+            ),
+        ):
+            created = client.post("/api/v1/proposals", json=proposal_payload())
+            assert created.status_code == 201, created.text
+            proposal_id = created.json()["id"]
+
+            app.dependency_overrides[current_active_user] = lambda: user("admin")
+            assert client.get(f"/api/v1/proposals/{proposal_id}").status_code == 403
+            assert client.put(f"/api/v1/proposals/{proposal_id}", json=proposal_payload()).status_code == 403
+
+            app.dependency_overrides[current_active_user] = lambda: owner
+            detail = client.get(f"/api/v1/proposals/{proposal_id}")
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["input"]["github"] == "member-github"
+
+            edited = proposal_payload()
+            edited["title"] = "Assimilate a corrected sparse coastal observation network"
+            edited["github"] = "another-user-cannot-be-substituted"
+            edited["affiliation"] = "Corrected Coastal Institute"
+            normalized = validate_proposal_submission(edited, github_login=owner.github_login)
+            github_update = AsyncMock(
+                return_value={
+                    "id": "D_kwDOEdit",
+                    "number": 41,
+                    "url": "https://github.com/example/repo/discussions/41",
+                    "title": normalized.title,
+                    "body": normalized.render_discussion(),
+                    "updatedAt": "2026-09-15T04:05:06Z",
+                }
+            )
+            with patch("control_panel.community.update_github_discussion", github_update):
+                updated = client.put(f"/api/v1/proposals/{proposal_id}", json=edited)
+            assert updated.status_code == 200, updated.text
+            assert updated.json()["input"] == normalized.model_dump(mode="json")
+            assert updated.json()["discussion"] == {
+                "title": normalized.title,
+                "body": normalized.render_discussion(),
+            }
+            assert github_update.await_count == 1
+            assert github_update.await_args.args[2] == "D_kwDOEdit"
+            assert github_update.await_args.args[3] == normalized
+
+            repaired = client.get(f"/api/v1/proposals/{proposal_id}").json()
+            assert repaired["input_valid"] is True
+            assert repaired["input"] == normalized.model_dump(mode="json")
+            board = client.get("/api/v1/public/proposals").json()["items"][0]
+            assert board["title"] == normalized.title
+            tracked = client.get("/api/v1/proposals").json()["items"][0]
+            assert tracked["author_login"] == "member-github"
+
+            rejected = {**edited, "title": "A third version that GitHub must reject atomically"}
+            with patch(
+                "control_panel.community.update_github_discussion",
+                AsyncMock(
+                    side_effect=HTTPException(
+                        status_code=502,
+                        detail="GitHub could not update the proposal discussion",
+                    )
+                ),
+            ):
+                failed = client.put(f"/api/v1/proposals/{proposal_id}", json=rejected)
+            assert failed.status_code == 502
+            unchanged = client.get(f"/api/v1/proposals/{proposal_id}").json()
+            assert unchanged["input"] == normalized.model_dump(mode="json")
+
+
 def test_member_can_preview_exact_submission_without_creating_a_discussion() -> None:
     with tempfile.TemporaryDirectory() as directory:
         database = Path(directory) / "control.sqlite3"
@@ -359,6 +457,109 @@ def test_proposals_from_different_repositories_can_share_a_discussion_number() -
         ):
             assert client.post("/api/v1/proposals", json=proposal_payload()).status_code == 201
             assert client.post("/api/v1/proposals", json=proposal_payload()).status_code == 201
+
+
+def test_admin_soft_delete_hides_proposal_and_sync_respects_tombstone() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Path(directory) / "control.sqlite3"
+        app = create_app(
+            Settings(
+                environment="test",
+                database_url=f"sqlite:///{database.as_posix()}",
+                auto_create_schema=True,
+                execution_mode="fake",
+            )
+        )
+        admin = user("admin")
+        app.dependency_overrides[current_active_user] = lambda: admin
+        with TestClient(app) as client:
+            with app.state.session_factory() as session:
+                proposal = Proposal(
+                    author_id=str(admin.id),
+                    author_login=admin.github_login,
+                    title="Proposal to delete",
+                    abstract="A complete local proposal record used to verify administrator deletion.",
+                    domain="Physics",
+                    field="condensed-matter",
+                    task_slug="proposal-to-delete",
+                    evidence="A reproducible reference implementation.",
+                    document=proposal_payload(),
+                    input_valid=True,
+                    status="pending",
+                    discussion_url="https://github.com/example/repo/discussions/41",
+                    discussion_node_id="D_kwDODeleteExample",
+                    discussion_number=41,
+                )
+                session.add(proposal)
+                session.flush()
+                proposal_id = proposal.id
+                revision = TaskRevision(
+                    repo_url="https://github.com/example/tasks",
+                    commit_sha="a" * 40,
+                    task_path="tasks/proposal-to-delete",
+                    resource_requirements={"cpu": 2},
+                    proposal_id=proposal_id,
+                )
+                session.add(revision)
+                session.commit()
+                revision_id = revision.id
+
+            app.dependency_overrides[current_active_user] = lambda: user("member")
+            denied = client.delete(f"/api/v1/proposals/{proposal_id}")
+            assert denied.status_code == 403
+
+            app.dependency_overrides[current_active_user] = lambda: admin
+            deleted = client.delete(f"/api/v1/proposals/{proposal_id}")
+            assert deleted.status_code == 204
+            assert deleted.content == b""
+            assert client.delete(f"/api/v1/proposals/{proposal_id}").status_code == 404
+            assert client.get(f"/api/v1/proposals/{proposal_id}").status_code == 404
+            assert client.put(f"/api/v1/proposals/{proposal_id}", json=proposal_payload()).status_code == 404
+            assert client.get("/api/v1/proposals").json()["items"] == []
+            assert client.get("/api/v1/public/proposals").json()["items"] == []
+
+            with app.state.session_factory() as session:
+                deleted_proposal = session.get(Proposal, proposal_id)
+                assert deleted_proposal is not None
+                assert deleted_proposal.deleted_at is not None
+                retained_revision = session.get(TaskRevision, revision_id)
+                assert retained_revision is not None
+                assert retained_revision.proposal_id == proposal_id
+
+            discussion = {
+                "id": "D_kwDODeleteExample",
+                "number": 41,
+                "url": "https://github.com/example/repo/discussions/41",
+                "title": "[Task Proposal #41] Proposal to delete",
+                "body": ProposalSubmission.model_validate(proposal_payload()).render_discussion(),
+                "category": {"name": "Task Proposals"},
+                "author": {"login": "admin-github"},
+                "labels": {"nodes": []},
+                "closed": False,
+                "createdAt": "2026-09-13T00:00:00Z",
+                "updatedAt": "2026-09-13T00:00:00Z",
+            }
+            with (
+                patch(
+                    "control_panel.community.github_access_token",
+                    AsyncMock(return_value="test-token"),
+                ),
+                patch(
+                    "control_panel.community.fetch_all_discussions",
+                    AsyncMock(return_value=[discussion]),
+                ),
+            ):
+                synced = client.post("/api/v1/proposals/sync-discussions")
+            assert synced.status_code == 200, synced.text
+            assert synced.json() == {
+                "scanned_count": 1,
+                "created_count": 0,
+                "updated_count": 0,
+                "invalid_count": 0,
+                "reviewed_count": 0,
+                "invalid_review_count": 0,
+            }
+            assert client.get("/api/v1/proposals").json()["items"] == []
 
 
 def test_admin_full_sync_upserts_discussions_without_deleting_records() -> None:

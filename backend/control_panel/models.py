@@ -139,6 +139,7 @@ class Proposal(Base):
     discussion_url: Mapped[str | None] = mapped_column(String(500))
     discussion_node_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     discussion_number: Mapped[int | None] = mapped_column(Integer)
+    discord_message_url: Mapped[str | None] = mapped_column(String(500))
     github_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     github_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_schema_version: Mapped[str | None] = mapped_column(String(80))
@@ -164,6 +165,7 @@ class Proposal(Base):
     review_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_input_valid: Mapped[bool] = mapped_column(default=False)
     review_document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

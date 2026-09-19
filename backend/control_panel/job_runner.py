@@ -94,9 +94,9 @@ class JobRunner:
             return False
 
         try:
-            status_code, body = send_delivery(delivery)
+            status_code, body, message_url = send_delivery(delivery)
             with self.sessions() as session:
-                complete_delivery(session, delivery.id, status_code, body)
+                complete_delivery(session, delivery, status_code, body, message_url)
                 session.commit()
             logger.info("completed webhook=%s event=%s", delivery.id, delivery.event_type)
         except Exception as exc:

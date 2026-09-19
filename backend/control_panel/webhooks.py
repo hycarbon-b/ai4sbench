@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -179,21 +180,58 @@ def claim_delivery(session: Session) -> WebhookDelivery | None:
     )
 
 
-def send_delivery(delivery: WebhookDelivery) -> tuple[int, str]:
+def discord_message_url(client: httpx.Client, destination_url: str, body: str) -> str | None:
+    """Build a browser message URL from Discord's execute-webhook response.
+
+    `wait=true` returns the created message and Forum thread IDs, but not the
+    guild ID. The authenticated webhook metadata supplies that final component.
+    Failure to read metadata must not turn an already-sent Discord message into
+    a retryable delivery, which would create a duplicate post.
+    """
+
+    try:
+        message = json.loads(body)
+        message_id = str(message.get("id") or "").strip()
+        channel_id = str(message.get("channel_id") or "").strip()
+        webhook = client.get(destination_url)
+        webhook.raise_for_status()
+        guild_id = str(webhook.json().get("guild_id") or "").strip()
+    except (KeyError, TypeError, ValueError, httpx.HTTPError):
+        return None
+    if not (message_id and channel_id and guild_id):
+        return None
+    return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+
+
+def send_delivery(delivery: WebhookDelivery) -> tuple[int, str, str | None]:
     separator = "&" if "?" in delivery.destination_url else "?"
     with httpx.Client(timeout=15) as client:
         response = client.post(f"{delivery.destination_url}{separator}wait=true", json=delivery.payload)
-    body = response.text[:20_000]
-    if response.is_error:
-        raise WebhookResponseError(response.status_code, body)
-    return response.status_code, body
+        body = response.text[:20_000]
+        if response.is_error:
+            raise WebhookResponseError(response.status_code, body)
+        message_url = discord_message_url(client, delivery.destination_url, body)
+    return response.status_code, body, message_url
 
 
-def complete_delivery(session: Session, delivery_id: str, status_code: int, body: str) -> None:
+def proposal_id_from_delivery(delivery: WebhookDelivery) -> str | None:
+    prefix = "discord:proposal-created:"
+    if delivery.event_type != "proposal_created" or not delivery.dedupe_key.startswith(prefix):
+        return None
+    return delivery.dedupe_key.removeprefix(prefix) or None
+
+
+def complete_delivery(
+    session: Session,
+    delivery: WebhookDelivery,
+    status_code: int,
+    body: str,
+    message_url: str | None,
+) -> None:
     now = utcnow()
     session.execute(
         update(WebhookDelivery)
-        .where(WebhookDelivery.id == delivery_id, WebhookDelivery.state == "sending")
+        .where(WebhookDelivery.id == delivery.id, WebhookDelivery.state == "sending")
         .values(
             state="completed",
             response_status=status_code,
@@ -203,6 +241,13 @@ def complete_delivery(session: Session, delivery_id: str, status_code: int, body
             updated_at=now,
         )
     )
+    proposal_id = proposal_id_from_delivery(delivery)
+    if proposal_id and message_url:
+        session.execute(
+            update(Proposal)
+            .where(Proposal.id == proposal_id)
+            .values(discord_message_url=message_url, updated_at=now)
+        )
 
 
 def fail_delivery(

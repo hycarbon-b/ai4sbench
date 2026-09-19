@@ -132,6 +132,30 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             self.assertEqual(payload["info"]["title"], "AI4S-Bench Control Plane API")
             self.assertIn("community", {tag["name"] for tag in payload["tags"]})
 
+    def test_website_cors_preflight_allows_proposal_updates(self) -> None:
+        cors_app = create_app(
+            Settings(
+                environment="test",
+                database_url="sqlite:///:memory:",
+                auto_create_schema=True,
+                execution_mode="fake",
+                cors_origins=("https://ai4sbench.org",),
+            )
+        )
+        with TestClient(cors_app) as client:
+            response = client.options(
+                "/api/v1/proposals/example-proposal-id",
+                headers={
+                    "Origin": "https://ai4sbench.org",
+                    "Access-Control-Request-Method": "PUT",
+                    "Access-Control-Request-Headers": "content-type",
+                },
+            )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["access-control-allow-origin"], "https://ai4sbench.org")
+        self.assertIn("PUT", response.headers["access-control-allow-methods"])
+        self.assertEqual(response.headers["access-control-allow-credentials"], "true")
+
     def test_website_dist_is_served_beneath_dashboard(self) -> None:
         redirect = self.client.get("/website", follow_redirects=False)
         self.assertEqual(redirect.status_code, 307)
@@ -171,6 +195,20 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(
             proposal_board["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/ProposalBoardListResponse",
+        )
+        proposal_detail = openapi["paths"]["/api/v1/proposals/{proposal_id}"]["get"]
+        self.assertEqual(
+            proposal_detail["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalEditDetailResponse",
+        )
+        proposal_update = openapi["paths"]["/api/v1/proposals/{proposal_id}"]["put"]
+        self.assertEqual(
+            proposal_update["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalSubmission",
+        )
+        self.assertEqual(
+            proposal_update["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ProposalUpdatedResponse",
         )
         review_preview = openapi["paths"]["/api/v1/proposals/reviews/preview"]["post"]
         self.assertEqual(

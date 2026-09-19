@@ -194,6 +194,10 @@ export const createProposal = (input: ProposalInput) =>
     method: "POST",
     body: JSON.stringify(input),
   });
+export const deleteProposal = (id: string) =>
+  api<void>(`/api/v1/proposals/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 export const updateReviewerApplication = (
   id: string,
   input: ReviewerApplicationUpdate,
