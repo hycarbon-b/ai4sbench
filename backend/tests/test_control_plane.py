@@ -25,6 +25,16 @@ from control_panel.services import deterministic_bootstrap_token
 JOB_SECRET = "test-job-secret-that-is-long-enough-456"
 
 
+class FailingLaunchProvider(FakeEC2Provider):
+    """A provider whose launch() always raises, to exercise retry exhaustion."""
+
+    def launch(self, run_id: str, worker_token: str, config: dict) -> str:
+        raise RuntimeError(
+            "InvalidBlockDeviceMapping: Volume of size 30GB is smaller than snapshot "
+            "'snap-example', expect size >= 40GB"
+        )
+
+
 async def control_state(factory, run_id: str) -> tuple[str, str, list[str], int]:
     async with factory() as session:
         stored = await session.get(Run, run_id)
@@ -32,6 +42,13 @@ async def control_state(factory, run_id: str) -> tuple[str, str, list[str], int]
         jobs = list(await session.scalars(select(DatabaseJob)))
         audits = list(await session.scalars(select(AuditEvent)))
         return stored.state, stored.instance_state, [job.state for job in jobs], len(audits)
+
+
+async def make_jobs_claimable_now(factory) -> None:
+    async with factory() as session:
+        for job in await session.scalars(select(DatabaseJob).where(DatabaseJob.state == "pending")):
+            job.available_at = datetime.now(UTC)
+        await session.commit()
 
 
 async def release_active_runs(factory) -> int:
@@ -654,6 +671,45 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             extract_quick_tunnel_url("https://quiet-river.trycloudflare.com ready"),
             "https://quiet-river.trycloudflare.com",
         )
+
+    def test_a_launch_failure_records_the_real_ec2_error_on_every_attempt(self) -> None:
+        """A launch failure happens before any worker exists, so the run's
+        event history is the only record of what went wrong. Each retry's
+        real error must be visible, not just a generic message after the
+        final one is exhausted.
+        """
+        plan = self.create_approved_plan()
+        response = self.client.post(
+            "/api/v1/runs",
+            headers={**self.headers, "Idempotency-Key": str(uuid.uuid4())},
+            json={"plan_id": plan["id"], "timeout_minutes": 180},
+        )
+        run_id = response.json()["id"]
+
+        failing_provider = FailingLaunchProvider()
+        runner = JobRunner(self.settings, failing_provider)
+        for _ in range(5):
+            self.assertTrue(self.client.portal.call(runner.process_one))
+            # Force the next attempt to be immediately claimable instead of
+            # waiting out the retry backoff.
+            self.client.portal.call(make_jobs_claimable_now, self.app.state.session_factory)
+
+        events = self.client.get(f"/api/v1/runs/{run_id}/events", headers=self.headers).json()["items"]
+        attempt_events = [item for item in events if item["event_type"] == "launch_attempt_failed"]
+        final_event = next(item for item in events if item["event_type"] == "launch_failed")
+
+        self.assertGreaterEqual(len(attempt_events), 4)
+        for item in attempt_events:
+            self.assertIn("InvalidBlockDeviceMapping", item["payload"]["error"])
+            self.assertIn("Volume of size 30GB", item["message"])
+        self.assertIn("InvalidBlockDeviceMapping", final_event["payload"]["error"])
+
+        state, instance_state, _jobs, _audits = self.client.portal.call(
+            control_state, self.app.state.session_factory, run_id
+        )
+        self.assertEqual(state, "failed")
+        self.assertEqual(instance_state, "launch_failed")
+        self.client.portal.call(runner.engine.dispose)
 
     def test_reconciler_times_out_committed_run(self) -> None:
         plan = self.create_approved_plan()

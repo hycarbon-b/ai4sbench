@@ -775,6 +775,33 @@ async def reconcile(session: AsyncSession) -> int:
     return len(expired)
 
 
+async def record_job_attempt_failure(session: AsyncSession, job: DatabaseJob, error: str) -> None:
+    """Log one failed launch/terminate attempt with its real error.
+
+    A launch failure happens entirely at the control plane, before any worker
+    instance exists, so there is no [worker]/[harbor] log to fall back on --
+    the run's event history is the only record. Without this, only the
+    generic "retries exhausted" message after the last attempt was visible;
+    every earlier attempt's actual EC2 error (a bad AMI, a misconfigured
+    volume size, a quota limit, ...) was recorded in the job queue's
+    last_error column but never surfaced to the run the operator is looking
+    at.
+    """
+    run_id = str(job.payload.get("run_id", ""))
+    run = await session.get(Run, run_id)
+    if run is None:
+        return
+    event_type = "launch_attempt_failed" if job.kind == "launch_run" else "terminate_attempt_failed"
+    add_event(
+        session,
+        run.id,
+        event_type,
+        f"Attempt {job.attempts} of {job.max_attempts} failed: {error[:500]}",
+        {"attempt": job.attempts, "max_attempts": job.max_attempts, "error": error[:2000]},
+    )
+    await session.commit()
+
+
 async def mark_job_exhausted(session: AsyncSession, job: DatabaseJob) -> None:
     run_id = str(job.payload.get("run_id", ""))
     run = await session.get(Run, run_id)
@@ -784,8 +811,20 @@ async def mark_job_exhausted(session: AsyncSession, job: DatabaseJob) -> None:
         run.state = "failed"
         run.instance_state = "launch_failed"
         run.result = {"error": "EC2 launch retries exhausted", "detail": job.last_error}
-        add_event(session, run.id, "launch_failed", "EC2 launch retries were exhausted")
+        add_event(
+            session,
+            run.id,
+            "launch_failed",
+            "EC2 launch retries were exhausted",
+            {"error": (job.last_error or "")[:2000]},
+        )
     elif job.kind == "terminate_run":
         run.instance_state = "termination_failed"
-        add_event(session, run.id, "terminate_failed", "EC2 termination retries were exhausted")
+        add_event(
+            session,
+            run.id,
+            "terminate_failed",
+            "EC2 termination retries were exhausted",
+            {"error": (job.last_error or "")[:2000]},
+        )
     await session.commit()
