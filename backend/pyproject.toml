@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
   "aiosqlite>=0.21,<1",
   "fastapi>=0.116,<1",
+  "fastapi-mail>=1.6,<2",
   "fastapi-users[oauth,sqlalchemy]>=15.0.5,<16",
   "httpx>=0.28,<1",
   "pydantic-settings>=2.10,<3",

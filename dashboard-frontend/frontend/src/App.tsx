@@ -34,7 +34,7 @@ import {
   getCurrentUser,
   getGithubAuthorizeUrl,
   getProposalDomains,
-  resendWebhookDelivery,
+  resendOutboundDelivery,
   signOut,
   syncProposalDiscussions,
   updateReviewerApplication,
@@ -50,7 +50,7 @@ import {
   type Run,
   type TaskRevision,
   type User,
-  type WebhookDelivery,
+  type OutboundDelivery,
 } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -86,7 +86,7 @@ type View =
   | "plans"
   | "runs"
   | "jobs"
-  | "webhooks"
+  | "deliveries"
   | "cloud"
   | "snapshots"
   | "reviewers"
@@ -97,7 +97,7 @@ const views: View[] = [
   "plans",
   "runs",
   "jobs",
-  "webhooks",
+  "deliveries",
   "cloud",
   "snapshots",
   "reviewers",
@@ -120,7 +120,7 @@ type Ops = {
   plans: Plan[];
   runs: Run[];
   jobs: Job[];
-  webhooks: WebhookDelivery[];
+  deliveries: OutboundDelivery[];
   profiles: CloudProfile[];
   snapshots: DatabaseSnapshot[];
 };
@@ -133,7 +133,7 @@ const emptyOps: Ops = {
   plans: [],
   runs: [],
   jobs: [],
-  webhooks: [],
+  deliveries: [],
   profiles: [],
   snapshots: [],
 };
@@ -276,7 +276,7 @@ export default function App() {
         plans,
         runs,
         jobs,
-        webhooks,
+        deliveries,
         profiles,
         snapshots,
       ] = await Promise.allSettled([
@@ -287,7 +287,7 @@ export default function App() {
           api<{ items: Plan[] }>("/api/v1/plans"),
           api<{ items: Run[] }>("/api/v1/runs"),
           api<{ items: Job[] }>("/api/v1/jobs"),
-          api<{ items: WebhookDelivery[] }>("/api/v1/webhook-deliveries"),
+          api<{ items: OutboundDelivery[] }>("/api/v1/deliveries"),
           api<{ items: CloudProfile[] }>("/api/v1/cloud-profiles"),
           api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots"),
         ]);
@@ -299,7 +299,7 @@ export default function App() {
         plans,
         runs,
         jobs,
-        webhooks,
+        deliveries,
         profiles,
         snapshots,
       ].filter((result) => result.status === "rejected");
@@ -314,8 +314,8 @@ export default function App() {
         plans: plans.status === "fulfilled" ? plans.value.items : current.plans,
         runs: runs.status === "fulfilled" ? runs.value.items : current.runs,
         jobs: jobs.status === "fulfilled" ? jobs.value.items : current.jobs,
-        webhooks:
-          webhooks.status === "fulfilled" ? webhooks.value.items : current.webhooks,
+        deliveries:
+          deliveries.status === "fulfilled" ? deliveries.value.items : current.deliveries,
         profiles:
           profiles.status === "fulfilled" ? profiles.value.items : current.profiles,
         snapshots:
@@ -553,25 +553,25 @@ export default function App() {
       setLoading(false);
     }
   };
-  const resendWebhook = async (delivery: WebhookDelivery) => {
+  const resendDelivery = async (delivery: OutboundDelivery) => {
     if (
       delivery.state === "completed" &&
       !window.confirm(
-        "This delivery already completed. Send the same Discord notification again?",
+        "This delivery already completed. Send it again?",
       )
     )
       return;
     setLoading(true);
     setError("");
     try {
-      await resendWebhookDelivery(delivery.id);
-      setMessage(`Webhook delivery ${short(delivery.id)} queued again.`);
+      await resendOutboundDelivery(delivery.id);
+      setMessage(`Outbound delivery ${short(delivery.id)} queued again.`);
       await loadOps();
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Could not queue the webhook delivery again.",
+          : "Could not queue the outbound delivery again.",
       );
     } finally {
       setLoading(false);
@@ -768,7 +768,7 @@ export default function App() {
               onProposal={submitProposal}
               onSyncDiscussions={syncDiscussions}
               onDeleteProposal={removeProposal}
-              onResendWebhook={resendWebhook}
+              onResendDelivery={resendDelivery}
               onManageReviewer={manageReviewer}
               loading={loading}
             />
@@ -851,7 +851,7 @@ function AdminPanel({
   onProposal,
   onSyncDiscussions,
   onDeleteProposal,
-  onResendWebhook,
+  onResendDelivery,
   onManageReviewer,
   onSaveDatabaseSnapshot,
   loading,
@@ -891,7 +891,7 @@ function AdminPanel({
   onProposal: (event: FormEvent<HTMLFormElement>) => void;
   onSyncDiscussions: () => void;
   onDeleteProposal: (proposal: Proposal) => void;
-  onResendWebhook: (delivery: WebhookDelivery) => void;
+  onResendDelivery: (delivery: OutboundDelivery) => void;
   onManageReviewer: (
     application: ReviewerApplication,
     update: ReviewerApplicationUpdate,
@@ -928,12 +928,12 @@ function AdminPanel({
       />
     );
   if (view === "jobs") return <JobsPanel jobs={ops.jobs} />;
-  if (view === "webhooks")
+  if (view === "deliveries")
     return (
-      <WebhooksPanel
-        deliveries={ops.webhooks}
+      <DeliveriesPanel
+        deliveries={ops.deliveries}
         loading={loading}
-        onResend={onResendWebhook}
+        onResend={onResendDelivery}
       />
     );
   if (view === "reviewers")
@@ -1472,21 +1472,21 @@ function JobsPanel({ jobs }: { jobs: Job[] }) {
     </>
   );
 }
-function WebhooksPanel({
+function DeliveriesPanel({
   deliveries,
   loading,
   onResend,
 }: {
-  deliveries: WebhookDelivery[];
+  deliveries: OutboundDelivery[];
   loading: boolean;
-  onResend: (delivery: WebhookDelivery) => void;
+  onResend: (delivery: OutboundDelivery) => void;
 }) {
   return (
     <>
       <Title
-        eyebrow="Outbound notifications"
-        title="Discord webhook deliveries"
-        description="Inspect the exact destination, payload, response, and retry state for proposal and review notifications."
+        eyebrow="Outbound operations"
+        title="Outbound deliveries"
+        description="Inspect delivery type, destination, payload, response, and retry state."
       />
       <DataCard
         title="Delivery history"
@@ -1494,7 +1494,7 @@ function WebhooksPanel({
       >
         <Table
           headers={[
-            "Event",
+            "Type / event",
             "Status",
             "Attempts",
             "Destination",
@@ -1507,8 +1507,9 @@ function WebhooksPanel({
             <tr key={delivery.id}>
               <td className="min-w-44 align-top">
                 <code className="text-xs text-sky-200">
-                  {delivery.event_type}
+                  {delivery.delivery_type}
                 </code>
+                <p className="mt-1 text-xs text-slate-300">{delivery.event_type}</p>
                 <p className="mt-1 text-xs text-slate-500">
                   {when(delivery.created_at)} · {short(delivery.id)}
                 </p>
@@ -1524,7 +1525,7 @@ function WebhooksPanel({
               </td>
               <td className="max-w-64 align-top">
                 <code className="block break-all text-[11px] leading-5 text-slate-300">
-                  {delivery.destination_url}
+                  {delivery.destination}
                 </code>
               </td>
               <td className="min-w-44 align-top">
@@ -1571,7 +1572,7 @@ function WebhooksPanel({
           ))}
         </Table>
         {!deliveries.length && (
-          <Empty text="No proposal or review webhook deliveries have been recorded." />
+          <Empty text="No outbound deliveries have been recorded." />
         )}
       </DataCard>
     </>
@@ -2402,7 +2403,7 @@ function Sidebar({
         ["plans", "Execution plans", SquareStack],
         ["runs", "Run queue", Rocket],
         ["jobs", "Worker jobs", ServerCog],
-        ["webhooks", "Discord webhooks", Webhook],
+        ["deliveries", "Outbound deliveries", Webhook],
         ["cloud", "Cloud profiles", CloudCog],
         ["snapshots", "Database snapshots", History],
       ]

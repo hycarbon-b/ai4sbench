@@ -71,9 +71,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "operations",
-        "description": (
-            "Administrator view of asynchronous database-backed jobs and outbound webhook deliveries."
-        ),
+        "description": ("Administrator view of asynchronous database-backed jobs and outbound deliveries."),
     },
     {
         "name": "worker",

@@ -123,10 +123,11 @@ export type Job = {
   last_error: string | null;
 };
 
-export type WebhookDelivery = {
+export type OutboundDelivery = {
   id: string;
   event_type: string;
-  destination_url: string;
+  delivery_type: "discord" | "github_discussion" | "smtp";
+  destination: string;
   payload: Record<string, unknown>;
   dedupe_key: string;
   state: string;
@@ -218,8 +219,8 @@ export const syncProposalDiscussions = () =>
   }>("/api/v1/proposals/sync-discussions", { method: "POST" });
 export const signOut = () =>
   api<void>("/api/v1/auth/logout", { method: "POST" });
-export const resendWebhookDelivery = (id: string) =>
-  api<WebhookDelivery>(`/api/v1/webhook-deliveries/${encodeURIComponent(id)}/resend`, {
+export const resendOutboundDelivery = (id: string) =>
+  api<OutboundDelivery>(`/api/v1/deliveries/${encodeURIComponent(id)}/resend`, {
     method: "POST",
   });
 export const listDatabaseSnapshots = () =>

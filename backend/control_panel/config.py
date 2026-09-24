@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     contributor_github_emails: tuple[str, ...] = ()
     reviewer_github_logins: tuple[str, ...] = ()
     discord_webhook_url: SecretStr | None = None
+    smtp_enabled: bool = False
+    smtp_server: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str = ""
+    smtp_password: SecretStr | None = None
+    smtp_from: str = ""
+    smtp_from_name: str = "AI4S-Bench"
+    smtp_starttls: bool = True
+    smtp_ssl_tls: bool = False
+    smtp_validate_certs: bool = True
+    smtp_timeout_seconds: int = Field(default=15, ge=1, le=120)
     website_public_base_url: str = "https://ai4sbench.org"
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
@@ -118,6 +129,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production(self) -> Settings:
+        if self.smtp_enabled:
+            if not self.smtp_server or not self.smtp_from:
+                raise ValueError("SMTP server and sender must be configured when SMTP is enabled")
+            if self.smtp_starttls and self.smtp_ssl_tls:
+                raise ValueError("SMTP STARTTLS and SSL/TLS cannot both be enabled")
         if self.environment == "production":
             if self.auto_create_schema:
                 raise ValueError("TBCP_AUTO_CREATE_SCHEMA must be false in production")

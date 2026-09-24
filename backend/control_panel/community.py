@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database import get_session
+from .deliveries import enqueue_proposal_notification, enqueue_review_notification
 from .identity import OAuthAccount, User, current_active_user, current_optional_user
 from .models import CloudProfile, ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
 from .schemas import (
@@ -40,7 +41,6 @@ from .schemas import (
     ReviewerApplicationCreatedResponse,
     ReviewerApplicationSubmission,
 )
-from .webhooks import enqueue_proposal_notification, enqueue_review_notification
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -895,9 +895,7 @@ async def preview_proposal(
         "The endpoint has no side effects."
     ),
 )
-async def preview_proposal_review(
-    body: ProposalReview, _user: ReviewerDep
-) -> ProposalReviewPreviewResponse:
+async def preview_proposal_review(body: ProposalReview, _user: ReviewerDep) -> ProposalReviewPreviewResponse:
     return {
         "input": body,
         "comment": {"body": body.render_comment()},

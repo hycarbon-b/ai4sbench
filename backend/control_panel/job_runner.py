@@ -13,8 +13,9 @@ from sqlalchemy import select
 
 from .config import Settings, get_settings
 from .database import Base, create_database_engine, create_session_factory
+from .deliveries import claim_delivery, complete_delivery, fail_delivery, send_delivery
 from .job_queue import claim, complete, defer, fail
-from .models import DatabaseJob, WebhookDelivery
+from .models import DatabaseJob, OutboundDelivery
 from .providers import EC2Provider, provider_from_settings
 from .services import (
     CapacityError,
@@ -25,7 +26,6 @@ from .services import (
     reconcile,
     record_job_attempt_failure,
 )
-from .webhooks import claim_delivery, complete_delivery, fail_delivery, send_delivery
 
 logger = logging.getLogger("ai4sbench.jobs")
 
@@ -101,7 +101,7 @@ class JobRunner:
                         await mark_job_exhausted(session, current)
         return True
 
-    async def process_webhook_one(self) -> bool:
+    async def process_delivery_one(self) -> bool:
         async with self.sessions() as session:
             delivery = await claim_delivery(session)
             await session.commit()
@@ -109,15 +109,25 @@ class JobRunner:
             return False
 
         try:
-            status_code, body, message_url = await send_delivery(delivery)
+            status_code, body, message_url = await send_delivery(delivery, self.settings)
             async with self.sessions() as session:
                 await complete_delivery(session, delivery, status_code, body, message_url)
                 await session.commit()
-            logger.info("completed webhook=%s event=%s", delivery.id, delivery.event_type)
+            logger.info(
+                "completed delivery=%s type=%s event=%s",
+                delivery.id,
+                delivery.delivery_type,
+                delivery.event_type,
+            )
         except Exception as exc:
-            logger.exception("failed webhook=%s event=%s", delivery.id, delivery.event_type)
+            logger.exception(
+                "failed delivery=%s type=%s event=%s",
+                delivery.id,
+                delivery.delivery_type,
+                delivery.event_type,
+            )
             async with self.sessions() as session:
-                current = await session.get(WebhookDelivery, delivery.id)
+                current = await session.get(OutboundDelivery, delivery.id)
                 if current is not None:
                     await fail_delivery(
                         session,
@@ -134,8 +144,8 @@ class JobRunner:
         async with self.sessions() as session:
             await reconcile(session)
         processed_job = await self.process_one()
-        processed_webhook = await self.process_webhook_one()
-        return processed_job or processed_webhook
+        processed_delivery = await self.process_delivery_one()
+        return processed_job or processed_delivery
 
     async def run_forever(self) -> None:
         await self.initialize()
@@ -152,8 +162,8 @@ class JobRunner:
                     logger.warning("timed out runs=%s", reconciled)
                 last_reconcile = now
             processed_job = await self.process_one()
-            processed_webhook = await self.process_webhook_one()
-            if not processed_job and not processed_webhook:
+            processed_delivery = await self.process_delivery_one()
+            if not processed_job and not processed_delivery:
                 await asyncio.sleep(self.settings.queue_poll_seconds)
         await self.engine.dispose()
 

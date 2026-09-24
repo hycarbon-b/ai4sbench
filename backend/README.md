@@ -104,7 +104,7 @@ structured review reply and latest linked task revision. Review comments are
 accepted only from administrators, approved reviewer applicants, or GitHub
 logins configured in `TBCP_REVIEWER_GITHUB_LOGINS`.
 
-## Reviewer applications and Discord deliveries
+## Reviewer applications and outbound deliveries
 
 The Website reviewer form submits to `POST /api/v1/reviewers`.
 Administrators manage records through:
@@ -114,11 +114,15 @@ Administrators manage records through:
 
 An approved application grants review access only when it has a GitHub
 username. `TBCP_DISCORD_WEBHOOK_URL` enables queued Proposal and review
-notifications. The job runner sends them, while administrators inspect or retry
-them through:
+notifications. The generic outbound queue also supports SMTP through
+FastAPI-Mail, but it is disabled by default and no current business flow queues
+email. Configure SMTP only when a later internal flow calls the queue service.
+GitHub Discussion delivery is a reserved type; existing Discussion creation and
+review replies remain synchronous. The job runner sends enabled deliveries,
+while administrators inspect or retry them through:
 
-- `GET /api/v1/webhook-deliveries`
-- `POST /api/v1/webhook-deliveries/{delivery_id}/resend`
+- `GET /api/v1/deliveries`
+- `POST /api/v1/deliveries/{delivery_id}/resend`
 
 After a Proposal-created Discord delivery succeeds, the backend records its
 Discord permalink in `proposals.discord_message_url`. The field is returned by

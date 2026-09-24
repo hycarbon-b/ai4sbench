@@ -18,15 +18,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import Principal, get_principal
 from .config import Settings
 from .database import get_session
+from .deliveries import resend_delivery
 from .github_source import GitHubTaskSource
 from .models import (
     DatabaseJob,
     ExecutionPlan,
+    OutboundDelivery,
     ReviewerApplication,
     Run,
     RunEvent,
     TaskRevision,
-    WebhookDelivery,
 )
 from .schemas import (
     CreatedRunResponse,
@@ -38,6 +39,8 @@ from .schemas import (
     ManualBatchRunCreate,
     ManualBatchRunResponse,
     ManualRunCreate,
+    OutboundDeliveryListResponse,
+    OutboundDeliveryResponse,
     PlanApprove,
     PlanCreate,
     PlanListResponse,
@@ -58,8 +61,6 @@ from .schemas import (
     TaskRevisionListResponse,
     TaskRevisionResponse,
     TaskRevisionSync,
-    WebhookDeliveryListResponse,
-    WebhookDeliveryResponse,
     WorkerClaim,
     WorkerClaimResponse,
     WorkerComplete,
@@ -85,7 +86,6 @@ from .services import (
     upsert_task_revision,
     upsert_task_revisions,
 )
-from .webhooks import resend_delivery
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 AdminDep = Annotated[Principal, Depends(get_principal)]
@@ -530,11 +530,12 @@ async def list_jobs(session: SessionDep) -> DatabaseJobListResponse:
     }
 
 
-def webhook_delivery_dict(item: WebhookDelivery) -> dict[str, object]:
+def outbound_delivery_dict(item: OutboundDelivery) -> dict[str, object]:
     return {
         "id": item.id,
         "event_type": item.event_type,
-        "destination_url": item.destination_url,
+        "delivery_type": item.delivery_type,
+        "destination": item.destination,
         "payload": item.payload,
         "dedupe_key": item.dedupe_key,
         "state": item.state,
@@ -551,38 +552,38 @@ def webhook_delivery_dict(item: WebhookDelivery) -> dict[str, object]:
 
 
 @admin_router.get(
-    "/webhook-deliveries",
+    "/deliveries",
     tags=["operations"],
-    response_model=WebhookDeliveryListResponse,
-    summary="List outbound webhook deliveries",
+    response_model=OutboundDeliveryListResponse,
+    summary="List outbound deliveries",
 )
-async def list_webhook_deliveries(session: SessionDep) -> WebhookDeliveryListResponse:
+async def list_outbound_deliveries(session: SessionDep) -> OutboundDeliveryListResponse:
     items = await session.scalars(
-        select(WebhookDelivery).order_by(WebhookDelivery.created_at.desc()).limit(100)
+        select(OutboundDelivery).order_by(OutboundDelivery.created_at.desc()).limit(100)
     )
-    return {"items": [webhook_delivery_dict(item) for item in items]}
+    return {"items": [outbound_delivery_dict(item) for item in items]}
 
 
 @admin_router.post(
-    "/webhook-deliveries/{delivery_id}/resend",
+    "/deliveries/{delivery_id}/resend",
     tags=["operations"],
-    response_model=WebhookDeliveryResponse,
-    summary="Queue a webhook delivery again",
+    response_model=OutboundDeliveryResponse,
+    summary="Queue an outbound delivery again",
     responses={
-        404: {"description": "The webhook delivery does not exist."},
-        409: {"description": "The webhook is currently being sent."},
+        404: {"description": "The outbound delivery does not exist."},
+        409: {"description": "The outbound delivery is currently being sent."},
     },
 )
-async def post_resend_webhook_delivery(delivery_id: str, session: SessionDep) -> WebhookDeliveryResponse:
-    delivery = await session.get(WebhookDelivery, delivery_id)
+async def post_resend_outbound_delivery(delivery_id: str, session: SessionDep) -> OutboundDeliveryResponse:
+    delivery = await session.get(OutboundDelivery, delivery_id)
     if delivery is None:
-        raise HTTPException(status_code=404, detail="Webhook delivery not found")
+        raise HTTPException(status_code=404, detail="Outbound delivery not found")
     try:
         await resend_delivery(session, delivery)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await session.commit()
-    return webhook_delivery_dict(delivery)
+    return outbound_delivery_dict(delivery)
 
 
 @worker_router.post("/runs/{run_id}/claim", response_model=WorkerClaimResponse)

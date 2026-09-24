@@ -680,10 +680,11 @@ class DatabaseJobListResponse(BaseModel):
     items: list[DatabaseJobResponse]
 
 
-class WebhookDeliveryResponse(BaseModel):
+class OutboundDeliveryResponse(BaseModel):
     id: str
     event_type: str
-    destination_url: str
+    delivery_type: Literal["discord", "github_discussion", "smtp"]
+    destination: str
     payload: dict[str, Any]
     dedupe_key: str
     state: str
@@ -698,8 +699,8 @@ class WebhookDeliveryResponse(BaseModel):
     updated_at: datetime
 
 
-class WebhookDeliveryListResponse(BaseModel):
-    items: list[WebhookDeliveryResponse]
+class OutboundDeliveryListResponse(BaseModel):
+    items: list[OutboundDeliveryResponse]
 
 
 class WorkerRunReference(BaseModel):
