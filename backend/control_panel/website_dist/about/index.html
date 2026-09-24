@@ -19,10 +19,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/tokens.css">
-  <link rel="stylesheet" href="../css/base.css">
-  <link rel="stylesheet" href="../css/components.css">
-  <link rel="stylesheet" href="../css/pages.css">
+  <link rel="stylesheet" href="../css/tokens.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/base.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/components.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/pages.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/workflow.css?v=20260921-3">
 </head>
 <body data-root="../" data-page="about">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -65,58 +66,59 @@
       <div class="container">
         <span class="eyebrow">About</span>
         <h1>Where are the questions?</h1>
-        <p class="lede">Questions drive us to discovery, and they are now driving the agent to improve. Especially in interdisciplinary fields, agent can propose strong solution from broad literature, but the question that matters, hidden deep inside the domain researchers, you and I. AI4S-bench is the communities effort that aims to build the collection with you together.</p>
+        <p class="lede">Questions drive discovery, and today they also drive the progress of AI agents. In interdisciplinary fields especially, an agent can assemble strong solutions from a broad literature, yet the questions that matter most still live with domain researchers. AI4S-Benchmark is a community effort to collect those questions, together with the researchers who know them best.</p>
       </div>
     </section>
 
     <div class="container about-layout">
       <div class="prose">
         <h2 id="why-now">Why now?</h2>
-        <p>AI systems are becoming capable of carrying out increasingly complex engineering and research workflows, but their true scientific capabilities are still poorly characterized. Coding has mature executable evaluations; many scientific domains do not. As agents begin to touch real research, the absence of honest measurement becomes the bottleneck.</p>
+        <p>AI systems are becoming capable of carrying out increasingly complex engineering and research workflows, but their true scientific capabilities are still poorly characterized. Coding has mature executable evaluations; many scientific domains do not. As agents begin to take part in real research, the lack of rigorous measurement becomes the bottleneck.</p>
         <p>Genuinely valuable scientific problems cannot simply be scraped from the web. Scientific software, data and evaluation expertise are scattered across laboratories, and determining whether an output is <em>scientifically correct</em> often requires domain expertise.</p>
-        <p>Researchers working at the frontier know which problems actually matter, which workflows are genuinely difficult, where current agents hallucinate or fail, what constitutes scientifically meaningful progress, and how a result can be honestly verified. AI4S-Benchmark turns that distributed expertise into open, executable scientific evaluations.</p>
+        <p>Researchers working at the frontier know which problems actually matter, which workflows are genuinely difficult, where current agents hallucinate or fail, what constitutes scientifically meaningful progress, and how a result can be properly verified. AI4S-Benchmark turns that distributed expertise into open, executable scientific evaluations.</p>
 
         <h2 id="why-interdisciplinary">Why interdisciplinary science?</h2>
-        <p>Important scientific discoveries frequently emerge at disciplinary boundaries, while successful AI agents increasingly need to combine knowledge, reasoning, code, tools and scientific domain expertise. Interdisciplinary tasks are therefore especially valuable for measuring emerging scientific capability — and especially encouraged in this benchmark.</p>
+        <p>Important scientific discoveries frequently emerge at disciplinary boundaries, while successful AI agents increasingly need to combine knowledge, reasoning, code, tools and scientific domain expertise. Interdisciplinary tasks are therefore especially valuable for measuring emerging scientific capability, and this benchmark actively encourages them.</p>
 
         <h2 id="good-task">What counts as a good task?</h2>
         <p>Every task must clear three bars:</p>
         <ul>
-          <li><strong>Scientific value.</strong> Researchers in the field would consider the problem worth solving on its own merits — never difficulty invented purely to confuse an AI.</li>
+          <li><strong>Scientific value.</strong> Researchers in the field would consider the problem worth solving on its own merits. Difficulty invented purely to confuse an AI does not qualify.</li>
           <li><strong>Verifiable.</strong> Correctness can be judged through a script, metric, experimental criterion or explicit scientific evaluation procedure.</li>
-          <li><strong>Frontier difficulty.</strong> The task remains genuinely challenging, even if it is an open problem, but not artificial difficulty or tricky.</li>
+          <li><strong>Frontier difficulty.</strong> The task remains genuinely challenging for current agents. Open problems qualify; artificial difficulty and trick questions do not.</li>
         </ul>
-        <p>Tasks also declare their integrity posture up front: contamination risk, answer-leakage vectors, and the anti-cheating measures the environment enforces.</p>
+        <p>Each task also states its integrity measures up front: the contamination risk, possible routes for answer leakage, and the anti-cheating measures the environment enforces.</p>
 
         <h2 id="review">How are tasks reviewed?</h2>
-        <p>Every task follows the same transparent path, and recorded in GitHub:</p>
+        <p>Every task follows the same transparent path, recorded on GitHub:</p>
         <ol>
-          <li><strong>Submit.</strong> A researcher proposes a task through the official issue form.</li>
+          <li><strong>Submit.</strong> A researcher proposes a task through the proposal form.</li>
           <li><strong>Scientific review.</strong> Automated checks verify format and duplication; domain reviewers assess scientific value, verifiability and difficulty.</li>
+          <li><strong>Revision.</strong> Authors revise their proposal on its task page, and the review record updates with it. Discussion happens on <a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>; the GitHub Discussion holds the structured record that review and automation read.</li>
           <li><strong>Task PR.</strong> The specification, environment, evaluator and anti-cheating measures are submitted as a structured pull request.</li>
           <li><strong>Agent testing.</strong> Frontier agents are run; pass rate, runtime, cost and failure modes are recorded.</li>
           <li><strong>Release.</strong> Verified tasks enter a versioned release.</li>
         </ol>
-        <p>Publicly, tasks carry one of five statuses — <em>Proposed, Under Review, Agent Testing, Verified, Released</em> — so visitors never need to understand the full internal state machine.</p>
+        <p>The task board shows where every task stands: <em>Pending Review</em>, <em>Changes Requested</em>, <em>Approved</em> or <em>Rejected</em> during review, then <em>Task PR</em>, <em>Agent Testing</em> and <em>Released</em>. The <a href="../guide/">contributor guide</a> walks through each stage.</p>
 
         <h2 id="evaluation">How are agents evaluated?</h2>
-        <p id="methodology">Agents run inside the task's execution environment under recorded configuration: harness version, model and scaffold identity, budgets, and limits. Scoring is performed by the task's evaluator — never by agent-controlled code — against references that stay hidden from the agent wherever the design requires it.</p>
-        <p>An agent/scaffold and its underlying foundation model are tracked as separate entities. Published results carry score, cost, runtime and a verification status; a result is marked <strong>Verified</strong> only when it was reproduced or validated under the AI4S-Benchmark evaluation procedure. Detailed methodology lives with the harness in the benchmark repository.</p>
+        <p id="methodology">Agents run inside the task's execution environment under a recorded configuration: harness version, model and scaffold identity, budgets and limits. Scoring is performed by the task's evaluator, never by code the agent controls, against reference data that stays hidden from the agent wherever the task design requires it.</p>
+        <p>An agent scaffold and its underlying foundation model are tracked separately. Published results carry score, cost, runtime and a verification status; a result is marked <strong>Verified</strong> only when it was reproduced or validated under the AI4S-Benchmark evaluation procedure. Detailed methodology lives with the harness in the benchmark repository.</p>
 
         <h2 id="governance">Who governs the project?</h2>
         <p>AI4S-Benchmark is community-governed. Contribution points, roles (Active Contributor, Core Contributor, Maintainer) and area committees are defined in the public <a href="../contributors/#credit">credit and governance policy</a>. Maintainers participate in task acceptance, review organization, contributor management and roadmap decisions. Scientific areas may form field-specific committees that organize reviews and decide task acceptance in their area.</p>
 
         <h2 id="open">What does open and independent mean?</h2>
-        <p>Open source, in public, with GitHub as the operational backend: task specifications, review history, evaluator code, releases and evaluation records. Independent means the benchmark is not owned by any single lab or model vendor, and no participant gets private influence over task selection or scoring.</p>
+        <p>Open means that everything happens in public on GitHub: task specifications, review history, evaluator code, releases and evaluation records. Independent means the benchmark is not owned by any single lab or model vendor, and no participant has private influence over task selection or scoring.</p>
 
         <h2 id="roadmap">The long-term roadmap</h2>
         <p>The project moves through three phases:</p>
         <ul>
-          <li><strong>Bench</strong> <em>(current)</em> — continuously test frontier AI agents against difficult scientific problems and measure the moving boundary of AI × Science capability.</li>
-          <li><strong>Dataset</strong> — accumulate tasks, execution environments, agent trajectories, evaluators and scientific verification systems into a valuable scientific dataset.</li>
-          <li><strong>Challenge</strong> — organize open challenges around important problems that remain unsolved, revisiting them as AI systems become stronger.</li>
+          <li><strong>Bench</strong> <em>(current)</em>: continuously test frontier AI agents on difficult scientific problems and track the moving frontier of AI capability in science.</li>
+          <li><strong>Dataset</strong>: accumulate tasks, execution environments, agent trajectories, evaluators and scientific verification systems into a scientific dataset of lasting value.</li>
+          <li><strong>Challenge</strong>: organize open challenges around important problems that remain unsolved, and revisit them as AI systems become stronger.</li>
         </ul>
-        <p style="margin-bottom:0;">Detailed documentation — schemas, validators, review guidelines and the evaluation harness — lives in the <a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>.</p>
+        <p style="margin-bottom:0;">Detailed documentation, including schemas, validators, review guidelines and the evaluation harness, lives in the <a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>.</p>
       </div>
 
       <nav class="about-toc" aria-label="On this page">
@@ -165,6 +167,8 @@
           <h4>Contribute</h4>
           <ul>
             <li><a href="../submit/">Submit a Task</a></li>
+            <li><a href="../guide/">Contributor Guide</a></li>
+            <li><a href="../guide/check.html">Pre-flight Check</a></li>
             <li><a href="../reviewers/">Become a Reviewer</a></li>
             <li><a href="../contributors/">Contributors</a></li>
             <li><a href="../contributors/#credit">Credit &amp; Governance</a></li>
@@ -187,7 +191,7 @@
     </div>
   </footer>
 
-  <script type="module" src="../js/app.js"></script>
+  <script type="module" src="../js/app.js?v=20260921-3"></script>
 
 </body>
 </html>

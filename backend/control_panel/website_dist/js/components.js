@@ -2,7 +2,9 @@
    AI4S-Benchmark · Shared render helpers
    ============================================================ */
 
-import { ROOT } from "./data.js";
+import { ROOT } from "./data.js?v=20260921-3";
+import { displayStatus, lifecycle, STATUS_INFO } from "./lifecycle.js?v=20260921-3";
+import { excerptHTML } from "./richtext.js?v=20260921-3";
 
 /** Escape untrusted-ish text before inserting into HTML strings. */
 export function esc(value) {
@@ -35,6 +37,8 @@ const STATUS_ICONS = {
     '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.8 6.1l1.5 1.6 2.9-3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   released:
     '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.6" fill="currentColor" opacity="0.25"/><circle cx="6" cy="6" r="2.4" fill="currentColor"/></svg>',
+  implementation:
+    '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="3.4" cy="3" r="1.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="3.4" cy="9" r="1.4" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8.6" cy="9" r="1.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 4.4v3.2M8.6 7.6V5.2a1.6 1.6 0 0 0-1.6-1.6H5.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
 };
 
 const STATUS_LABELS = {
@@ -47,12 +51,36 @@ const STATUS_LABELS = {
   agent_testing: "Agent Testing",
   verified: "Verified",
   released: "Released",
+  implementation: "Task PR",
+};
+
+/* Hover text for every badge: what the status means and what happens next. */
+const STATUS_TITLES = {
+  proposed: "A researcher has proposed this task. It has not yet entered formal scientific review.",
+  under_review: "Domain reviewers are assessing scientific value, verifiability and difficulty.",
+  verified: "The task, environment and evaluator have been validated.",
+  ...Object.fromEntries(Object.entries(STATUS_INFO).map(([key, info]) => [key, info.description])),
 };
 
 export function statusBadge(status) {
   const label = STATUS_LABELS[status] ?? status;
   const icon = STATUS_ICONS[status] ?? "";
-  return `<span class="badge badge--${esc(status)}">${icon}${esc(label)}</span>`;
+  const title = STATUS_TITLES[status];
+  return `<span class="badge badge--${esc(status)}"${title ? ` title="${esc(title)}"` : ""}>${icon}${esc(label)}</span>`;
+}
+
+/**
+ * Five-segment progress meter for a task row: where the task sits in
+ * proposal → review → task PR → evaluation → release.
+ */
+export function stageMeter(task) {
+  const stages = lifecycle(task);
+  const now = stages.find((s) => ["current", "attention", "stopped"].includes(s.state)) ?? stages[stages.length - 1];
+  const summary = `Stage ${now.index + 1} of ${stages.length}: ${now.label} — ${now.note}`;
+  return `<span class="stage-meter" title="${esc(summary)}" role="img" aria-label="${esc(summary)}">
+    <span class="stage-meter__bar" aria-hidden="true">${stages.map((s) => `<i class="is-${s.state}"></i>`).join("")}</span>
+    <span class="stage-meter__label">${now.index + 1}/${stages.length} · ${esc(now.short)}</span>
+  </span>`;
 }
 
 export function chip(text) {
@@ -62,6 +90,8 @@ export function chip(text) {
 /* ---- Icons ------------------------------------------------- */
 
 export const ICONS = {
+  discord:
+    '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.05 3.02A12.3 12.3 0 0 0 9.99 2.1a8.5 8.5 0 0 0-.39.79 11.4 11.4 0 0 0-3.2 0 8.4 8.4 0 0 0-.4-.79 12.3 12.3 0 0 0-3.06.92C1 5.9.46 8.7.73 11.47a12.4 12.4 0 0 0 3.76 1.88c.3-.41.57-.85.8-1.31a8 8 0 0 1-1.26-.6c.1-.08.21-.16.31-.24a8.85 8.85 0 0 0 7.52 0l.31.24c-.4.24-.82.44-1.26.6.23.46.5.9.8 1.31a12.4 12.4 0 0 0 3.76-1.88c.32-3.2-.54-5.98-2.42-8.45ZM5.66 9.77c-.73 0-1.33-.67-1.33-1.49s.58-1.5 1.33-1.5 1.35.68 1.34 1.5c0 .82-.59 1.49-1.34 1.49Zm4.68 0c-.73 0-1.33-.67-1.33-1.49s.58-1.5 1.33-1.5 1.35.68 1.34 1.5c0 .82-.59 1.49-1.34 1.49Z"/></svg>',
   github:
     '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>',
   check:
@@ -104,9 +134,19 @@ export function emptyState({ title, text, actionsHTML = "" }) {
 
 /* ---- Formatting ------------------------------------------- */
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * "2026-09-11T20:02:56.340053" → "11 Sep 2026". Control-plane timestamps
+ * carry no zone and are UTC; anything unparseable is returned as-is.
+ */
 export function formatDate(iso) {
   if (!iso) return "—";
-  return iso; // dates render in ISO form (mono metadata idiom)
+  const text = String(iso);
+  const hasZone = /(Z|[+-]\d\d:?\d\d)$/.test(text);
+  const date = new Date(text.length === 10 || hasZone ? text : `${text}Z`);
+  if (Number.isNaN(date.getTime())) return text;
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 export function taskURL(task) {
@@ -147,11 +187,12 @@ export function taskCard(task) {
     <div class="task-row__head">
       <span class="task-row__id mono">${esc(identifier)}</span>
       <h3 class="task-row__title"><a href="${taskURL(task)}">${esc(task.title)}</a></h3>
-      <span class="task-row__badges">${statusBadge(task.status)}</span>
+      <span class="task-row__badges">${statusBadge(displayStatus(task))}</span>
     </div>
-    <p class="task-row__desc">${esc(task.review_short_description ?? task.problem)}</p>
+    <p class="task-row__desc">${excerptHTML(task.review_short_description ?? task.problem)}</p>
     <div class="task-row__foot">
       <span class="task-row__chips">${chips}</span>
+      ${stageMeter(task)}
       <span class="task-row__facts mono">${facts.join(" · ")}${facts.length ? " · " : ""}${esc(formatDate(task.updated_at))}</span>
     </div>
   </article>`;

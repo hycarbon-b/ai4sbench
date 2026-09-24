@@ -1,9 +1,21 @@
 [
   {
-    "date": "2026-08-16",
-    "title": "First candidate pilot task enters scientific review",
-    "text": "Active Learning for Electronic Structure is the first candidate task under review for release v0.1.",
+    "date": "2026-09-21",
+    "title": "Task lifecycle, contributor guide and pre-flight check",
+    "text": "Every task page now shows its five stages, from proposal to release. A new contributor guide and a task PR pre-flight check help authors turn approved proposals into tasks.",
+    "link": "guide/"
+  },
+  {
+    "date": "2026-09-21",
+    "title": "19 proposals from 9 researchers across 7 domains",
+    "text": "The task board now holds 19 scientific proposals awaiting domain review, from quantum many-body physics to immunology and battery science.",
     "link": "tasks/"
+  },
+  {
+    "date": "2026-09-13",
+    "title": "Authors revise proposals on the site",
+    "text": "Authors can edit their proposal on its task page with a live preview; saving updates the GitHub Discussion at the same time.",
+    "link": "submit/"
   },
   {
     "date": "2026-08-16",

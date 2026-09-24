@@ -2,8 +2,8 @@
    AI4S-Benchmark · Releases
    ============================================================ */
 
-import { getReleases, ROOT } from "../data.js";
-import { esc, emptyState } from "../components.js";
+import { getReleases, ROOT } from "../data.js?v=20260921-3";
+import { esc, emptyState, formatDate } from "../components.js?v=20260921-3";
 
 const STATUS_BADGE = {
   preparing: '<span class="badge badge--preparing">Preparing</span>',
@@ -36,13 +36,13 @@ getReleases()
         <div>
           <p class="release-card__version">${esc(r.version)}</p>
           ${STATUS_BADGE[r.status] ?? ""}
-          ${r.date ? `<p class="mono text-muted" style="margin-top: var(--space-3); font-size: var(--text-xs);">${esc(r.date)}</p>` : `<p class="text-muted" style="margin-top: var(--space-3); font-size: var(--text-xs);">Date to be announced</p>`}
+          ${r.date ? `<p class="mono text-muted" style="margin-top: var(--space-3); font-size: var(--text-xs);">${esc(formatDate(r.date))}</p>` : `<p class="text-muted" style="margin-top: var(--space-3); font-size: var(--text-xs);">Date to be announced</p>`}
         </div>
         <div>
           <p class="text-secondary" style="margin-bottom:0;">${esc(r.summary ?? "")}</p>
           ${
             r.status === "preparing"
-              ? `<p class="text-muted" style="font-size: var(--text-sm); margin-top: var(--space-3);">Task counts, evaluated agents and release notes are published when the release ships — each release freezes exactly what was evaluated, so results stay reproducible.</p>`
+              ? `<p class="text-muted" style="font-size: var(--text-sm); margin-top: var(--space-3);">Task counts, evaluated agents and release notes are published when the release ships.</p>`
               : `<div class="release-card__stats">
                   ${stat("Tasks", r.tasks)}
                   ${stat("Domains", r.domains)}

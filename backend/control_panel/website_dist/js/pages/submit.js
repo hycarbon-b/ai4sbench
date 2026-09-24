@@ -5,8 +5,8 @@
    Field → schema mapping lives in ../proposal.js (DOM-free).
    ============================================================ */
 
-import { esc, ICONS } from "../components.js?v=20260908";
-import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20260908";
+import { esc, ICONS } from "../components.js?v=20260921-3";
+import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20260921-3";
 import {
   LIMITS,
   STEP_FIELDS,
@@ -15,7 +15,10 @@ import {
   buildProposalSubmission,
   buildMarkdown,
   slugify,
-} from "../proposal.js?v=20260908";
+} from "../proposal.js?v=20260921-3";
+import { renderRich, mountMath } from "../richtext.js?v=20260921-3";
+import { mountContributorRows } from "../contributor-fields.js?v=20260921-3";
+import { mountFieldAdvice, checklistHTML } from "../proposal-advice.js?v=20260921-3";
 
 const STEPS = ["Scientific problem", "Environment", "Evaluation", "Contributor", "Review & submit"];
 const REVIEW_STEP = STEPS.length - 1;
@@ -34,19 +37,73 @@ const authAction = document.getElementById("auth-action");
 const submitBtn = document.getElementById("wizard-submit");
 const submitStatus = document.getElementById("submit-status");
 const preview = document.getElementById("proposal-preview");
+const rendered = document.getElementById("proposal-rendered");
 const success = document.getElementById("submit-success");
+
+/* ---- Preview format toggle (rendered ↔ Markdown source) ---- */
+document.querySelectorAll(".preview-toggle__btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const view = btn.dataset.view;
+    document.querySelectorAll(".preview-toggle__btn").forEach((b) => {
+      const active = b === btn;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-pressed", String(active));
+    });
+    rendered.hidden = view !== "rendered";
+    preview.hidden = view !== "markdown";
+  });
+});
 
 let current = 0;
 const visited = new Set([0]);
 let user = null; // signed-in control-plane user, or null
 let serviceState = "checking"; // checking | ready | signed-out | unreachable
 
+/* ---- Contributors: one row per person, joined for the control plane ---- */
+const contributors = mountContributorRows(document.getElementById("f-contributors"), [{ name: "", affiliation: "" }], {
+  onChange: () => saveDraft(),
+});
+
 /* ---- Answers ---- */
 function answers() {
   const data = new FormData(form);
   const out = Object.fromEntries(data.entries());
+  delete out.contributor_name;
+  delete out.contributor_affiliation;
   out.domain = data.getAll("domain"); // multi-select: every checked domain
+  const people = contributors.value();
+  out.name = people.name;
+  out.affiliation = people.affiliation;
+  out.contributors = contributors.read(); // kept in the draft so rows restore as typed
   return out;
+}
+
+/* ---- Proposal checklist: advice under each field once the author leaves it ---- */
+const advice = mountFieldAdvice(form, answers);
+const checklistEl = document.getElementById("proposal-checklist");
+
+function stepOfField(field) {
+  return STEP_FIELDS.findIndex((keys) => keys.includes(field));
+}
+
+async function renderChecklist() {
+  const findings = await advice.showAll();
+  checklistEl.innerHTML = checklistHTML(findings, {
+    goto: true,
+    intro:
+      "Advice only — you can submit either way. Items marked with a warning usually cost a review round if left as they are.",
+  });
+  checklistEl.querySelectorAll("[data-goto-field]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const field = btn.dataset.gotoField;
+      const step = stepOfField(field);
+      if (step < 0) return;
+      goTo(step);
+      const el = form.elements[field];
+      (el instanceof RadioNodeList ? el[0] : el)?.focus({ preventScroll: true });
+      form.querySelector(`[data-field="${field}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    })
+  );
 }
 
 /* ---- Shared domain options from the control plane (multi-select chips) ---- */
@@ -75,6 +132,14 @@ function restoreDraft() {
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
     if (!draft) return;
     for (const [key, value] of Object.entries(draft)) {
+      if (key === "contributors") {
+        if (Array.isArray(value) && value.some((r) => r?.name || r?.affiliation)) contributors.set(value);
+        continue;
+      }
+      if (key === "name" && !draft.contributors && value) {
+        contributors.set({ name: value, affiliation: draft.affiliation ?? "" });
+        continue;
+      }
       if (key === "domain") {
         const chosen = new Set(Array.isArray(value) ? value : [value]);
         form.querySelectorAll('input[name="domain"]').forEach((cb) => { cb.checked = chosen.has(cb.value); });
@@ -155,7 +220,9 @@ function validateStep(i) {
   const errors = validateAnswers(answers());
   showErrors(errors, keys);
   const bad = keys.find((k) => errors[k]);
-  if (bad) {
+  if (bad === "name") {
+    contributors.focusFirst();
+  } else if (bad) {
     const el = form.elements[bad];
     // A checkbox group comes back as a RadioNodeList; focus its first box.
     (el instanceof RadioNodeList ? el[0] : el)?.focus({ preventScroll: false });
@@ -228,7 +295,11 @@ function renderReview() {
   reviewList.querySelectorAll("[data-goto]").forEach((b) =>
     b.addEventListener("click", () => goTo(Number(b.dataset.goto)))
   );
-  preview.textContent = buildMarkdown(answers());
+  const markdown = buildMarkdown(answers());
+  preview.textContent = markdown;
+  rendered.innerHTML = renderRich(markdown);
+  void mountMath(rendered);
+  void renderChecklist();
   updateSubmitState(Object.keys(errors).length === 0);
 }
 
@@ -262,7 +333,7 @@ function applyUser(next) {
 function unreachable() {
   setService(
     "unreachable",
-    `The proposal service isn't reachable from this page right now. Copy your proposal as Markdown and email it to ${CONTACT}, or try again later.`
+    `The proposal service is not reachable from this page right now. Copy your proposal as Markdown and email it to ${CONTACT}, or try again later.`
   );
 }
 
@@ -336,7 +407,7 @@ function showSuccess(proposal) {
   } else {
     link.hidden = true;
     document.getElementById("success-text").textContent =
-      "Your proposal was received. The review Discussion link will appear on GitHub shortly.";
+      "Your proposal was received. The review Discussion link will appear on GitHub shortly, and you can revise the proposal any time from its task page.";
   }
   steps.forEach((s) => (s.hidden = true));
   footer.hidden = true;
@@ -351,6 +422,7 @@ function showSuccess(proposal) {
 
 document.getElementById("success-another").addEventListener("click", () => {
   form.reset();
+  contributors.set([{ name: "", affiliation: "" }]);
   updateSlug();
   updateCounters();
   success.hidden = true;
@@ -370,7 +442,7 @@ document.getElementById("copy-markdown").addEventListener("click", async () => {
     await navigator.clipboard.writeText(buildMarkdown(answers()));
     feedback.textContent = "Copied";
   } catch {
-    feedback.textContent = "Copy failed — open the preview below and select the text.";
+    feedback.textContent = "Copy failed. Open the preview below and select the text.";
   }
   feedback.classList.add("is-visible");
   setTimeout(() => feedback.classList.remove("is-visible"), 2400);

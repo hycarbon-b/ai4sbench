@@ -2,8 +2,8 @@
    AI4S-Benchmark · Contributors: credit policy + leaderboard
    ============================================================ */
 
-import { getContributors, getSite, ROOT } from "../data.js";
-import { esc, emptyState, chip, ICONS } from "../components.js";
+import { getContributors, getSite, ROOT } from "../data.js?v=20260921-3";
+import { esc, emptyState, chip, ICONS } from "../components.js?v=20260921-3";
 
 /* ---- Contribution categories ----------------------------------
    The points table in site.json has seven lines; the board folds them into

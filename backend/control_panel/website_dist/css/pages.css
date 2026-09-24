@@ -579,6 +579,10 @@
   padding-block: var(--space-6);
   align-items: start;
 }
+/* While the editor is open the aside is hidden, but its 20rem track stays
+   declared — which left ~400px of dead space and squeezed the editor's two
+   columns to 380px each. Collapse to a single track for the duration. */
+.task-layout--editing { grid-template-columns: minmax(0, 1fr); }
 .task-layout__main > section { margin-bottom: var(--space-6); }
 .task-layout__main h2 {
   font-size: var(--text-xl);
@@ -958,6 +962,11 @@
   letter-spacing: 0.02em;
 }
 .form-field label .counter.is-met { color: var(--cyan-deep); }
+/* Approaching or past the control plane's maximum. A field can sit a handful
+   of characters under its cap, and without this the author only discovers it
+   from a 422 after writing. */
+.form-field label .counter.is-near { color: var(--amber); font-weight: 600; }
+.form-field label .counter.is-over { color: var(--red); font-weight: 600; }
 .form-field label .counter.is-met::after {
   content: "";
   display: inline-block;
@@ -1492,3 +1501,193 @@
    full 1240px. The column stays put; the line length is capped instead. */
 .measure { max-width: 46rem; }
 .news-list { max-width: 52rem; }
+
+/* ================= Rich proposal text =================
+   Proposal fields rendered from Discussion-style text (js/richtext.js):
+   paragraphs, subheadings, lists, links, code and KaTeX formulas. */
+.rich {
+  color: var(--ink-secondary);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.rich > :first-child { margin-top: 0; }
+.rich > :last-child { margin-bottom: 0; }
+.rich p { margin: 0 0 var(--space-3); }
+.rich h3, .rich h4 {
+  color: var(--navy);
+  margin: var(--space-4) 0 var(--space-2);
+  line-height: var(--leading-snug);
+}
+.rich h3 { font-size: var(--text-lg); }
+.rich h4 { font-size: var(--text-base); font-weight: 600; letter-spacing: -0.01em; }
+.rich ul, .rich ol { margin: 0 0 var(--space-3); padding-left: 1.4rem; }
+.rich li { margin: 0.3rem 0; color: var(--ink-secondary); }
+.rich strong { color: var(--navy); }
+.rich a { color: var(--electric-blue); text-decoration: underline; text-underline-offset: 0.15em; }
+.rich a:hover { color: var(--navy); }
+.rich code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--surface-sunken);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-sm);
+}
+.rich pre {
+  background: var(--navy);
+  color: #D7DEEC;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  margin: 0 0 var(--space-3);
+}
+.rich pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+.rich hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-4) 0; }
+.rich .katex { font-size: 1.05em; }
+.rich .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.35rem 0;
+  margin: var(--space-3) 0;
+}
+
+/* Rich text inside compact containers */
+.def-grid dd .rich { font-weight: 400; font-size: var(--text-sm); }
+.def-grid dd .rich p { color: var(--navy); }
+.notice--rich > div { flex: 1; min-width: 0; }
+.notice--rich > div > strong { display: block; color: var(--navy); margin-bottom: 0.3rem; }
+.notice--rich .rich { font-size: var(--text-sm); }
+.verify-panel .rich { font-size: var(--text-sm); }
+.task-hero__sync {
+  flex-basis: 100%;
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+/* Submission preview: rendered view with a Markdown-source toggle */
+.preview-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-3);
+}
+.preview-toggle__btn {
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0.95rem;
+  border-radius: var(--radius-full);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+.preview-toggle__btn:hover { color: var(--navy); }
+.preview-toggle__btn.is-active { background: var(--surface); color: var(--navy); box-shadow: var(--shadow-xs); }
+.preview-toggle__btn:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.proposal-rendered {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: var(--space-5);
+  max-height: 32rem;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+}
+.proposal-rendered h4 { margin-top: var(--space-5); }
+.proposal-rendered > h4:first-child { margin-top: 0; }
+
+/* ================= Contributor rows (form + editor) ================= */
+.contrib-rows { display: grid; gap: var(--space-3); }
+.contrib-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.contrib-row__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-3); min-width: 0; }
+.contrib-row__fields .form-field { margin: 0; }
+.contrib-row__remove {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink-muted);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0.15rem;
+}
+.contrib-row__remove:hover { color: var(--red); border-color: var(--red); }
+.contrib-add { margin-top: var(--space-3); }
+.form-field.is-invalid .contrib-row input { border-color: var(--red); }
+
+/* ================= On-site proposal editor ================= */
+.proposal-editor { margin-bottom: var(--space-7); }
+.proposal-editor__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-5);
+}
+.proposal-editor__head h2 { margin: 0 0 var(--space-2); border: 0; padding: 0; }
+.proposal-editor__head p { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); max-width: 44rem; }
+.proposal-editor__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+}
+@media (min-width: 1180px) {
+  .proposal-editor--wide .proposal-editor__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .proposal-editor--wide .proposal-editor__preview { position: sticky; top: calc(var(--header-height) + var(--space-4)); }
+}
+.proposal-editor__form .form-field textarea { min-height: 7rem; }
+.proposal-editor__preview .proposal-rendered { max-height: min(70vh, 48rem); }
+.proposal-editor__preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.proposal-editor__preview-head .mono-label { font-size: var(--text-xs); }
+/* Sticky to the bottom of the viewport: the form is ~2400px tall, so a Save
+   button that only exists at the very end is a button most authors never find. */
+.proposal-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-5);
+  padding-block: var(--space-4);
+  border-top: 1px solid var(--border);
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--bg);
+}
+.proposal-editor__actions .submit-status { flex: 1 1 16rem; margin: 0; }
+.proposal-editor__fallback {
+  margin-top: var(--space-4);
+}
+.task-hero__owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--text-xs);
+  color: var(--cyan-deep);
+  font-weight: 600;
+}
+.person + .person { border-top: 1px solid var(--border-faint); }

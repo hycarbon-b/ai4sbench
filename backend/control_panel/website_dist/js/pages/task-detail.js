@@ -4,10 +4,16 @@
    Missing fields render gracefully — early proposals are sparse.
    ============================================================ */
 
-import { controlPlaneFetch, currentUser } from "../app.js?v=20260908-review";
-import { statusBadge, chip, esc, emptyState, ICONS, formatDate } from "../components.js?v=20260908-review";
-import { getTask, invalidateTasks, ROOT } from "../data.js?v=20260908-review";
-import { reviewDraft, reviewPayload } from "../review.js?v=20260908-review";
+import { controlPlaneFetch, currentUser } from "../app.js?v=20260921-3";
+import { statusBadge, chip, esc, emptyState, ICONS, formatDate } from "../components.js?v=20260921-3";
+import { getSite, getTask, invalidateTasks, ROOT } from "../data.js?v=20260921-3";
+import { reviewDraft, reviewPayload } from "../review.js?v=20260921-3";
+import { richBlock, mountMath } from "../richtext.js?v=20260921-3";
+import { splitContributors } from "../people.js?v=20260921-3";
+import { canEdit, mountEditor, editingAvailable } from "./task-edit.js?v=20260921-3";
+import { displayStatus } from "../lifecycle.js?v=20260921-3";
+import { timelineHTML } from "../timeline.js?v=20260921-3";
+import { adviseOn, checklistHTML } from "../proposal-advice.js?v=20260921-3";
 
 const params = new URLSearchParams(location.search);
 const key = params.get("id");
@@ -44,8 +50,10 @@ function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
+/* Proposal text is written like a Discussion post: paragraphs, lists,
+   links, Markdown and LaTeX. Render it as such instead of one flat line. */
 function para(text) {
-  return text ? `<p class="text-secondary">${esc(text)}</p>` : "";
+  return richBlock(text);
 }
 
 function pendingLine(text) {
@@ -101,7 +109,7 @@ function reviewWorkbench(task, user) {
       <span class="review-workbench__current">${task.review_input_valid ? "Current review loaded" : "First review"}</span>
     </div>
     <form id="proposal-review-form" class="review-workbench__form" novalidate>
-      ${reviewInput("review_schema_version", "Schema version", draft.review_schema_version, { readonly: true })}
+      <!-- The schema version is not shown: reviewPayload() always sends REVIEW_SCHEMA_VERSION. -->
 
       <fieldset class="review-decision">
         <legend>Decision</legend>
@@ -247,9 +255,11 @@ function wireReviewWorkbench(task, notice = null) {
 }
 
 async function render(reviewNotice = null) {
-  const [task, user] = await Promise.all([
+  const [task, user, canEditOnSite, site] = await Promise.all([
     key ? getTask(key) : null,
     currentUser().catch(() => null),
+    editingAvailable(),
+    getSite().catch(() => ({})),
   ]);
   if (!task) return notFound();
   const identifier = task.discussion_number ? `Proposal #${task.discussion_number}` : task.task_slug;
@@ -260,21 +270,40 @@ async function render(reviewNotice = null) {
   /* ---- Hero ---- */
   els.badges.innerHTML = `
     <span class="task-hero__id">${esc(identifier)}</span>
-    ${statusBadge(task.status)}`;
+    ${statusBadge(displayStatus(task))}`;
   els.title.textContent = task.title;
+  document.getElementById("td-lifecycle").innerHTML = timelineHTML(task);
 
   const metaBits = [
     `<span><span class="mono-label">Domain</span> &nbsp;<strong style="color:var(--navy);">${esc(task.domain)}</strong></span>`,
-    `<span><span class="mono-label">Field</span> &nbsp;${esc(task.field_name)}</span>`,
     `<span><span class="mono-label">Release</span> &nbsp;<span class="mono">${task.revision_release ? esc(task.revision_release) : "—"}</span></span>`,
     `<span><span class="mono-label">Updated</span> &nbsp;<span class="mono">${esc(formatDate(task.updated_at))}</span></span>`,
+    `<span class="task-hero__field"><span class="mono-label">Field</span> &nbsp;${esc(task.field_name)}</span>`,
   ];
   els.meta.innerHTML = metaBits.filter(Boolean).join("");
 
+  // Authors revise their proposal here on the site. The Discussion stays the
+  // place review happens, so it is still linked — just no longer the way an
+  // author is expected to make changes.
+  const isAuthor = canEdit(task, user);
+  const editsHere = isAuthor && canEditOnSite;
+
   const actions = [];
+  if (editsHere) {
+    actions.push(
+      `<button type="button" class="btn btn--primary" id="td-edit">Edit proposal</button>`
+    );
+  }
   if (task.discussion_url) {
     actions.push(
-      `<a class="btn btn--primary" href="${esc(task.discussion_url)}" target="_blank" rel="noopener">Open proposal Discussion <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
+      `<a class="btn btn--${editsHere ? "secondary" : "primary"}" href="${esc(task.discussion_url)}" target="_blank" rel="noopener">${editsHere ? "View review Discussion" : "Open proposal Discussion"} <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
+    );
+  }
+  // Set by the control plane when a proposal notification reached Discord.
+  // Null for proposals older than that feature, so the link is conditional.
+  if (task.discord_message_url) {
+    actions.push(
+      `<a class="btn btn--secondary" href="${esc(task.discord_message_url)}" target="_blank" rel="noopener" title="Opens this proposal's thread in the AI4S-Bench Discord server. Join the server first if you are not a member yet.">${ICONS.discord ?? ""}Discuss on Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
     );
   }
   if (task.revision_repo_url && task.revision_task_path) {
@@ -287,13 +316,38 @@ async function render(reviewNotice = null) {
       `<a class="btn btn--secondary" href="${esc(task.revision_pull_request_url)}" target="_blank" rel="noopener">Open task PR <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
     );
   }
+  // Fallback only: if the control plane is not exposing the update route, an
+  // author still needs some way to correct their own proposal.
+  if (isAuthor && !canEditOnSite && task.discussion_url) {
+    actions.push(
+      `<a class="btn btn--secondary" href="${esc(task.discussion_url)}" target="_blank" rel="noopener">Edit on GitHub <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
+    );
+  }
+  // One rule, stated the same way everywhere: revise here, talk on Discord,
+  // and the Discussion is the structured record the pipeline reads.
+  const discordJoin = site?.discord
+    ? ` Not a member yet? <a href="${esc(site.discord)}" target="_blank" rel="noopener">Join the Discord server <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden">(opens in a new tab)</span></a> first.`
+    : "";
+  const discordNote = task.discord_message_url
+    ? ` Questions and discussion about this proposal happen on <strong>Discord</strong>.${discordJoin}`
+    : "";
+  if (editsHere) {
+    actions.push(
+      `<p class="task-hero__sync"><span class="task-hero__owner">You are the author of this proposal.</span> Use <strong>Edit proposal</strong> to revise it — your changes update this page and the Discussion together.${discordNote} The GitHub Discussion is the structured record for review and automation, so there is no need to edit it by hand.</p>`
+    );
+  } else if (task.discussion_url) {
+    actions.push(
+      `<p class="task-hero__sync">Content is synchronized from the proposal Discussion, the structured record for review and automation.${discordNote}${isAuthor ? ' <span class="task-hero__owner">You are the author of this proposal.</span> Edits made on GitHub appear here after the next sync.' : ""}</p>`
+    );
+  }
   els.actions.innerHTML = actions.join("");
+  document.getElementById("td-edit")?.addEventListener("click", () => openEditor(task, user));
 
   /* ---- Main column ---- */
   const envRows = [
-    `<div><dt>Software and tools</dt><dd>${esc(task.software)}</dd></div>`,
-    `<div><dt>Dataset and artifacts</dt><dd>${esc(task.dataset)}</dd></div>`,
-    `<div><dt>Requested compute</dt><dd>${esc(task.compute)}</dd></div>`,
+    `<div><dt>Software and tools</dt><dd>${richBlock(task.software)}</dd></div>`,
+    `<div><dt>Dataset and artifacts</dt><dd>${richBlock(task.dataset)}</dd></div>`,
+    `<div><dt>Requested compute</dt><dd>${richBlock(task.compute)}</dd></div>`,
   ].filter(Boolean);
   const envHTML = `<dl class="def-grid" style="grid-template-columns: 1fr;">${envRows.join("")}</dl>`;
 
@@ -313,10 +367,10 @@ async function render(reviewNotice = null) {
        ${reviewRows.length ? `<dl class="def-grid" style="grid-template-columns: 1fr;">${reviewRows.join("")}</dl>` : ""}
        <div class="verify-panel" style="margin-top: var(--space-4);">
          <div class="verify-panel__title">${ICONS.shield} Verification</div>
-         <p style="margin:0; color: var(--ink-secondary);">${esc(task.review_verification_method)}</p>
+         ${richBlock(task.review_verification_method)}
        </div>
        ${task.review_notes ? para(task.review_notes) : ""}`
-    : pendingLine("No valid structured review has been synchronized yet.");
+    : pendingLine("No structured review has been synchronized yet.");
 
   const resultsHTML = task.revision_agent_results?.length
     ? `<div class="table-wrap"><table class="data-table">
@@ -349,7 +403,7 @@ async function render(reviewNotice = null) {
     section("References & resources", para(task.references)),
     section("Requested environment", envHTML),
     section("Expected workflow & outputs", para(task.workflow)),
-    section("Proposed evaluation", para(task.evaluation) + `<div class="notice" style="margin-top: var(--space-4);">${ICONS.info}<p><strong>Leakage risk.</strong> ${esc(task.leakage)}</p></div>`, "evaluation"),
+    section("Proposed evaluation", para(task.evaluation) + `<div class="notice notice--rich" style="margin-top: var(--space-4);">${ICONS.info}<div><strong>Leakage risk</strong>${richBlock(task.leakage)}</div></div>`, "evaluation"),
     section("Scientific review", reviewHTML, "review"),
     task.review_baseline_results?.length ? section("Baseline results", listOrDash(task.review_baseline_results)) : "",
     task.review_failure_modes?.length ? section("Failure analysis", listOrDash(task.review_failure_modes)) : "",
@@ -357,17 +411,24 @@ async function render(reviewNotice = null) {
     section("Agent results", resultsHTML, "results"),
     user?.can_review ? reviewWorkbench(task, user) : "",
   ].join("");
+  void mountMath(els.main);
 
   /* ---- Aside ---- */
   const glance = [
-    ["Status", statusBadge(task.status)],
+    ["Status", statusBadge(displayStatus(task))],
     ["Difficulty", task.review_difficulty ? esc(task.review_difficulty) : '<span class="text-muted">Pending review</span>'],
     ["Release", `<span class="mono">${task.revision_release ? esc(task.revision_release) : "—"}</span>`],
     ["Created", `<span class="mono">${esc(formatDate(task.created_at))}</span>`],
     ["Updated", `<span class="mono">${esc(formatDate(task.updated_at))}</span>`],
   ];
 
-  const authorHTML = `<div class="person"><span class="person__name">${esc(task.name)}</span>${task.affiliation ? `<span class="person__affil">${esc(task.affiliation)}</span>` : ""}<span class="person__affil">@${esc(task.github)}</span></div>`;
+  // Several people may share a task; the first listed is the submitter (GitHub contact).
+  const people = splitContributors(task.name, task.affiliation);
+  const authorHTML = (people.length ? people : [{ name: task.name, affiliation: task.affiliation }])
+    .map(
+      (p, i) => `<div class="person"><span class="person__name">${esc(p.name)}</span>${p.affiliation ? `<span class="person__affil">${esc(p.affiliation)}</span>` : ""}${i === 0 ? `<span class="person__affil">@${esc(task.github)}</span>` : ""}</div>`
+    )
+    .join("");
   const reviewerHTML = task.review_reviewer_login
     ? `<div class="person"><span class="person__name">@${esc(task.review_reviewer_login)}</span>${task.review_comment_url ? `<a class="person__affil" href="${esc(task.review_comment_url)}" target="_blank" rel="noopener">Open review reply</a>` : ""}</div>`
     : `<p class="text-muted" style="font-size: var(--text-sm); margin:0;">Reviewer assignment pending.</p>`;
@@ -378,7 +439,7 @@ async function render(reviewNotice = null) {
       <ul>${glance.map(([k, v]) => `<li><span class="mono-label">${esc(k)}</span><span>${v}</span></li>`).join("")}</ul>
     </div>
     <div class="aside-card">
-      <h3>Task contributor</h3>
+      <h3>${people.length > 1 ? "Task contributors" : "Task contributor"}</h3>
       ${authorHTML}
     </div>
     <div class="aside-card">
@@ -391,6 +452,57 @@ async function render(reviewNotice = null) {
         : ""
     }`;
   wireReviewWorkbench(task, reviewNotice);
+
+  // Proposal checklist for the people who act on it: the author (to improve
+  // the proposal) and reviewers (as hints, never a verdict).
+  if (isAuthor || user?.can_review) {
+    adviseOn(task, { selfId: task.id }).then((findings) => {
+      els.aside.querySelector("#td-checklist")?.remove();
+      const card = document.createElement("div");
+      card.className = "aside-card";
+      card.id = "td-checklist";
+      card.innerHTML = checklistHTML(findings, {
+        title: isAuthor ? "Your proposal checklist" : "Proposal checklist",
+        compact: false,
+        intro: isAuthor
+          ? `Only you and reviewers see this.${editsHere ? " Use <strong>Edit proposal</strong> to address it." : ""}`
+          : "Automated hints for reviewers, not a verdict.",
+      });
+      els.aside.prepend(card);
+    });
+  }
+}
+
+/* ---- On-site editing (authors only; the control plane enforces ownership) ---- */
+function openEditor(task, user) {
+  const host = document.createElement("div");
+  host.id = "proposal-editor-host";
+  els.main.replaceChildren(host);
+  // Hiding the aside is not enough — its grid track stays declared, so the
+  // layout must also collapse to one column or the editor keeps its width.
+  const layout = els.main.closest(".task-layout");
+  els.aside.hidden = true;
+  layout?.classList.add("task-layout--editing");
+  const restoreLayout = () => {
+    els.aside.hidden = false;
+    layout?.classList.remove("task-layout--editing");
+  };
+  mountEditor({
+    task,
+    user,
+    root: host,
+    onSaved: async () => {
+      invalidateTasks();
+      restoreLayout();
+      await render();
+      document.getElementById("task-detail-root")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    onCancel: async () => {
+      restoreLayout();
+      await render();
+    },
+  });
+  host.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 render().catch((err) => {

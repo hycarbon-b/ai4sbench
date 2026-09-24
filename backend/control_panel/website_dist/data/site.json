@@ -7,14 +7,14 @@
     {
       "id": "bench",
       "title": "Bench",
-      "summary": "Continuously test frontier AI agents against difficult scientific problems and measure the moving boundary of AI × Science capability.",
+      "summary": "Continuously test frontier AI agents on difficult scientific problems and track the moving frontier of AI capability in science.",
       "current": true,
       "short": "Continuously test frontier agents on hard scientific problems."
     },
     {
       "id": "dataset",
       "title": "Dataset",
-      "summary": "Accumulate high-quality tasks, execution environments, agent trajectories, evaluators and scientific verification systems into a valuable scientific dataset.",
+      "summary": "Accumulate tasks, execution environments, agent trajectories, evaluators and scientific verification systems into a scientific dataset of lasting value.",
       "current": false,
       "short": "Accumulate tasks, environments, trajectories and evaluators."
     },
@@ -42,14 +42,14 @@
     }
   ],
   "github": {
-    "org_url": "https://github.com/ai4s-bench",
-    "bench_repo": "https://github.com/ai4s-bench/ai4s-bench",
-    "web_repo": "https://github.com/ai4s-bench/ai4s-bench-web",
-    "task_proposal_form": "https://github.com/ai4s-bench/ai4s-bench/issues/new/choose",
-    "reviewer_form": "https://github.com/ai4s-bench/ai4s-bench/issues/new/choose",
-    "discussions": "https://github.com/ai4s-bench/ai4s-bench/discussions",
-    "contributing": "https://github.com/ai4s-bench/ai4s-bench/blob/main/CONTRIBUTING.md",
-    "methodology_docs": "https://github.com/ai4s-bench/ai4s-bench/tree/main/docs"
+    "org_url": "https://github.com/AI4S-Bench",
+    "bench_repo": "https://github.com/AI4S-Bench/ai4s-benchmark",
+    "web_repo": "https://github.com/AI4S-Bench/ai4s-bench-website",
+    "task_proposal_form": "https://ai4sbench.org/submit/",
+    "reviewer_form": "https://github.com/AI4S-Bench/ai4s-benchmark/issues/new",
+    "discussions": "https://github.com/AI4S-Bench/ai4s-benchmark/discussions",
+    "contributing": "https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md",
+    "methodology_docs": "https://github.com/AI4S-Bench/ai4s-benchmark#readme"
   },
   "discord": "https://discord.gg/3SNTCj5wm",
   "canonical_url": "https://ai4sbench.org",
@@ -88,7 +88,7 @@
   "criteria": [
     {
       "title": "Scientific Value",
-      "text": "The task represents something researchers in the field genuinely consider meaningful — not difficulty invented purely to confuse an AI."
+      "text": "Researchers in the field would consider the problem worth solving on its own merits, with difficulty that comes from the science itself."
     },
     {
       "title": "Verifiable",
@@ -117,22 +117,22 @@
         "category": "Maintain"
       },
       {
-        "contribution": "Contributor organization, review coordination, helping newcomers",
+        "contribution": "Community organization, review coordination and onboarding newcomers",
         "points": "1–2",
         "category": "Organize"
       },
       {
-        "contribution": "Effective PI / student / collaborator referral",
+        "contribution": "Successful referral of a PI, student or collaborator",
         "points": "2",
         "category": "Referral"
       },
       {
-        "contribution": "Effective sponsor introduction",
+        "contribution": "Successful sponsor introduction",
         "points": "3",
         "category": "Sponsorship"
       },
       {
-        "contribution": "Sponsorship / strategic collaboration completed",
+        "contribution": "Sponsorship or strategic collaboration secured",
         "points": "5",
         "category": "Sponsorship"
       }
@@ -151,7 +151,7 @@
       {
         "name": "Core Contributor",
         "threshold": "20 points · ≥ 2 contribution categories",
-        "description": "Demonstrated breadth — for example Task + Review, or Task + Maintain."
+        "description": "Demonstrated breadth, for example tasks and reviews, or tasks and maintenance."
       },
       {
         "name": "Maintainer",
@@ -160,6 +160,6 @@
       }
     ],
     "committees_note": "Scientific areas may form field-specific committees (Area Chair, Committee Members) responsible for organizing reviews and deciding task acceptance in that area. Committees are being formed as the community grows.",
-    "authorship_note": "Substantive academic contributions may be considered for authorship according to the contribution and release policy. Specific task and review credit remains permanently visible regardless."
+    "authorship_note": "Substantive academic contributions may qualify for authorship under the contribution and release policy. Credit for individual tasks and reviews remains permanently visible in every case."
   }
 }

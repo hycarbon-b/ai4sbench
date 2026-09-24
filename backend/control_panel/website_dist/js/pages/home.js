@@ -8,8 +8,9 @@
    motion.
    ============================================================ */
 
-import { getSite, getTasks, getReleases, getNews, ROOT } from "../data.js";
-import { esc } from "../components.js";
+import { getSite, getTasks, getReleases, getNews, ROOT } from "../data.js?v=20260921-3";
+import { esc, formatDate } from "../components.js?v=20260921-3";
+import { displayStatus } from "../lifecycle.js?v=20260921-3";
 
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -35,8 +36,10 @@ async function renderReadout() {
 
   const phaseIndex = Math.max(0, site.roadmap.findIndex((p) => p.current));
   const phase = site.roadmap[phaseIndex];
-  const released = tasks.filter((t) => t.status === "released").length;
-  const underReview = tasks.filter((t) => t.status === "under_review").length;
+  // From the lifecycle, not the raw `status` column: a proposal awaiting or
+  // answering review is "in review" (the raw column never says under_review).
+  const released = tasks.filter((t) => displayStatus(t) === "released").length;
+  const underReview = tasks.filter((t) => ["pending", "changes_requested"].includes(displayStatus(t))).length;
   const next = (site.submissions ?? [])[0];
   const deadline = formatDeadline(next?.deadline);
 
@@ -137,7 +140,7 @@ async function renderNews() {
     .slice(0, 4)
     .map(
       (n) => `<li>
-        <time datetime="${esc(n.date)}">${esc(n.date)}</time>
+        <time datetime="${esc(n.date)}">${esc(formatDate(n.date))}</time>
         <div>
           <h3>${n.link ? `<a href="${ROOT}${esc(n.link)}">${esc(n.title)}</a>` : esc(n.title)}</h3>
           <p>${esc(n.text)}</p>

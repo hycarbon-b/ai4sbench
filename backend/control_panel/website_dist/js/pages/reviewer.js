@@ -7,16 +7,16 @@
    visible so a successful database submission is never duplicated.
    ============================================================ */
 
-import { getSite } from "../data.js";
-import { esc } from "../components.js";
-import { controlPlaneFetch } from "../app.js";
+import { getSite } from "../data.js?v=20260921-3";
+import { esc } from "../components.js?v=20260921-3";
+import { controlPlaneFetch } from "../app.js?v=20260921-3";
 import {
   LIMITS,
   REVIEWER_ENDPOINT,
   buildMarkdown,
   buildReviewerDocument,
   validateApplication,
-} from "../reviewer.js?v=20260910-reviewer-intake";
+} from "../reviewer.js?v=20260921-3";
 
 const form = document.getElementById("reviewer-form");
 const statusEl = document.getElementById("reviewer-status");
@@ -97,7 +97,7 @@ async function openOnGitHub(a) {
   const site = await getSite();
   const repo = String(site.github?.bench_repo || "").replace(/\/$/, "");
   if (!repo) {
-    setStatus('The benchmark repository is not configured — use "Copy as Markdown" and email it instead.', "error");
+    setStatus('The benchmark repository is not configured. Use "Copy as Markdown" and email it instead.', "error");
     return;
   }
   const url =
@@ -106,7 +106,7 @@ async function openOnGitHub(a) {
   const opened = window.open(url, "_blank", "noopener");
   setStatus(
     opened
-      ? 'Your application opened on GitHub — check it over and press "Submit new issue".'
+      ? 'Your application opened on GitHub. Check it over and press "Submit new issue".'
       : 'Allow pop-ups, or use "Copy as Markdown" and open a GitHub issue yourself.',
     opened ? "success" : "error"
   );
@@ -133,7 +133,7 @@ form.addEventListener("submit", async (event) => {
     form.reset();
     domainBox.querySelectorAll("input:checked").forEach((el) => (el.checked = false));
     updateCounter();
-    setStatus("Thank you — your application was received. We will be in touch by email.", "success");
+    setStatus("Thank you. Your application was received, and we will be in touch by email.", "success");
   } catch (error) {
     if (NOT_DEPLOYED.has(error?.status)) {
       // Retain a graceful fallback for static deployments pointing at an older backend.
@@ -155,7 +155,7 @@ document.getElementById("reviewer-copy").addEventListener("click", async () => {
     await navigator.clipboard.writeText(buildMarkdown(answers()));
     feedback.textContent = "Copied";
   } catch {
-    feedback.textContent = "Copy failed — select the text manually.";
+    feedback.textContent = "Copy failed. Select the text manually.";
   }
   feedback.classList.add("is-visible");
   window.setTimeout(() => feedback.classList.remove("is-visible"), 2400);

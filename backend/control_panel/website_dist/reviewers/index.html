@@ -4,25 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Become a Reviewer | AI4S-Benchmark</title>
-  <meta name="description" content="Apply to review AI4S-Benchmark task proposals in your field. Tell us your name, affiliation, expertise domains and research background — it takes a couple of minutes.">
+  <meta name="description" content="Apply to review AI4S-Benchmark task proposals in your field. Tell us your name, affiliation, expertise domains and research background. The form takes a couple of minutes.">
   <link rel="canonical" href="https://ai4sbench.org/reviewers/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="AI4S-Benchmark">
   <meta property="og:title" content="Become a Reviewer | AI4S-Benchmark">
-  <meta property="og:description" content="Apply to review AI4S-Benchmark task proposals in your field. Tell us your name, affiliation, expertise domains and research background — it takes a couple of minutes.">
+  <meta property="og:description" content="Apply to review AI4S-Benchmark task proposals in your field. Tell us your name, affiliation, expertise domains and research background. The form takes a couple of minutes.">
   <meta property="og:url" content="https://ai4sbench.org/reviewers/">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Become a Reviewer | AI4S-Benchmark">
-  <meta name="twitter:description" content="Apply to review AI4S-Benchmark task proposals in your field. Tell us your name, affiliation, expertise domains and research background — it takes a couple of minutes.">
+  <meta name="twitter:description" content="Apply to review AI4S-Benchmark task proposals in your field. Tell us your name, affiliation, expertise domains and research background. The form takes a couple of minutes.">
   <link rel="icon" type="image/svg+xml" href="../assets/branding/favicon.svg">
   <link rel="manifest" href="../site.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/tokens.css">
-  <link rel="stylesheet" href="../css/base.css">
-  <link rel="stylesheet" href="../css/components.css">
-  <link rel="stylesheet" href="../css/pages.css">
+  <link rel="stylesheet" href="../css/tokens.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/base.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/components.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/pages.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/workflow.css?v=20260921-3">
 </head>
 <body data-root="../" data-page="reviewers">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -66,8 +67,8 @@
         <span class="eyebrow">Contribute</span>
         <h1>Become a reviewer</h1>
         <p class="lede">Scientific review is what makes this benchmark trustworthy. Reviewers judge whether a proposed
-          task is scientifically valuable, verifiably scored and genuinely hard — and earn visible, permanent credit for
-          every review. Tell us about your field; it takes a couple of minutes.</p>
+          task is scientifically valuable, verifiable and genuinely difficult, and receive visible, permanent credit for
+          every review. Tell us about your field. The form takes a couple of minutes.</p>
 
         <form id="reviewer-form" novalidate>
           <fieldset class="form-block">
@@ -93,7 +94,7 @@
               <div class="form-field" data-field="github">
                 <label for="r-github">GitHub username <span class="optional">optional</span></label>
                 <input type="text" id="r-github" name="github" maxlength="100" autocomplete="off" placeholder="without the @">
-                <p class="hint">Review happens on GitHub, so this speeds up onboarding.</p>
+                <p class="hint">Reviews are published from a GitHub account. No account yet? Leave this blank and we will contact you by email.</p>
               </div>
             </div>
 
@@ -125,7 +126,7 @@
 
             <div class="form-field" data-field="background">
               <label for="r-background">A few lines about your work <span class="counter" id="background-counter"></span></label>
-              <textarea id="r-background" name="background" rows="5" maxlength="4000" placeholder="What do you work on, and what would make you a good judge of tasks in your area? Links to a lab page, Google Scholar, ORCID or a representative paper are ideal."></textarea>
+              <textarea id="r-background" name="background" rows="5" maxlength="4000" placeholder="What do you work on, and what would make you a good judge of tasks in your area? Links to a lab page, Google Scholar, ORCID or a representative paper are welcome."></textarea>
             </div>
           </fieldset>
 
@@ -136,7 +137,7 @@
             <button type="button" class="btn btn--secondary" id="reviewer-copy">Copy as Markdown</button>
             <span class="copy-feedback" id="reviewer-copy-feedback" role="status"></span>
           </div>
-          <p class="hint reviewer-note">Your application goes to the benchmark team and will be reviewed ASAP.</p>
+          <p class="hint reviewer-note">Your application goes to the benchmark team, and we reply by email once it has been reviewed.</p>
         </form>
       </div>
     </section>
@@ -172,6 +173,8 @@
           <h4>Contribute</h4>
           <ul>
             <li><a href="../submit/">Submit a Task</a></li>
+            <li><a href="../guide/">Contributor Guide</a></li>
+            <li><a href="../guide/check.html">Pre-flight Check</a></li>
             <li><a href="../reviewers/">Become a Reviewer</a></li>
             <li><a href="../contributors/">Contributors</a></li>
             <li><a href="../contributors/#credit">Credit &amp; Governance</a></li>
@@ -194,7 +197,7 @@
     </div>
   </footer>
 
-  <script type="module" src="../js/app.js?v=20260908-review"></script>
-  <script type="module" src="../js/pages/reviewer.js?v=20260910-reviewer-intake"></script>
+  <script type="module" src="../js/app.js?v=20260921-3"></script>
+  <script type="module" src="../js/pages/reviewer.js?v=20260921-3"></script>
 </body>
 </html>

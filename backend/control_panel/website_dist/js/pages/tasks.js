@@ -4,8 +4,10 @@
    Filters render only when the data actually contains values.
    ============================================================ */
 
-import { getTasks, ROOT } from "../data.js?v=20260908";
-import { taskCard, emptyState, esc } from "../components.js?v=20260908";
+import { getTasks, ROOT } from "../data.js?v=20260921-3";
+import { taskCard, emptyState, esc } from "../components.js?v=20260921-3";
+import { displayStatus, isApproved, STATUS_INFO, STATUS_ORDER } from "../lifecycle.js?v=20260921-3";
+import { mountMath } from "../richtext.js?v=20260921-3";
 
 const state = {
   query: "",
@@ -25,12 +27,9 @@ const els = {
   list: document.getElementById("task-list"),
 };
 
-const STATUS_LABELS = {
-  pending: "Pending Review",
-  changes_requested: "Changes Requested",
-  approved: "Approved",
-  rejected: "Rejected",
-};
+/* Long free-text field names stay readable in the Field filter. */
+const FIELD_LABEL_MAX = 56;
+const shorten = (text) => (text.length > FIELD_LABEL_MAX ? `${text.slice(0, FIELD_LABEL_MAX - 1).trimEnd()}…` : text);
 
 function proposalDomains(task) {
   return String(task.domain ?? "")
@@ -42,28 +41,41 @@ function proposalDomains(task) {
 /* ---- Summary stats ---- */
 function renderStats() {
   const domains = new Set(allTasks.flatMap(proposalDomains));
-  const approved = allTasks.filter((task) => task.status === "approved").length;
-  const pending = allTasks.filter((task) => task.status === "pending").length;
+  // Counted from the lifecycle, so a published review or a linked PR is
+  // reflected even while the proposal's own `status` column still says pending.
+  const approved = allTasks.filter(isApproved).length;
+  const pending = allTasks.filter((task) => displayStatus(task) === "pending").length;
 
   const stats = [
-    { value: allTasks.length, label: allTasks.length === 1 ? "Proposal" : "Proposals" },
-    { value: domains.size, label: domains.size === 1 ? "Domain" : "Domains" },
-    { value: approved, label: "Approved" },
-    { value: pending, label: "Pending review" },
+    { value: allTasks.length, label: allTasks.length === 1 ? "Proposal" : "Proposals", title: "Every valid proposal on the board, whatever its stage." },
+    { value: domains.size, label: domains.size === 1 ? "Domain" : "Domains", title: "Distinct scientific domains across all proposals. A proposal can span several." },
+    { value: approved, label: "Approved", title: "Approved by a reviewer, including tasks already in implementation, evaluation or a release." },
+    { value: pending, label: "Pending review", title: "Waiting for a reviewer's first decision." },
   ];
   els.stats.innerHTML = stats
     .map(
-      (s) => `<div class="stat"><span class="stat__value">${esc(s.value)}</span><span class="stat__label">${esc(s.label)}</span></div>`
+      (s) => `<div class="stat" title="${esc(s.title)}"><span class="stat__value">${esc(s.value)}</span><span class="stat__label">${esc(s.label)}</span></div>`
     )
     .join("");
 }
 
 /* ---- Data-driven filter selects ---- */
 function buildFilters() {
+  // Every stage is listed with its count, so the filter also shows the
+  // shape of the pipeline — including stages no task has reached yet.
+  const stageCounts = new Map(STATUS_ORDER.map((key) => [key, 0]));
+  allTasks.forEach((task) => stageCounts.set(displayStatus(task), (stageCounts.get(displayStatus(task)) ?? 0) + 1));
   const defs = [
-    { key: "status", label: "Status", values: uniq(allTasks.map((t) => t.status)), display: (v) => STATUS_LABELS[v] ?? v },
+    {
+      key: "stage",
+      label: "Stage",
+      values: STATUS_ORDER,
+      display: (v) => `${STATUS_INFO[v].label} (${stageCounts.get(v)})`,
+      title: (v) => STATUS_INFO[v].description,
+      disabled: (v) => stageCounts.get(v) === 0,
+    },
     { key: "domain", label: "Domain", values: uniq(allTasks.flatMap(proposalDomains)) },
-    { key: "field_name", label: "Field", values: uniq(allTasks.map((task) => task.field_name)) },
+    { key: "field_name", label: "Field", values: uniq(allTasks.map((task) => task.field_name)), display: shorten, title: (v) => v },
     { key: "review_difficulty", label: "Difficulty", values: uniq(allTasks.map((task) => task.review_difficulty)) },
     { key: "revision_release", label: "Release", values: uniq(allTasks.map((task) => task.revision_release)) },
   ];
@@ -75,7 +87,7 @@ function buildFilters() {
         <label for="filter-${d.key}">${esc(d.label)}</label>
         <select id="filter-${d.key}" data-filter="${d.key}">
           <option value="">All</option>
-          ${d.values.map((v) => `<option value="${esc(v)}">${esc(d.display ? d.display(v) : v)}</option>`).join("")}
+          ${d.values.map((v) => `<option value="${esc(v)}"${d.title ? ` title="${esc(d.title(v))}"` : ""}${d.disabled?.(v) ? " disabled" : ""}>${esc(d.display ? d.display(v) : v)}</option>`).join("")}
         </select>
       </div>`
     )
@@ -112,7 +124,7 @@ function matches(task) {
       .toLowerCase();
     if (!haystack.includes(q)) return false;
   }
-  if (state.filters.status && task.status !== state.filters.status) return false;
+  if (state.filters.stage && displayStatus(task) !== state.filters.stage) return false;
   if (state.filters.domain && !proposalDomains(task).includes(state.filters.domain)) return false;
   if (state.filters.field_name && task.field_name !== state.filters.field_name) return false;
   if (state.filters.review_difficulty && task.review_difficulty !== state.filters.review_difficulty) return false;
@@ -156,6 +168,7 @@ function render() {
     return;
   }
   els.list.innerHTML = visible.map(taskCard).join("");
+  void mountMath(els.list);
 }
 
 function clearFilters() {

@@ -41,7 +41,7 @@ export const STEP_FIELDS = [
   ["name", "affiliation", "github"],
 ];
 
-const FIELD_LABELS = {
+export const FIELD_LABELS = {
   title: "Task title",
   domain: "Domain",
   field_name: "Specific field",

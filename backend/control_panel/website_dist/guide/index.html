@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contributor Guide | AI4S-Benchmark</title>
+  <meta name="description" content="How an AI4S-Benchmark proposal becomes a merged, evaluated task: the five stages, what reviewers look for, the Harbor task layout, the task PR and the acceptance checklist.">
+  <link rel="canonical" href="https://ai4sbench.org/guide/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AI4S-Benchmark">
+  <meta property="og:title" content="Contributor Guide | AI4S-Benchmark">
+  <meta property="og:description" content="How an AI4S-Benchmark proposal becomes a merged, evaluated task: the five stages, what reviewers look for, the Harbor task layout, the task PR and the acceptance checklist.">
+  <meta property="og:url" content="https://ai4sbench.org/guide/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Contributor Guide | AI4S-Benchmark">
+  <meta name="twitter:description" content="How an AI4S-Benchmark proposal becomes a merged, evaluated task: the five stages, what reviewers look for, the Harbor task layout, the task PR and the acceptance checklist.">
+  <link rel="icon" type="image/svg+xml" href="../assets/branding/favicon.svg">
+  <link rel="manifest" href="../site.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/tokens.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/base.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/components.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/pages.css?v=20260921-3">
+  <link rel="stylesheet" href="../css/workflow.css?v=20260921-3">
+</head>
+<body data-root="../" data-page="guide">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container container--wide site-header__inner">
+      <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+        <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="60" cy="60" rx="29" ry="16" transform="rotate(-30 60 60)" stroke="#F7F9FC" stroke-width="2" stroke-dasharray="4 5"/>
+          <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+          <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+          <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+          <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+          <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+          <circle cx="92" cy="92" r="5.5" fill="#7E8AA3"/>
+        </svg>
+        <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" data-nav="about" href="../about/">About</a>
+        <a class="site-nav__link" data-nav="tasks" href="../tasks/">Tasks</a>
+        <a class="site-nav__link" data-nav="contributors" href="../contributors/">Contributors</a>
+        <a class="site-nav__link" data-nav="releases" href="../releases/">Releases</a>
+        <a class="site-nav__link site-nav__github" data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden">(opens in a new tab)</span>
+        </a>
+        <a class="btn btn--primary btn--sm" data-nav="submit" href="../submit/">Submit a Task</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-head">
+      <div class="container container--wide">
+        <span class="eyebrow">Contributor guide</span>
+        <h1>From proposal to merged task</h1>
+        <p class="lede">Every task goes through the same five stages, and each task page shows where it stands. This guide covers what happens at each stage, what you need to do, and what a finished task must meet to be accepted.</p>
+      </div>
+    </section>
+
+    <div class="container container--wide guide-layout">
+      <nav class="guide-toc" aria-label="On this page">
+        <ol>
+          <li><a href="#overview">The five stages</a></li>
+          <li><a href="#propose">1 · Propose</a></li>
+          <li><a href="#review">2 · Scientific review</a></li>
+          <li><a href="#build">3 · Build the task</a></li>
+          <li><a href="#pr">3 · Open the task PR</a></li>
+          <li><a href="#evaluate">4–5 · Evaluation &amp; release</a></li>
+          <li><a href="#acceptance">Acceptance checklist</a></li>
+        </ol>
+      </nav>
+
+      <div class="guide-body">
+        <section id="overview" aria-labelledby="overview-h">
+          <h2 id="overview-h">The five stages</h2>
+          <p>A proposal is a short scientific description. A <strong>task</strong> is the runnable version of it in the benchmark repository: an environment, instructions for the agent, a reference solution and an independent verifier. The task board tracks each proposal through these stages:</p>
+          <div class="stagetrack" aria-label="Task lifecycle">
+            <ol class="stagetrack__track">
+              <li class="stagetrack__step is-done"><span class="stagetrack__dot" aria-hidden="true">1</span><span class="stagetrack__label">Proposal submitted</span><span class="stagetrack__note">You describe the problem with the proposal form. It becomes a GitHub Discussion and a task page.</span></li>
+              <li class="stagetrack__step is-current"><span class="stagetrack__dot" aria-hidden="true">2</span><span class="stagetrack__label">Scientific review</span><span class="stagetrack__note">A domain reviewer approves it, asks for changes, or declines it.</span></li>
+              <li class="stagetrack__step is-upcoming"><span class="stagetrack__dot" aria-hidden="true">3</span><span class="stagetrack__label">Task implementation</span><span class="stagetrack__note">You build the task and open a PR in the benchmark repository.</span></li>
+              <li class="stagetrack__step is-upcoming"><span class="stagetrack__dot" aria-hidden="true">4</span><span class="stagetrack__label">Agent evaluation</span><span class="stagetrack__note">Maintainers run the oracle, a negative control and frontier agents.</span></li>
+              <li class="stagetrack__step is-upcoming"><span class="stagetrack__dot" aria-hidden="true">5</span><span class="stagetrack__label">Accepted &amp; released</span><span class="stagetrack__note">The verified task joins a versioned release.</span></li>
+            </ol>
+          </div>
+          <p>Three places, one rule each: <strong>this website</strong> is where you write and revise your proposal and follow its progress; the <strong>GitHub Discussion</strong> is the structured record that review and automation read; <strong>Discord</strong> is where questions and conversation happen.</p>
+        </section>
+
+        <section id="propose" aria-labelledby="propose-h">
+          <h2 id="propose-h"><span class="guide-step-num">01</span> Propose</h2>
+          <p>Use the <a href="../submit/">proposal form</a>. It has four short sections (the scientific problem, the environment, the evaluation, and the contributors). Sign in with GitHub to submit.</p>
+          <h3>What makes a proposal ready for review</h3>
+          <ul>
+            <li><strong>Scientific value.</strong> Researchers in your field would consider the problem worth solving on its own merits, and its difficulty comes from the science itself.</li>
+            <li><strong>Verifiable.</strong> Correctness can be judged by a script, a metric with a threshold, or an explicit procedure. Say what counts as a pass.</li>
+            <li><strong>Frontier difficulty.</strong> Current agents should find it genuinely hard, or the workflow itself should be meaningful scientific work.</li>
+            <li><strong>Sources, where they exist.</strong> If the task builds on papers, datasets or code, citing them (authors and year, a DOI, an arXiv ID or a link) helps reviewers check the science.</li>
+            <li><strong>No easy leakage.</strong> Explain why the answer cannot simply be looked up, and what stays hidden from the agent.</li>
+            <li><strong>Within budget.</strong> The current limit is one GPU and 16 CPU cores per task.</li>
+          </ul>
+          <div class="notice guide-callout">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 7.2v3.6M8 5v.1" stroke-linecap="round"/></svg>
+            <p>As you fill in the form, a <strong>proposal checklist</strong> suggests citing sources, points out missing pass criteria, compute over the limit, math that will not render, and proposals with a near-identical title. It is advice only, and never stops you from submitting.</p>
+          </div>
+          <p>Markdown and LaTeX work in every text field (<code>$…$</code> inline, <code>$$…$$</code> for display math). After you submit, you can revise the proposal at any time with <strong>Edit proposal</strong> on its task page. Saving updates the page and the Discussion together.</p>
+        </section>
+
+        <section id="review" aria-labelledby="review-h">
+          <h2 id="review-h"><span class="guide-step-num">02</span> Scientific review</h2>
+          <p>A reviewer from your domain reads the proposal and publishes a structured review. It appears as a reply in the GitHub Discussion and on the task page.</p>
+          <h3>What the reviewer records</h3>
+          <dl class="def-grid">
+            <div><dt>Decision</dt><dd>Approved, changes requested, or rejected.</dd></div>
+            <div><dt>Short description and tags</dt><dd>How the task is summarised and filed on the board.</dd></div>
+            <div><dt>Difficulty</dt><dd>For example Moderate, Hard or Expert.</dd></div>
+            <div><dt>Scientific value</dt><dd>Why the problem matters to the field.</dd></div>
+            <div><dt>Primary metric and verification method</dt><dd>How success is measured and how it is checked. These become the core of your verifier.</dd></div>
+            <div><dt>Optional estimates</dt><dd>Runtime, compute and token budgets, baseline results and expected failure modes.</dd></div>
+          </dl>
+          <h3>The three outcomes</h3>
+          <div class="guide-outcomes">
+            <div><span class="badge badge--approved">Approved</span><p>Move on to stage 3 and build the task. The review's metric and verification method are your specification.</p></div>
+            <div><span class="badge badge--changes_requested">Changes requested</span><p>Revise with <strong>Edit proposal</strong> on your task page. The reviewer sees the updated Discussion.</p></div>
+            <div><span class="badge badge--rejected">Rejected</span><p>The proposal is not a fit in its current form. The review explains why. A substantially different proposal is welcome.</p></div>
+          </div>
+          <div class="notice guide-callout">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 7.2v3.6M8 5v.1" stroke-linecap="round"/></svg>
+            <p><strong>Get email when your review arrives.</strong> Open your proposal's GitHub Discussion (the task page links it) and press <strong>Subscribe</strong> in its sidebar. GitHub then emails you about every reply, including the review.</p>
+          </div>
+        </section>
+
+        <section id="build" aria-labelledby="build-h">
+          <h2 id="build-h"><span class="guide-step-num">03</span> Build the task</h2>
+          <p>Tasks are native <a href="https://github.com/harbor-framework/harbor" target="_blank" rel="noopener">Harbor <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a> task directories, following the Terminal-Bench Science contribution model. Each task lives in its own folder:</p>
+<pre><code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/
+├── task.toml
+├── instruction.md
+├── environment/Dockerfile
+├── solution/solve.sh
+└── tests/test.sh</code></pre>
+          <div class="guide-files">
+            <div><code>task.toml</code><span>Metadata, resources and timeouts. The PR check requires a <code>[metadata]</code> table.</span></div>
+            <div><code>instruction.md</code><span>The only thing the agent reads. State the task, the inputs, where outputs go and what they must contain, in plain words. Never include the answer.</span></div>
+            <div><code>environment/Dockerfile</code><span>The agent's environment. Pin versions, and keep reference answers out of the image.</span></div>
+            <div><code>solution/solve.sh</code><span>The oracle: a reference solution that passes the verifier. It proves the task is solvable.</span></div>
+            <div><code>tests/test.sh</code><span>The verifier. It checks the agent's outputs independently of anything the agent controls, and gives the same result on every run.</span></div>
+          </div>
+          <p>The <code>&lt;task-slug&gt;</code> is lowercase letters, digits and hyphens. Shell scripts start with a shebang (<code>#!/usr/bin/env bash</code>) and use Unix (LF) line endings. Windows line endings break them inside the Linux container.</p>
+          <h3>A task.toml to start from</h3>
+          <p>These are the fields Terminal-Bench Science tasks carry. The benchmark repository's own <a href="https://github.com/AI4S-Bench/ai4s-benchmark/tree/main/tasks/mathematical-sciences/applied-mathematics/amr-poisson-contribution-example" target="_blank" rel="noopener">example task <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a> shows the minimal shape the PR check accepts.</p>
+<pre><code>schema_version = "1.0"
+
+[task]
+description = "One sentence: what the agent must do."
+
+[metadata]
+author_name = "Your Name"
+author_email = "you@university.edu"
+author_organization = "Your institution"
+domain = "mathematical-sciences"      # matches the &lt;domain&gt; folder
+field = "applied-mathematics"         # matches the &lt;field&gt; folder
+subfield = "numerical PDE solvers"
+tags = ["multigrid", "python"]
+expert_time_estimate_hours = 5
+
+[agent]
+timeout_sec = 7200.0
+
+[verifier]
+timeout_sec = 1200.0
+
+[environment]
+cpus = 4          # at most 16
+memory_mb = 4096
+gpus = 0          # at most 1</code></pre>
+          <h3>Run it before you open the PR</h3>
+          <p>The PR template asks you to confirm that you ran the oracle locally. Maintainers run tasks with Harbor, pinned to a specific release. The benchmark repository's <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/bench/README.md" target="_blank" rel="noopener">bench/README.md <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a> documents the pinned version and the runner. At a minimum, check that the oracle passes your verifier and that a do-nothing attempt fails it.</p>
+        </section>
+
+        <section id="pr" aria-labelledby="pr-h">
+          <h2 id="pr-h"><span class="guide-step-num">03</span> Open the task PR</h2>
+          <ol>
+            <li>Fork <a href="https://github.com/AI4S-Bench/ai4s-benchmark" target="_blank" rel="noopener">AI4S-Bench/ai4s-benchmark <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a> and create a branch.</li>
+            <li>Add <strong>exactly one</strong> task folder under <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code>.</li>
+            <li>Run the <a href="check.html">pre-flight check</a> on your folder. It reads the files in your browser and uploads nothing.</li>
+            <li>Open the PR. In the template, paste your <strong>approved proposal's Discussion link</strong> under “Task Proposal”, summarise the research workflow, and tick the checklist.</li>
+          </ol>
+          <p>The repository's <strong>validate-task-contribution</strong> check then runs on your PR. It requires the five files, a <code>[metadata]</code> table in <code>task.toml</code>, and a Discussion link in the PR description. The pre-flight check runs the same rules and can also check an open PR by its link.</p>
+          <p style="margin-bottom:0;"><a class="btn btn--primary" href="check.html">Open the pre-flight check</a></p>
+        </section>
+
+        <section id="evaluate" aria-labelledby="evaluate-h">
+          <h2 id="evaluate-h"><span class="guide-step-num">04–05</span> Evaluation &amp; release</h2>
+          <p>Once maintainers link your PR to the proposal, the task page shows it in the timeline, and evaluation begins after the merge. The current validation matrix runs the <strong>oracle</strong> several times (it must pass every time), a <strong>do-nothing agent</strong> as a negative control (it must fail), and <strong>frontier agents</strong> to calibrate difficulty and record how they fail. Results appear in the task page's <em>Agent results</em> section.</p>
+          <p>Verified tasks join a versioned release. A task accepted into AI4S-Benchmark earns its authors <a href="../contributors/#credit">contribution credit</a>, visible under their names permanently. Task proposals for the ICML 2027 submission close on <strong>31 December 2026</strong>.</p>
+        </section>
+
+        <section id="acceptance" aria-labelledby="acceptance-h">
+          <h2 id="acceptance-h">Acceptance checklist</h2>
+          <p>What a finished task must meet before it is accepted:</p>
+          <ul class="guide-checklist">
+            <li><span>The proposal is <strong>approved</strong>, and the PR links its Discussion.</span></li>
+            <li><span>The PR adds one task at <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code> with all five files, and <code>task.toml</code> has <code>[metadata]</code>.</span></li>
+            <li><span><code>instruction.md</code> is self-contained, states the expected outputs, and does not reveal the answer.</span></li>
+            <li><span>The oracle passes the verifier on every run, and a do-nothing attempt fails it.</span></li>
+            <li><span>The verifier judges outputs independently of agent-controlled code, as the review's verification method describes.</span></li>
+            <li><span>The reference data and answers are not reachable from the agent's environment.</span></li>
+            <li><span>Resources stay within one GPU and 16 CPU cores, and agent and verifier timeouts are set.</span></li>
+            <li><span>The shell scripts have a shebang and LF line endings, and the <a href="check.html">pre-flight check</a> passes.</span></li>
+          </ul>
+          <p style="margin-bottom:0;">Questions at any stage? Ask on <a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>, or read the repository's <a data-gh="contributing" href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container container--wide">
+      <div class="site-footer__inner">
+        <div class="site-footer__brand">
+          <a class="brand" href="../" aria-label="AI4S-Benchmark — home">
+            <svg class="brand__mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <path d="M 21.9 82 A 44 44 0 1 1 41.4 99.9" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <path d="M 32.2 88.7 L 92 27" stroke="#F7F9FC" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="60" cy="60" r="13" fill="#F7F9FC"/>
+              <circle cx="92" cy="27" r="8.5" fill="#2474FF"/>
+              <circle cx="28" cy="93" r="6.5" stroke="#F7F9FC" stroke-width="4" fill="none"/>
+              <circle cx="16" cy="52" r="5.5" fill="#18B7C9"/>
+            </svg>
+            <span class="brand__text"><span class="brand__name">AI4S</span><span class="brand__sub">Benchmark</span></span>
+          </a>
+          <p>An open benchmark built by scientists to measure what autonomous AI agents can actually accomplish in research.</p>
+        </div>
+        <div>
+          <h4>Benchmark</h4>
+          <ul>
+            <li><a href="../tasks/">Tasks</a></li>
+            <li><a href="../releases/">Releases</a></li>
+            <li><a href="../about/#methodology">Methodology</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Contribute</h4>
+          <ul>
+            <li><a href="../submit/">Submit a Task</a></li>
+            <li><a href="../guide/">Contributor Guide</a></li>
+            <li><a href="../guide/check.html">Pre-flight Check</a></li>
+            <li><a href="../reviewers/">Become a Reviewer</a></li>
+            <li><a href="../contributors/">Contributors</a></li>
+            <li><a href="../contributors/#credit">Credit &amp; Governance</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="../about/">About</a></li>
+            <li><a data-gh="bench_repo" href="https://github.com" target="_blank" rel="noopener">Benchmark repository <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a data-link="discord" href="https://discord.gg/3SNTCj5wm" target="_blank" rel="noopener">Discord <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a></li>
+            <li><a href="mailto:contact@ai4sbench.org">contact@ai4sbench.org</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="site-footer__bottom">
+        <span>AI4S-Benchmark · Advancing science through intelligent evaluation</span>
+        <span class="mono">OPEN · INDEPENDENT · COMMUNITY-BUILT · © <span data-year>2026</span></span>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="../js/app.js?v=20260921-3"></script>
+  
+</body>
+</html>
