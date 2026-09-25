@@ -260,3 +260,37 @@ class OutboundDelivery(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AIReviewPublication(Base):
+    """One bot-owned sticky publication per immutable Discussion identity."""
+
+    __tablename__ = "ai_review_publications"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    discussion_node_id: Mapped[str] = mapped_column(String(100), unique=True)
+    repository: Mapped[str] = mapped_column(String(200))
+    discussion_number: Mapped[int] = mapped_column(Integer)
+    latest_review_id: Mapped[str | None] = mapped_column(String(36))
+    github_comment_id: Mapped[str | None] = mapped_column(String(100))
+    github_comment_url: Mapped[str | None] = mapped_column(String(500))
+    discord_message_id: Mapped[str | None] = mapped_column(String(30))
+    discord_thread_id: Mapped[str | None] = mapped_column(String(30))
+    discord_message_url: Mapped[str | None] = mapped_column(String(500))
+    discord_create_started: Mapped[bool] = mapped_column(default=False)
+    assigned_reviewer: Mapped[str | None] = mapped_column(String(100))
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProposalAIReview(Base):
+    __tablename__ = "proposal_ai_reviews"
+    __table_args__ = (UniqueConstraint("repository", "run_id", "run_attempt"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    publication_id: Mapped[str] = mapped_column(ForeignKey("ai_review_publications.id"), index=True)
+    repository: Mapped[str] = mapped_column(String(200))
+    run_id: Mapped[int] = mapped_column(Integer)
+    run_attempt: Mapped[int] = mapped_column(Integer)
+    request_digest: Mapped[str] = mapped_column(String(64))
+    document: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

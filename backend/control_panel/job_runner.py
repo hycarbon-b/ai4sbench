@@ -11,6 +11,8 @@ import uuid
 
 from sqlalchemy import select
 
+from .ai_reviews import EVENT as AI_REVIEW_EVENT
+from .ai_reviews import publish_ai_delivery
 from .config import Settings, get_settings
 from .database import Base, create_database_engine, create_session_factory
 from .deliveries import claim_delivery, complete_delivery, fail_delivery, send_delivery
@@ -107,6 +109,10 @@ class JobRunner:
             await session.commit()
         if delivery is None:
             return False
+
+        if delivery.event_type == AI_REVIEW_EVENT:
+            await publish_ai_delivery(self.sessions, self.settings, delivery)
+            return True
 
         try:
             status_code, body, message_url = await send_delivery(delivery, self.settings)

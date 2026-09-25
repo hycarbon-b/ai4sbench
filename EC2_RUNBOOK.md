@@ -452,3 +452,9 @@ Verified 2026-09-13:
 
 The host is a `t3.micro` with no swap. Monitor memory before adding workers,
 large synchronizations, or resource-intensive background jobs.
+
+## AI proposal reviews
+
+See [AI review setup, API and recovery](backend/docs/ai-proposal-reviews.md) for the service key, bot token,
+Discord destination, benchmark Actions settings, migration and smoke-test sequence.
+Deploy the backend before enabling the benchmark workflow.
