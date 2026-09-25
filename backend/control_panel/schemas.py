@@ -921,3 +921,75 @@ class CloudProfileResponse(BaseModel):
 
 class CloudProfileListResponse(BaseModel):
     items: list[CloudProfileResponse]
+
+
+class AIReviewResult(BaseModel):
+    """TBS rubric output, deliberately separate from human ProposalReview."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    decision: Literal["Strong Reject", "Reject", "Uncertain", "Accept", "Strong Accept"]
+    review: str = Field(min_length=1, max_length=30_000)
+    decision_reason: str | None = Field(default=None, max_length=2_000)
+    scientific_domain: str | None = Field(default=None, max_length=500)
+    summary: str | None = Field(default=None, max_length=4_000)
+    justification: str | None = Field(default=None, max_length=4_000)
+    author_name: str | None = Field(default=None, max_length=300)
+    author_profile: str | None = Field(default=None, max_length=1_000)
+    author_academic_profile: str | None = Field(default=None, max_length=1_000)
+    author_fit: Literal["Direct", "Adjacent", "Unrelated"] | None = None
+    author_fit_reason: str | None = Field(default=None, max_length=2_000)
+    author_fit_review: str | None = Field(default=None, max_length=12_000)
+    coi: Literal["None", "Disclosed"] | None = None
+    coi_reason: str | None = Field(default=None, max_length=2_000)
+
+
+class AIReviewSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    schema_version: Literal["ai4sbench-proposal-ai-review/v1"] = "ai4sbench-proposal-ai-review/v1"
+    repository: str = Field(pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", max_length=200)
+    discussion_number: int = Field(gt=0, le=2**31 - 1)
+    discussion_node_id: str = Field(pattern=r"^[A-Za-z0-9_=-]+$", max_length=100)
+    run_id: int = Field(gt=0, le=2**63 - 1)
+    run_attempt: int = Field(gt=0, le=2**31 - 1)
+    workflow_sha: str = Field(pattern=r"^[a-f0-9]{40}$")
+    upstream_sha: str = Field(pattern=r"^[a-f0-9]{40}$")
+    model: str = Field(min_length=1, max_length=200)
+    proposal_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    status: Literal["completed", "unavailable"]
+    result: AIReviewResult | None = None
+    error_summary: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def result_matches_status(self) -> AIReviewSubmission:
+        if self.status == "completed" and (self.result is None or self.error_summary is not None):
+            raise ValueError("completed requires a result and no error summary")
+        if self.status == "unavailable" and self.result is not None:
+            raise ValueError("unavailable must not contain a recommendation")
+        return self
+
+
+class AIReviewDeliveryStatus(BaseModel):
+    id: str
+    delivery_type: str
+    state: str
+
+
+class AIReviewAccepted(BaseModel):
+    review_id: str
+    publication_id: str
+    deliveries: list[AIReviewDeliveryStatus]
+
+
+class AIReviewDiscordRecovery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message_id: str | None = Field(default=None, pattern=r"^[0-9]{1,30}$")
+    thread_id: str | None = Field(default=None, pattern=r"^[0-9]{1,30}$")
+    confirmed_not_sent: bool = False
+
+    @model_validator(mode="after")
+    def choose_action(self) -> AIReviewDiscordRecovery:
+        if bool(self.message_id) == self.confirmed_not_sent:
+            raise ValueError("provide message_id OR confirmed_not_sent")
+        if self.thread_id and not self.message_id:
+            raise ValueError("thread_id requires message_id")
+        return self
