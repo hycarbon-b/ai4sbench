@@ -172,3 +172,9 @@ docker compose -f backend/compose.yaml up --build
 The public benchmark repository is selected through
 `TBCP_GITHUB_REPOSITORY`. It remains external to the control plane's private
 data directory.
+
+## AI proposal reviews
+
+See [AI review setup, API and recovery](docs/ai-proposal-reviews.md) for the service key, bot token,
+Discord destination, benchmark Actions settings, migration and smoke-test sequence.
+Deploy the backend before enabling the benchmark workflow.

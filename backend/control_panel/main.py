@@ -12,6 +12,7 @@ from httpx_oauth.clients.github import GitHubOAuth2
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .ai_reviews import ai_review_router
 from .api import admin_router, public_router, worker_router
 from .community import community_router
 from .config import Settings, get_settings
@@ -141,6 +142,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.include_router(admin_router)
     app.include_router(worker_router)
     app.include_router(community_router)
+    app.include_router(ai_review_router)
     auth_backend, fastapi_users = build_auth(resolved)
     if resolved.github_oauth_client_id and resolved.github_oauth_client_secret:
         github_oauth = GitHubOAuth2(

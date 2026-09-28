@@ -618,6 +618,7 @@ def review_values_from_discussion(
         comment
         for comment in comments
         if REVIEW_COMMENT_MARKER in str(comment.get("body") or "")
+        and "<!-- ai4sbench-proposal-ai-review:v1 -->" not in str(comment.get("body") or "")
         and str((comment.get("author") or {}).get("login") or "").lower() in reviewer_logins
     ]
     if not candidates:
