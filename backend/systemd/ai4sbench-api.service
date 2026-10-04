@@ -1,0 +1,20 @@
+[Unit]
+Description=AI4S-Bench control panel API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai4sbench
+Group=ai4sbench
+WorkingDirectory=/opt/ai4sbench/backend
+EnvironmentFile=/etc/ai4sbench/control-panel.env
+Environment=PATH=/opt/ai4sbench/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/ai4sbench/backend/.venv/bin/uvicorn src.main:create_app --factory --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

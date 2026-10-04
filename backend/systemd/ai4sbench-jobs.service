@@ -1,0 +1,20 @@
+[Unit]
+Description=AI4S-Bench SQLite job runner
+After=network-online.target ai4sbench-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai4sbench
+Group=ai4sbench
+WorkingDirectory=/opt/ai4sbench/backend
+EnvironmentFile=/etc/ai4sbench/control-panel.env
+Environment=PATH=/opt/ai4sbench/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/ai4sbench/backend/.venv/bin/python -m src.jobs.runner
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

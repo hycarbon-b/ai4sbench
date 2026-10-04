@@ -408,8 +408,8 @@ The API and v1 runner must report `active`. When v2 is configured, also check
 
 ### Deploying Harbor EC2 v2
 
-The v2 systemd unit is committed at
-`backend/systemd/ai4sbench-harbor-v2-jobs.service`. Before enabling it:
+The API, v1 jobs, and v2 jobs systemd units are committed under
+`backend/systemd/`. Before enabling v2:
 
 1. Add `harbor[ec2]==0.20.0` to the service virtual environment with
    `uv sync --frozen --extra aws --extra harbor-ec2 --extra dev`.
@@ -420,8 +420,11 @@ The v2 systemd unit is committed at
 3. Install the unit, reload systemd, and enable it:
 
    ```bash
+   sudo install -o root -g root -m 0644 backend/systemd/ai4sbench-api.service /etc/systemd/system/
+   sudo install -o root -g root -m 0644 backend/systemd/ai4sbench-jobs.service /etc/systemd/system/
    sudo install -o root -g root -m 0644 backend/systemd/ai4sbench-harbor-v2-jobs.service /etc/systemd/system/
    sudo systemctl daemon-reload
+   sudo systemctl restart ai4sbench-api.service ai4sbench-jobs.service
    sudo systemctl enable --now ai4sbench-harbor-v2-jobs.service
    ```
 
