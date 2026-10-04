@@ -1,5 +1,5 @@
-from control_panel.bootstrap import render_worker_bootstrap
-from control_panel.harbor_result import terminal_state
+from src.control_panel.bootstrap import render_worker_bootstrap
+from src.control_panel.harbor_result import terminal_state
 
 
 def result(*, completed: int = 1, errored: int = 0) -> dict:

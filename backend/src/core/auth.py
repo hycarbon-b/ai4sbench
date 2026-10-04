@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .identity import User, current_active_user
+from src.core.identity import User, current_active_user
 
 
 @dataclass(frozen=True)

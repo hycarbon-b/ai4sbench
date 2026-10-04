@@ -16,15 +16,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from control_panel.ami_build import (
+from src.control_panel.ami_build import (
     ImageSpec,
     assert_image_is_runtime_free,
     render_provisioning_script,
 )
-from control_panel.bootstrap import render_worker_bootstrap
-from control_panel.config import Settings
-from control_panel.providers import Boto3EC2Provider
-from control_panel.worker import (
+from src.control_panel.bootstrap import render_worker_bootstrap
+from src.control_panel.providers import Boto3EC2Provider
+from src.control_panel.worker import (
     WORKER_PREFIX,
     EventStream,
     HarborRecorder,
@@ -33,6 +32,7 @@ from control_panel.worker import (
     run_command,
     split_event_message,
 )
+from src.core.config import Settings
 
 SPEC = ImageSpec(repo_url="https://github.com/example/ai4sbench.git", commit_sha="a" * 40)
 
@@ -78,7 +78,7 @@ class EventStreamTests(unittest.TestCase):
         self.assertEqual(len(parts), 3)
 
     def test_every_line_is_delivered_in_order_under_fast_output(self) -> None:
-        with patch("control_panel.worker.post") as post:
+        with patch("src.control_panel.worker.post") as post:
             stream = RecordingStream()
             post.side_effect = _patched_post(stream)
             expected = [f"line-{index}" for index in range(500)]
@@ -88,7 +88,7 @@ class EventStreamTests(unittest.TestCase):
         self.assertEqual(stream.sent, expected)
 
     def test_a_failed_send_does_not_stop_later_lines(self) -> None:
-        with patch("control_panel.worker.post") as post:
+        with patch("src.control_panel.worker.post") as post:
             stream = RecordingStream(failures=1)
             post.side_effect = _patched_post(stream)
             stream.emit("first")
@@ -99,7 +99,7 @@ class EventStreamTests(unittest.TestCase):
         self.assertEqual(stream.sent, ["second"])
 
     def test_close_waits_for_the_queue_to_drain(self) -> None:
-        with patch("control_panel.worker.post") as post:
+        with patch("src.control_panel.worker.post") as post:
             stream = RecordingStream()
             post.side_effect = _patched_post(stream)
             for index in range(200):
@@ -108,7 +108,7 @@ class EventStreamTests(unittest.TestCase):
             self.assertEqual(len(stream.sent), 200)
 
     def test_emitting_after_close_is_ignored(self) -> None:
-        with patch("control_panel.worker.post") as post:
+        with patch("src.control_panel.worker.post") as post:
             stream = RecordingStream()
             post.side_effect = _patched_post(stream)
             stream.close()
@@ -324,7 +324,7 @@ class ImageProvisioningTests(unittest.TestCase):
             "docker buildx version",
             "harbor --version",
             "/opt/ai4sbench/.venv/bin/ai4sbench-worker --help",
-            "import control_panel.worker",
+            "import src.control_panel.worker",
         ):
             self.assertIn(check, script)
         # `poweroff` is the build's success signal, so it must come last: a
@@ -412,7 +412,7 @@ class MainFailureReportingTests(unittest.TestCase):
     """
 
     def run_main(self, commit_sha: str) -> dict:
-        import control_panel.worker as worker_module
+        import src.control_panel.worker as worker_module
 
         posted: list[tuple[str, dict]] = []
 
@@ -446,7 +446,7 @@ class MainFailureReportingTests(unittest.TestCase):
             "TBCP_JOB_TOKEN": "bootstrap-token",
             "TBCP_ENABLE_QUICK_TUNNEL": "0",
         }
-        with patch("control_panel.worker.post", side_effect=fake_post), patch.dict(
+        with patch("src.control_panel.worker.post", side_effect=fake_post), patch.dict(
             "os.environ", env, clear=False
         ), self.assertRaises(RuntimeError):
             worker_module.main()
@@ -502,7 +502,7 @@ class MainFailureReportingTests(unittest.TestCase):
     def test_a_claim_failure_is_logged_locally_before_any_session_token_exists(self) -> None:
         import io
 
-        import control_panel.worker as worker_module
+        import src.control_panel.worker as worker_module
 
         def failing_post(base_url, path, value, **kwargs):
             raise OSError("control plane unreachable")
@@ -513,7 +513,7 @@ class MainFailureReportingTests(unittest.TestCase):
             "TBCP_JOB_TOKEN": "bootstrap-token",
         }
         captured = io.StringIO()
-        with patch("control_panel.worker.post", side_effect=failing_post), patch.dict(
+        with patch("src.control_panel.worker.post", side_effect=failing_post), patch.dict(
             "os.environ", env, clear=False
         ), patch("sys.stderr", captured), self.assertRaises(OSError):
             worker_module.main()

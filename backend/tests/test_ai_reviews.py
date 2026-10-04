@@ -11,20 +11,20 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from test_community import review_payload, user
 
-from control_panel.ai_reviews import (
+from src.community.ai_reviews import (
     MARKER,
     PublicationError,
     github_request,
     proposal_digest,
     render_github,
 )
-from control_panel.community import review_values_from_discussion
-from control_panel.config import Settings
-from control_panel.identity import current_active_user
-from control_panel.job_runner import JobRunner
-from control_panel.main import create_app
-from control_panel.models import AIReviewPublication, OutboundDelivery, Proposal, ProposalAIReview
-from control_panel.schemas import AIReviewSubmission, ProposalReview
+from src.community.routes import review_values_from_discussion
+from src.community.schemas import AIReviewSubmission, ProposalReview
+from src.core.config import Settings
+from src.core.identity import current_active_user
+from src.db.models import AIReviewPublication, OutboundDelivery, Proposal, ProposalAIReview
+from src.jobs.runner import JobRunner
+from src.main import create_app
 
 KEY = "test-service-key-" * 3
 URL = "/api/v1/internal/proposal-ai-reviews"
@@ -112,11 +112,11 @@ def setup(tmp_path):
     with (
         TestClient(app) as client,
         patch(
-            "control_panel.ai_reviews.fetch_discussion", AsyncMock(return_value=copy.deepcopy(DISCUSSION))
+            "src.community.ai_reviews.fetch_discussion", AsyncMock(return_value=copy.deepcopy(DISCUSSION))
         ) as fetch,
-        patch("control_panel.ai_reviews.github_request", side_effect=github.__call__),
+        patch("src.community.ai_reviews.github_request", side_effect=github.__call__),
         patch(
-            "control_panel.ai_reviews.discord_request",
+            "src.community.ai_reviews.discord_request",
             AsyncMock(return_value={"id": "123", "channel_id": "456"}),
         ) as discord,
     ):
@@ -403,7 +403,7 @@ def test_github_http_200_errors_are_not_success():
     response = httpx.Response(200, json={"errors": [{"message": "denied"}]})
     client = AsyncMock()
     client.post.return_value = response
-    with patch("control_panel.ai_reviews.httpx.AsyncClient") as constructor:
+    with patch("src.community.ai_reviews.httpx.AsyncClient") as constructor:
         constructor.return_value.__aenter__.return_value = client
         import asyncio
 
@@ -477,7 +477,7 @@ def test_github_create_response_loss_recovers_the_existing_comment(setup):
             raise PublicationError("Response lost after creating comment")
         return result
 
-    with patch("control_panel.ai_reviews.github_request", side_effect=lose_response):
+    with patch("src.community.ai_reviews.github_request", side_effect=lose_response):
         pump(client, runner)
         assert len(github.comments) == 1
         client.portal.call(available, app.state.session_factory)
@@ -490,12 +490,12 @@ def test_github_create_response_loss_recovers_the_existing_comment(setup):
 def test_discord_transport_constructs_patch_url_and_never_sends_thread_name():
     import asyncio
 
-    from control_panel.ai_reviews import discord_request
+    from src.community.ai_reviews import discord_request
 
     settings = Settings(_env_file=None, discord_webhook_url="https://discord.example/api/webhooks/1/secret")
     client = AsyncMock()
     client.request.return_value = httpx.Response(200, json={"id": "123", "channel_id": "456"})
-    with patch("control_panel.ai_reviews.httpx.AsyncClient") as constructor:
+    with patch("src.community.ai_reviews.httpx.AsyncClient") as constructor:
         constructor.return_value.__aenter__.return_value = client
         asyncio.run(
             discord_request(settings, "PATCH", message_id="123", thread_id="456", payload={"embeds": []})

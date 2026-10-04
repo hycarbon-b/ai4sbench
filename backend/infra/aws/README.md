@@ -50,7 +50,7 @@ Keep this mode limited to one short-lived test worker and automatic termination.
 It is compatible with an AWS Free plan because it does not create an AWS
 Organization; EC2, gp3, public IPv4, and data transfer still consume available
 Free-plan credits.  The default eligible family allowlist is maintained in
-`control_panel/config.py`.  It validates lifecycle wiring, not task-performance
+`src/config.py`.  It validates lifecycle wiring, not task-performance
 capacity: the reference task needs four CPUs, while Free-plan small instances
 may provide fewer.
 

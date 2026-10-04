@@ -13,14 +13,14 @@ from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_panel.config import Settings
-from control_panel.identity import User, current_active_user
-from control_panel.job_runner import JobRunner
-from control_panel.main import create_app
-from control_panel.models import AuditEvent, DatabaseJob, Run
-from control_panel.providers import FakeEC2Provider
-from control_panel.quick_tunnel import extract_quick_tunnel_url
-from control_panel.services import deterministic_bootstrap_token
+from src.control_panel.providers import FakeEC2Provider
+from src.control_panel.quick_tunnel import extract_quick_tunnel_url
+from src.control_panel.services import deterministic_bootstrap_token
+from src.core.config import Settings
+from src.core.identity import User, current_active_user
+from src.db.models import AuditEvent, DatabaseJob, Run
+from src.jobs.runner import JobRunner
+from src.main import create_app
 
 JOB_SECRET = "test-job-secret-that-is-long-enough-456"
 
@@ -203,6 +203,25 @@ class ControlPanelIntegrationTests(unittest.TestCase):
             payload = schema.json()
             self.assertEqual(payload["info"]["title"], "AI4S-Bench Control Plane API")
             self.assertIn("community", {tag["name"] for tag in payload["tags"]})
+
+            ec2_docs = client.get("/docs/ec2/v1")
+            self.assertEqual(ec2_docs.status_code, 200)
+            self.assertIn("/openapi/ec2/v1.json", ec2_docs.text)
+            community_docs = client.get("/docs/community/v1")
+            self.assertEqual(community_docs.status_code, 200)
+            self.assertIn("/openapi/community/v1.json", community_docs.text)
+
+            ec2_schema = client.get("/openapi/ec2/v1.json").json()
+            community_schema = client.get("/openapi/community/v1.json").json()
+            self.assertIn("/api/v1/runs", ec2_schema["paths"])
+            self.assertIn("/api/v1/cloud-profiles", ec2_schema["paths"])
+            self.assertNotIn("/api/v1/proposals", ec2_schema["paths"])
+            self.assertNotIn("/api/v1/reviewer-applications", ec2_schema["paths"])
+            self.assertIn("/api/v1/proposals", community_schema["paths"])
+            self.assertIn("/api/v1/reviewer-applications", community_schema["paths"])
+            self.assertIn("/api/v1/deliveries", community_schema["paths"])
+            self.assertNotIn("/api/v1/runs", community_schema["paths"])
+            self.assertNotIn("/api/v1/cloud-profiles", community_schema["paths"])
 
     def test_website_cors_preflight_allows_proposal_updates(self) -> None:
         cors_app = create_app(
@@ -617,7 +636,7 @@ class ControlPanelIntegrationTests(unittest.TestCase):
                 },
             ],
         )
-        with patch("control_panel.api.GitHubTaskSource") as source_class:
+        with patch("src.control_panel.api.v1.routes.GitHubTaskSource") as source_class:
             source_class.return_value.sync_repository = AsyncMock(return_value=source_result)
             response = self.client.post(
                 "/api/v1/task-revisions/sync-repository",

@@ -16,17 +16,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from test_community import proposal_payload, review_payload
 
-from control_panel.config import Settings
-from control_panel.database import Base
-from control_panel.deliveries import (
+from src.community.deliveries import (
     DeliveryResponseError,
     discord_message_url,
     enqueue_delivery,
 )
-from control_panel.identity import User, current_active_user
-from control_panel.job_runner import JobRunner
-from control_panel.main import create_app
-from control_panel.models import OutboundDelivery, Proposal
+from src.core.config import Settings
+from src.core.identity import User, current_active_user
+from src.db.database import Base
+from src.db.models import OutboundDelivery, Proposal
+from src.jobs.runner import JobRunner
+from src.main import create_app
 
 
 def github_user(role: str, login: str) -> User:
@@ -129,7 +129,7 @@ def test_proposals_and_reviews_queue_inspectable_discord_deliveries() -> None:
         with (
             TestClient(app) as client,
             patch(
-                "control_panel.community.create_github_discussion",
+                "src.community.routes.create_github_discussion",
                 AsyncMock(
                     return_value={
                         "id": "D_kwDONotify",
@@ -139,7 +139,7 @@ def test_proposals_and_reviews_queue_inspectable_discord_deliveries() -> None:
                 ),
             ),
             patch(
-                "control_panel.community.create_github_discussion_comment",
+                "src.community.routes.create_github_discussion_comment",
                 AsyncMock(
                     return_value={
                         "id": "DC_kwDONotifyReview",
@@ -178,7 +178,7 @@ def test_proposals_and_reviews_queue_inspectable_discord_deliveries() -> None:
             assert "Approved" in deliveries[1].payload["embeds"][0]["title"]
 
             with patch(
-                "control_panel.job_runner.send_delivery",
+                "src.jobs.runner.send_delivery",
                 side_effect=[
                     (
                         200,
@@ -247,7 +247,7 @@ def test_webhook_deduplication_and_bounded_retry() -> None:
 
         runner = JobRunner(settings)
         response_error = DeliveryResponseError(400, '{"message":"invalid payload"}')
-        with patch("control_panel.job_runner.send_delivery", side_effect=response_error):
+        with patch("src.jobs.runner.send_delivery", side_effect=response_error):
             assert asyncio.run(runner.run_once()) is True
             delivery = asyncio.run(retry_state(app.state.session_factory, delivery_id, make_available=True))
             assert delivery.state == "pending"
@@ -302,7 +302,7 @@ def test_smtp_delivery_uses_fastapi_mail_without_recording_credentials() -> None
 
         delivery_id = asyncio.run(seed())
         runner = JobRunner(settings)
-        with patch("control_panel.deliveries.FastMail") as fast_mail:
+        with patch("src.community.deliveries.FastMail") as fast_mail:
             fast_mail.return_value.send_message = AsyncMock()
             assert asyncio.run(runner.run_once()) is True
             message = fast_mail.return_value.send_message.await_args.args[0]
@@ -354,7 +354,7 @@ def test_smtp_delivery_failure_retries_and_becomes_terminal() -> None:
 
         delivery_id = asyncio.run(seed())
         runner = JobRunner(settings)
-        with patch("control_panel.deliveries.FastMail") as fast_mail:
+        with patch("src.community.deliveries.FastMail") as fast_mail:
             fast_mail.return_value.send_message = AsyncMock(side_effect=RuntimeError("SMTP unavailable"))
             assert asyncio.run(runner.run_once()) is True
 

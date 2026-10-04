@@ -14,18 +14,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/ai4sbench/.venv/bin:$PATH"
 
 RUN groupadd --system ai4sbench && useradd --system --gid ai4sbench --home /opt/ai4sbench ai4sbench
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/ai4sbench
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.9 /uv /usr/local/bin/uv
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-dev --extra aws --no-install-project
+RUN uv sync --frozen --no-dev --extra aws --extra harbor-ec2 --no-install-project
 
-COPY backend/control_panel ./control_panel
-COPY --from=frontend /build/backend/control_panel/static ./control_panel/static
+COPY backend/src ./src
+COPY --from=frontend /build/backend/src/static ./src/static
 COPY backend/migrations ./migrations
 COPY backend/alembic.ini ./
-RUN uv sync --frozen --no-dev --extra aws && mkdir -p /var/lib/ai4sbench && chown -R ai4sbench:ai4sbench /var/lib/ai4sbench
+RUN uv sync --frozen --no-dev --extra aws --extra harbor-ec2 \
+    && mkdir -p /var/lib/ai4sbench \
+    && chown -R ai4sbench:ai4sbench /var/lib/ai4sbench
 
 USER ai4sbench
 EXPOSE 8080
-CMD ["uvicorn", "control_panel.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
+CMD ["uvicorn", "src.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]

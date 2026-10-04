@@ -1,4 +1,4 @@
-from control_panel.contribution_contract import (
+from src.community.contribution_contract import (
     ball_in_court,
     ci_status,
     parse_proposal_title,

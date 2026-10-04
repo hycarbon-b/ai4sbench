@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import DatabaseJob
+from src.db.models import DatabaseJob
 
 
 def utcnow() -> datetime:

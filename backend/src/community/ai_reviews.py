@@ -19,13 +19,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import get_principal, require_ai_review_service
-from .config import Settings
-from .database import get_session
-from .deliveries import complete_delivery, enqueue_delivery, fail_delivery, resend_delivery
-from .models import AIReviewPublication, OutboundDelivery, Proposal, ProposalAIReview
-from .schemas import AIReviewAccepted, AIReviewDiscordRecovery, AIReviewSubmission
-from .services import begin_immediate
+from src.community.deliveries import complete_delivery, enqueue_delivery, fail_delivery, resend_delivery
+from src.community.schemas import AIReviewAccepted, AIReviewDiscordRecovery, AIReviewSubmission
+from src.core.auth import get_principal, require_ai_review_service
+from src.core.config import Settings
+from src.db.database import begin_immediate, get_session
+from src.db.models import AIReviewPublication, OutboundDelivery, Proposal, ProposalAIReview
 
 MARKER = "<!-- ai4sbench-proposal-ai-review:v1 -->"
 EVENT = "proposal_ai_review"

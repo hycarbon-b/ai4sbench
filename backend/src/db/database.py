@@ -4,12 +4,12 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from fastapi import Request
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from .config import Settings
+from src.core.config import Settings
 
 
 class Base(DeclarativeBase):
@@ -55,3 +55,8 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
     async with factory() as session:
         yield session
+
+
+async def begin_immediate(session: AsyncSession) -> None:
+    """Acquire SQLite's write lock before a multi-step state transition."""
+    await session.execute(text("BEGIN IMMEDIATE"))

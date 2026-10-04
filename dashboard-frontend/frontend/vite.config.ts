@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    outDir: "../../backend/control_panel/static",
+    outDir: "../../backend/src/static",
     emptyOutDir: true,
   },
 });

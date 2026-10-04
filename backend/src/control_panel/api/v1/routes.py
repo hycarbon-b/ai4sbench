@@ -15,21 +15,11 @@ from sqlalchemy import func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import Principal, get_principal
-from .config import Settings
-from .database import get_session
-from .deliveries import resend_delivery
-from .github_source import GitHubTaskSource
-from .models import (
-    DatabaseJob,
-    ExecutionPlan,
-    OutboundDelivery,
-    ReviewerApplication,
-    Run,
-    RunEvent,
-    TaskRevision,
-)
-from .schemas import (
+from src.control_panel.github_source import GitHubTaskSource
+from src.control_panel.schemas import (
+    CloudProfileCreate,
+    CloudProfileListResponse,
+    CloudProfileResponse,
     CreatedRunResponse,
     DashboardResponse,
     DatabaseJobListResponse,
@@ -39,16 +29,11 @@ from .schemas import (
     ManualBatchRunCreate,
     ManualBatchRunResponse,
     ManualRunCreate,
-    OutboundDeliveryListResponse,
-    OutboundDeliveryResponse,
     PlanApprove,
     PlanCreate,
     PlanListResponse,
     PlanResponse,
     ReadyHealthResponse,
-    ReviewerApplicationListResponse,
-    ReviewerApplicationResponse,
-    ReviewerApplicationUpdate,
     RunCreate,
     RunEventListResponse,
     RunEventResponse,
@@ -66,7 +51,7 @@ from .schemas import (
     WorkerComplete,
     WorkerEventCreate,
 )
-from .services import (
+from src.control_panel.services import (
     ConflictError,
     NotFoundError,
     WorkerAuthError,
@@ -85,6 +70,17 @@ from .services import (
     task_dict,
     upsert_task_revision,
     upsert_task_revisions,
+)
+from src.core.auth import Principal, get_principal
+from src.core.config import Settings
+from src.db.database import get_session
+from src.db.models import (
+    CloudProfile,
+    DatabaseJob,
+    ExecutionPlan,
+    Run,
+    RunEvent,
+    TaskRevision,
 )
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -129,73 +125,6 @@ async def dashboard(session: SessionDep) -> DashboardResponse:
         "task_revisions": [task_dict(item) for item in revisions],
         "counts": counts,
     }
-
-
-@admin_router.get(
-    "/reviewer-applications",
-    tags=["reviewers"],
-    response_model=ReviewerApplicationListResponse,
-    summary="List reviewer applications",
-    description="Returns the complete applicant dossiers and administrator decisions, newest first.",
-)
-async def list_reviewer_applications(session: SessionDep) -> ReviewerApplicationListResponse:
-    items = await session.scalars(select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc()))
-    return {"items": list(items)}
-
-
-@admin_router.get(
-    "/reviewer-applications/{application_id}",
-    tags=["reviewers"],
-    response_model=ReviewerApplicationResponse,
-    summary="Get one reviewer application",
-    responses={404: {"description": "The reviewer application does not exist."}},
-)
-async def get_reviewer_application(
-    application_id: str,
-    session: SessionDep,
-) -> ReviewerApplicationResponse:
-    item = await session.get(ReviewerApplication, application_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Reviewer application not found")
-    return item
-
-
-@admin_router.patch(
-    "/reviewer-applications/{application_id}",
-    tags=["reviewers"],
-    response_model=ReviewerApplicationResponse,
-    summary="Manage a reviewer application",
-    description=(
-        "Updates the GitHub identity, private administrator notes, or decision. "
-        "An approved application with a GitHub username grants reviewer access immediately."
-    ),
-    responses={404: {"description": "The reviewer application does not exist."}},
-)
-async def update_reviewer_application(
-    application_id: str,
-    body: ReviewerApplicationUpdate,
-    session: SessionDep,
-    principal: AdminDep,
-) -> ReviewerApplicationResponse:
-    item = await session.get(ReviewerApplication, application_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Reviewer application not found")
-
-    if "github" in body.model_fields_set:
-        item.github = body.github
-    if "admin_notes" in body.model_fields_set:
-        item.admin_notes = body.admin_notes
-    if "status" in body.model_fields_set and body.status is not None:
-        item.status = body.status
-        if body.status == "pending":
-            item.reviewed_by = None
-            item.reviewed_at = None
-        else:
-            item.reviewed_by = principal.subject
-            item.reviewed_at = datetime.now(UTC)
-    await session.commit()
-    await session.refresh(item)
-    return item
 
 
 def sqlite_snapshot_paths(settings: Settings) -> tuple[Path, Path]:
@@ -530,62 +459,6 @@ async def list_jobs(session: SessionDep) -> DatabaseJobListResponse:
     }
 
 
-def outbound_delivery_dict(item: OutboundDelivery) -> dict[str, object]:
-    return {
-        "id": item.id,
-        "event_type": item.event_type,
-        "delivery_type": item.delivery_type,
-        "destination": item.destination,
-        "payload": item.payload,
-        "dedupe_key": item.dedupe_key,
-        "state": item.state,
-        "attempts": item.attempts,
-        "max_attempts": item.max_attempts,
-        "available_at": item.available_at,
-        "last_error": item.last_error,
-        "response_status": item.response_status,
-        "response_body": item.response_body,
-        "sent_at": item.sent_at,
-        "created_at": item.created_at,
-        "updated_at": item.updated_at,
-    }
-
-
-@admin_router.get(
-    "/deliveries",
-    tags=["operations"],
-    response_model=OutboundDeliveryListResponse,
-    summary="List outbound deliveries",
-)
-async def list_outbound_deliveries(session: SessionDep) -> OutboundDeliveryListResponse:
-    items = await session.scalars(
-        select(OutboundDelivery).order_by(OutboundDelivery.created_at.desc()).limit(100)
-    )
-    return {"items": [outbound_delivery_dict(item) for item in items]}
-
-
-@admin_router.post(
-    "/deliveries/{delivery_id}/resend",
-    tags=["operations"],
-    response_model=OutboundDeliveryResponse,
-    summary="Queue an outbound delivery again",
-    responses={
-        404: {"description": "The outbound delivery does not exist."},
-        409: {"description": "The outbound delivery is currently being sent."},
-    },
-)
-async def post_resend_outbound_delivery(delivery_id: str, session: SessionDep) -> OutboundDeliveryResponse:
-    delivery = await session.get(OutboundDelivery, delivery_id)
-    if delivery is None:
-        raise HTTPException(status_code=404, detail="Outbound delivery not found")
-    try:
-        await resend_delivery(session, delivery)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await session.commit()
-    return outbound_delivery_dict(delivery)
-
-
 @worker_router.post("/runs/{run_id}/claim", response_model=WorkerClaimResponse)
 async def worker_claim(
     run_id: str, body: WorkerClaim, request: Request, session: SessionDep
@@ -619,3 +492,49 @@ async def worker_complete(run_id: str, body: WorkerComplete, session: SessionDep
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@admin_router.get("/cloud-profiles", tags=["cloud profiles"], response_model=CloudProfileListResponse)
+async def list_cloud_profiles(session: SessionDep, _principal: AdminDep) -> CloudProfileListResponse:
+    items = await session.scalars(select(CloudProfile).order_by(CloudProfile.name))
+    return {
+        "items": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "provider": item.provider,
+                "allocation": item.allocation,
+                "enabled": item.enabled,
+            }
+            for item in items
+        ]
+    }
+
+
+@admin_router.post(
+    "/cloud-profiles",
+    tags=["cloud profiles"],
+    status_code=status.HTTP_201_CREATED,
+    response_model=CloudProfileResponse,
+)
+async def create_cloud_profile(
+    body: CloudProfileCreate, session: SessionDep, principal: AdminDep
+) -> CloudProfileResponse:
+    if await session.scalar(select(CloudProfile).where(CloudProfile.name == body.name)):
+        raise HTTPException(status_code=409, detail="Cloud profile name already exists")
+    item = CloudProfile(
+        name=body.name,
+        provider=body.provider,
+        allocation=body.allocation,
+        enabled=body.enabled,
+        created_by=principal.subject,
+    )
+    session.add(item)
+    await session.commit()
+    return {
+        "id": item.id,
+        "name": item.name,
+        "provider": item.provider,
+        "allocation": item.allocation,
+        "enabled": item.enabled,
+    }

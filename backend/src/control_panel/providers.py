@@ -5,9 +5,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from .ami_build import WORKER_ENTRYPOINT
-from .bootstrap import render_worker_bootstrap
-from .config import Settings
+from src.control_panel.ami_build import WORKER_ENTRYPOINT
+from src.control_panel.bootstrap import render_worker_bootstrap
+from src.core.config import Settings
 
 
 class EC2Provider(Protocol):

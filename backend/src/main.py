@@ -12,13 +12,16 @@ from httpx_oauth.clients.github import GitHubOAuth2
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .ai_reviews import ai_review_router
-from .api import admin_router, public_router, worker_router
-from .community import community_router
-from .config import Settings, get_settings
-from .database import Base, create_database_engine, create_session_factory
-from .identity import build_auth
-from .providers import EC2Provider, provider_from_settings
+from src.api_docs import install_scoped_docs
+from src.community.admin_routes import admin_router as community_admin_router
+from src.community.ai_reviews import ai_review_router
+from src.community.routes import community_router
+from src.control_panel.api.v1.routes import admin_router, public_router, worker_router
+from src.control_panel.api.v2.routes import router as harbor_v2_router
+from src.control_panel.providers import EC2Provider, provider_from_settings
+from src.core.config import Settings, get_settings
+from src.core.identity import build_auth
+from src.db.database import Base, create_database_engine, create_session_factory
 
 STATIC_DIR = Path(__file__).with_name("static")
 WEBSITE_DIST_DIR = Path(__file__).with_name("website_dist")
@@ -67,6 +70,10 @@ OPENAPI_TAGS = [
         "description": "Execution-plan creation and optimistic-lock approval.",
     },
     {
+        "name": "cloud profiles",
+        "description": "Administrator-managed EC2 allocation profiles.",
+    },
+    {
         "name": "runs",
         "description": "Run queueing, cancellation and event inspection. Mutations accept `Idempotency-Key`.",
     },
@@ -77,6 +84,14 @@ OPENAPI_TAGS = [
     {
         "name": "worker",
         "description": "Worker-agent lifecycle endpoints authenticated with each run's worker token.",
+    },
+    {
+        "name": "AI reviews",
+        "description": "Service-submitted AI reviews and publication recovery.",
+    },
+    {
+        "name": "Harbor EC2 v2",
+        "description": "Harbor CLI managed EC2 jobs, with independent v2 persistence and runner.",
     },
 ]
 
@@ -141,8 +156,17 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.include_router(public_router)
     app.include_router(admin_router)
     app.include_router(worker_router)
+    ec2_routes = [*public_router.routes, *admin_router.routes, *worker_router.routes]
+    app.include_router(harbor_v2_router)
+    v2_routes = list(harbor_v2_router.routes)
     app.include_router(community_router)
+    app.include_router(community_admin_router)
     app.include_router(ai_review_router)
+    community_routes = [
+        *community_router.routes,
+        *community_admin_router.routes,
+        *ai_review_router.routes,
+    ]
     auth_backend, fastapi_users = build_auth(resolved)
     if resolved.github_oauth_client_id and resolved.github_oauth_client_secret:
         github_oauth = GitHubOAuth2(
@@ -150,18 +174,15 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
             resolved.github_oauth_client_secret.get_secret_value(),
             scopes=["read:user", "user:email", "public_repo"],
         )
-        app.include_router(
-            fastapi_users.get_oauth_router(
-                github_oauth,
-                auth_backend,
-                resolved.auth_jwt_secret,
-                associate_by_email=True,
-                is_verified_by_default=True,
-                csrf_token_cookie_secure=resolved.environment == "production",
-            ),
-            prefix="/auth/github",
-            tags=["authentication"],
+        oauth_router = fastapi_users.get_oauth_router(
+            github_oauth,
+            auth_backend,
+            resolved.auth_jwt_secret,
+            associate_by_email=True,
+            is_verified_by_default=True,
+            csrf_token_cookie_secure=resolved.environment == "production",
         )
+        app.include_router(oauth_router, prefix="/auth/github", tags=["authentication"])
 
         @app.get("/auth/github/start", include_in_schema=False)
         async def github_start() -> HTMLResponse:
@@ -179,6 +200,10 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
 </script>"""
             )
 
+    install_scoped_docs(
+        app, ec2_routes=ec2_routes, v2_routes=v2_routes, community_routes=community_routes
+    )
+
     @app.get("/website", include_in_schema=False)
     async def website_root() -> RedirectResponse:
         return RedirectResponse("/website/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
@@ -192,7 +217,7 @@ def run() -> None:
     import uvicorn
 
     settings = get_settings()
-    uvicorn.run("control_panel.main:create_app", host=settings.host, port=settings.port, factory=True)
+    uvicorn.run("src.main:create_app", host=settings.host, port=settings.port, factory=True)
 
 
 if __name__ == "__main__":

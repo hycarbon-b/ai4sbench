@@ -7,8 +7,9 @@ from pathlib import Path
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from control_panel import models  # noqa: F401
-from control_panel.database import Base
+from src.control_panel.v2 import models as v2_models  # noqa: F401
+from src.db import models  # noqa: F401
+from src.db.database import Base
 
 config = context.config
 if config.config_file_name is not None:

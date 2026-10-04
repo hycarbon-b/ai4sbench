@@ -20,9 +20,9 @@ ai4sbench/
   Discussion synchronization, SQLite jobs, database snapshots, migrations, and
   worker orchestration.
 - [`dashboard-frontend/frontend/`](dashboard-frontend/frontend/README.md) is
-  compiled into `backend/control_panel/static/` and served at `/`.
+  compiled into `backend/src/static/` and served at `/`.
 - `ai4s-bench-website/` is developed in its own repository. A reviewed static
-  build is committed under `backend/control_panel/website_dist/` and served at
+  build is committed under `backend/src/website_dist/` and served at
   `/website`.
 - `benchmark-repository/` points to
   `https://github.com/AI4S-Bench/ai4s-benchmark.git` and contains public task
@@ -71,7 +71,7 @@ npm run check
 npm run build
 ```
 
-The production build writes directly to `backend/control_panel/static/`.
+The production build writes directly to `backend/src/static/`.
 Commit the generated `index.html` and hashed assets together with the source
 change. The API then serves:
 
@@ -93,7 +93,7 @@ Run backend and frontend verification before committing a release:
 ```bash
 cd backend
 uv run pytest
-uv run ruff check control_panel tests
+uv run ruff check src tests
 ```
 
 ```bash

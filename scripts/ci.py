@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "dashboard-frontend" / "frontend"
-STATIC_ASSETS = ROOT / "backend" / "control_panel" / "static"
+STATIC_ASSETS = ROOT / "backend" / "src" / "static"
 NPM = "npm.cmd" if sys.platform == "win32" else "npm"
 
 
@@ -51,7 +51,7 @@ def assert_static_assets_are_current() -> None:
         raise SystemExit(
             "Dashboard static assets are out of date. Run "
             "`npm run build` from dashboard-frontend/frontend and commit the "
-            "resulting backend/control_panel/static changes."
+            "resulting backend/src/static changes."
         )
 
 
@@ -60,7 +60,7 @@ def main() -> None:
         require(command)
 
     run("uv", "sync", "--locked", "--extra", "dev", "--extra", "aws", cwd=BACKEND)
-    run("uv", "run", "ruff", "check", "control_panel", "tests", cwd=BACKEND)
+    run("uv", "run", "ruff", "check", "src", "tests", cwd=BACKEND)
     run("uv", "run", "pytest", cwd=BACKEND)
 
     run(NPM, "ci", cwd=FRONTEND)

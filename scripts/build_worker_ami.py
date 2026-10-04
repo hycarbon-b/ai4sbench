@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from control_panel.ami_build import (  # noqa: E402 - path setup must precede the import
+from src.control_panel.ami_build import (  # noqa: E402 - path setup must precede the import
     ImageSpec,
     assert_image_is_runtime_free,
     render_provisioning_script,

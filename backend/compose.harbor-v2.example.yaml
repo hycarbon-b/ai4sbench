@@ -1,0 +1,12 @@
+# Optional bind mount for the Harbor runner. Set both path values
+# in backend/.env; no separate credentials service is required.
+services:
+  api:
+    environment:
+      TBCP_HARBOR_V2_SSH_KEY_PATH: /run/secrets/harbor-ec2-key
+  harbor-v2-jobs:
+    environment:
+      TBCP_HARBOR_V2_SSH_KEY_PATH: /run/secrets/harbor-ec2-key
+      TBCP_HARBOR_V2_JOBS_DIR: /var/lib/ai4sbench/harbor-v2
+    volumes:
+      - ${HARBOR_V2_SSH_KEY_HOST_PATH:?set HARBOR_V2_SSH_KEY_HOST_PATH}:/run/secrets/harbor-ec2-key:ro

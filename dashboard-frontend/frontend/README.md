@@ -24,7 +24,7 @@ npm run build
 ```
 
 The production build writes directly to
-`../../backend/control_panel/static/`, where FastAPI serves it. Commit the
+`../../backend/src/static/`, where FastAPI serves it. Commit the
 generated `index.html` and hashed assets with the React source; production
 receives them through Git rather than a direct file upload.
 

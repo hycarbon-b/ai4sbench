@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
@@ -114,6 +115,14 @@ class Settings(BaseSettings):
     ec2_security_group_ids: tuple[str, ...] = ()
     ec2_instance_profile_arn: str | None = None
     ec2_associate_public_ip: bool = True
+    harbor_v2_enabled: bool = False
+    harbor_v2_executable: str = "harbor"
+    harbor_v2_jobs_dir: Path = Path("./data/harbor-v2")
+    harbor_v2_ssh_key_path: Path | None = None
+    harbor_v2_ec2_key_name: str = ""
+    harbor_v2_ssh_user: str = "ec2-user"
+    harbor_v2_bootstrap_docker: bool = False
+    harbor_v2_lease_seconds: int = Field(default=120, ge=30, le=3600)
     github_token: SecretStr | None = None
     git_https_proxy: str | None = None
 

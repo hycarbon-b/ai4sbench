@@ -8,13 +8,16 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import Principal
-from .config import Settings
-from .job_queue import enqueue
-from .models import (
+from src.control_panel.job_queue import enqueue
+from src.control_panel.providers import EC2Provider
+from src.control_panel.schemas import PlanConfig
+from src.core.auth import Principal
+from src.core.config import Settings
+from src.db.database import begin_immediate
+from src.db.models import (
     AuditEvent,
     DatabaseJob,
     ExecutionPlan,
@@ -23,8 +26,6 @@ from .models import (
     TaskRevision,
     WorkerCredential,
 )
-from .providers import EC2Provider
-from .schemas import PlanConfig
 
 ACTIVE_STATES = {"provisioning", "running", "terminating"}
 TERMINAL_STATES = {"succeeded", "failed", "timed_out", "cancelled"}
@@ -48,10 +49,6 @@ class WorkerAuthError(Exception):
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
-
-
-async def begin_immediate(session: AsyncSession) -> None:
-    await session.execute(text("BEGIN IMMEDIATE"))
 
 
 def task_dict(item: TaskRevision) -> dict[str, Any]:

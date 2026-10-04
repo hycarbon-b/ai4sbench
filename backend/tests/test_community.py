@@ -10,16 +10,16 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from control_panel.community import (
+from src.community.routes import (
     form_payload_from_discussion,
     review_payload_from_comment,
     validate_proposal_submission,
 )
-from control_panel.config import Settings
-from control_panel.identity import User, current_active_user, current_optional_user
-from control_panel.main import create_app
-from control_panel.models import Proposal, TaskRevision
-from control_panel.schemas import ProposalReview, ProposalSubmission
+from src.community.schemas import ProposalReview, ProposalSubmission
+from src.core.config import Settings
+from src.core.identity import User, current_active_user, current_optional_user
+from src.db.models import Proposal, TaskRevision
+from src.main import create_app
 
 
 def user(role: str) -> User:
@@ -181,7 +181,7 @@ def test_configured_reviewer_can_publish_review_reply_and_update_public_board() 
         with (
             TestClient(app) as client,
             patch(
-                "control_panel.community.create_github_discussion",
+                "src.community.routes.create_github_discussion",
                 AsyncMock(
                     return_value={
                         "id": "D_kwDOPublishReview",
@@ -191,7 +191,7 @@ def test_configured_reviewer_can_publish_review_reply_and_update_public_board() 
                 ),
             ),
             patch(
-                "control_panel.community.create_github_discussion_comment",
+                "src.community.routes.create_github_discussion_comment",
                 AsyncMock(
                     return_value={
                         "id": "DC_kwDOPublishedReview",
@@ -262,7 +262,7 @@ def test_member_can_open_discussion_but_cannot_manage_cloud_profiles() -> None:
         with (
             TestClient(app) as client,
             patch(
-                "control_panel.community.create_github_discussion",
+                "src.community.routes.create_github_discussion",
                 AsyncMock(
                     return_value={
                         "id": "D_kwDOExample",
@@ -307,7 +307,7 @@ def test_author_can_edit_proposal_and_existing_discussion_atomically() -> None:
         with (
             TestClient(app) as client,
             patch(
-                "control_panel.community.create_github_discussion",
+                "src.community.routes.create_github_discussion",
                 AsyncMock(
                     return_value={
                         "id": "D_kwDOEdit",
@@ -345,7 +345,7 @@ def test_author_can_edit_proposal_and_existing_discussion_atomically() -> None:
                     "updatedAt": "2026-09-15T04:05:06Z",
                 }
             )
-            with patch("control_panel.community.update_github_discussion", github_update):
+            with patch("src.community.routes.update_github_discussion", github_update):
                 updated = client.put(f"/api/v1/proposals/{proposal_id}", json=edited)
             assert updated.status_code == 200, updated.text
             assert updated.json()["input"] == normalized.model_dump(mode="json")
@@ -367,7 +367,7 @@ def test_author_can_edit_proposal_and_existing_discussion_atomically() -> None:
 
             rejected = {**edited, "title": "A third version that GitHub must reject atomically"}
             with patch(
-                "control_panel.community.update_github_discussion",
+                "src.community.routes.update_github_discussion",
                 AsyncMock(
                     side_effect=HTTPException(
                         status_code=502,
@@ -495,7 +495,7 @@ def test_proposals_from_different_repositories_can_share_a_discussion_number() -
         ]
         with (
             TestClient(app) as client,
-            patch("control_panel.community.create_github_discussion", AsyncMock(side_effect=discussions)),
+            patch("src.community.routes.create_github_discussion", AsyncMock(side_effect=discussions)),
         ):
             assert client.post("/api/v1/proposals", json=proposal_payload()).status_code == 201
             assert client.post("/api/v1/proposals", json=proposal_payload()).status_code == 201
@@ -555,11 +555,11 @@ def test_admin_soft_delete_hides_proposal_and_sync_respects_tombstone() -> None:
             }
             with (
                 patch(
-                    "control_panel.community.github_access_token",
+                    "src.community.routes.github_access_token",
                     AsyncMock(return_value="test-token"),
                 ),
                 patch(
-                    "control_panel.community.fetch_all_discussions",
+                    "src.community.routes.fetch_all_discussions",
                     AsyncMock(return_value=[discussion]),
                 ),
             ):
@@ -605,9 +605,9 @@ def test_admin_full_sync_upserts_discussions_without_deleting_records() -> None:
         }
         with (
             TestClient(app) as client,
-            patch("control_panel.community.github_access_token", AsyncMock(return_value="test-token")),
+            patch("src.community.routes.github_access_token", AsyncMock(return_value="test-token")),
             patch(
-                "control_panel.community.fetch_all_discussions",
+                "src.community.routes.fetch_all_discussions",
                 AsyncMock(return_value=[discussion]),
             ) as fetch,
         ):
@@ -695,8 +695,8 @@ def test_review_sync_updates_proposal_and_public_board_joins_latest_revision() -
         }
         with (
             TestClient(app) as client,
-            patch("control_panel.community.github_access_token", AsyncMock(return_value="token")),
-            patch("control_panel.community.fetch_all_discussions", AsyncMock(return_value=[discussion])),
+            patch("src.community.routes.github_access_token", AsyncMock(return_value="token")),
+            patch("src.community.routes.fetch_all_discussions", AsyncMock(return_value=[discussion])),
         ):
             preview = client.post("/api/v1/proposals/reviews/preview", json=review_payload())
             assert preview.status_code == 200, preview.text
@@ -778,8 +778,8 @@ def test_invalid_authorized_review_is_recorded_but_does_not_approve_proposal() -
         }
         with (
             TestClient(app) as client,
-            patch("control_panel.community.github_access_token", AsyncMock(return_value="token")),
-            patch("control_panel.community.fetch_all_discussions", AsyncMock(return_value=[discussion])),
+            patch("src.community.routes.github_access_token", AsyncMock(return_value="token")),
+            patch("src.community.routes.fetch_all_discussions", AsyncMock(return_value=[discussion])),
         ):
             synced = client.post("/api/v1/proposals/sync-discussions")
             assert synced.status_code == 200, synced.text
@@ -832,9 +832,9 @@ GitHub: @scientist
         }
         with (
             TestClient(app) as client,
-            patch("control_panel.community.github_access_token", AsyncMock(return_value="test-token")),
+            patch("src.community.routes.github_access_token", AsyncMock(return_value="test-token")),
             patch(
-                "control_panel.community.fetch_all_discussions",
+                "src.community.routes.fetch_all_discussions",
                 AsyncMock(return_value=[discussion]),
             ),
         ):

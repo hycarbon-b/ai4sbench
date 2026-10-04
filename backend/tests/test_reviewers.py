@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from control_panel.config import Settings
-from control_panel.identity import User, current_active_user, current_optional_user
-from control_panel.main import create_app
+from src.core.config import Settings
+from src.core.identity import User, current_active_user, current_optional_user
+from src.main import create_app
 
 
 def make_user(role: str, github_login: str) -> User:

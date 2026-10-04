@@ -126,7 +126,7 @@ def render_provisioning_script(spec: ImageSpec) -> str:
             "docker buildx version",
             "harbor --version",
             f"{WORKER_ENTRYPOINT} --help || true",
-            f"{INSTALL_ROOT}/.venv/bin/python -c 'import control_panel.worker'",
+            f"{INSTALL_ROOT}/.venv/bin/python -c 'import src.control_panel.worker'",
             f"docker --version > {INSTALL_ROOT}/docker-version",
             "touch /var/lib/ai4sbench-image-ready",
             "poweroff",

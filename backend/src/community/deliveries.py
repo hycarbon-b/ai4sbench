@@ -9,9 +9,9 @@ from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import Settings
-from .models import OutboundDelivery, Proposal
-from .schemas import ProposalReview
+from src.community.schemas import ProposalReview
+from src.core.config import Settings
+from src.db.models import OutboundDelivery, Proposal
 
 DeliveryType = Literal["discord", "github_discussion", "smtp"]
 

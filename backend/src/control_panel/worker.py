@@ -17,8 +17,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .harbor_result import terminal_state
-from .quick_tunnel import DebugState, start_debug_server, start_quick_tunnel
+from src.control_panel.harbor_result import terminal_state
+from src.control_panel.quick_tunnel import DebugState, start_debug_server, start_quick_tunnel
 
 HARBOR_PREFIX = "[harbor]"
 WORKER_PREFIX = "[worker]"

@@ -13,18 +13,12 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database import get_session
-from .deliveries import enqueue_proposal_notification, enqueue_review_notification
-from .identity import OAuthAccount, User, current_active_user, current_optional_user
-from .models import CloudProfile, ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
-from .schemas import (
+from src.community.deliveries import enqueue_proposal_notification, enqueue_review_notification
+from src.community.schemas import (
     PROPOSAL_DOMAIN_OPTIONS,
     REVIEW_COMMENT_MARKER,
     AuthConfigResponse,
     AuthenticatedUserResponse,
-    CloudProfileCreate,
-    CloudProfileListResponse,
-    CloudProfileResponse,
     ProposalBoardListResponse,
     ProposalDomainListResponse,
     ProposalEditDetailResponse,
@@ -41,6 +35,9 @@ from .schemas import (
     ReviewerApplicationCreatedResponse,
     ReviewerApplicationSubmission,
 )
+from src.core.identity import OAuthAccount, User, current_active_user, current_optional_user
+from src.db.database import get_session
+from src.db.models import ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -1302,47 +1299,4 @@ async def pull_request_instructions(
         "task_path": f"tasks/{proposal.domain}/{proposal.field}/{proposal.task_slug}",
         "proposal_url": proposal.discussion_url or "",
         "compare_url": f"https://github.com/{repository}/compare/main..." if repository else "",
-    }
-
-
-@community_router.get("/cloud-profiles", response_model=CloudProfileListResponse)
-async def list_cloud_profiles(session: SessionDep, _user: AdminDep) -> CloudProfileListResponse:
-    items = await session.scalars(select(CloudProfile).order_by(CloudProfile.name))
-    return {
-        "items": [
-            {
-                "id": item.id,
-                "name": item.name,
-                "provider": item.provider,
-                "allocation": item.allocation,
-                "enabled": item.enabled,
-            }
-            for item in items
-        ]
-    }
-
-
-@community_router.post(
-    "/cloud-profiles", status_code=status.HTTP_201_CREATED, response_model=CloudProfileResponse
-)
-async def create_cloud_profile(
-    body: CloudProfileCreate, session: SessionDep, user: AdminDep
-) -> CloudProfileResponse:
-    if await session.scalar(select(CloudProfile).where(CloudProfile.name == body.name)):
-        raise HTTPException(status_code=409, detail="Cloud profile name already exists")
-    item = CloudProfile(
-        name=body.name,
-        provider=body.provider,
-        allocation=body.allocation,
-        enabled=body.enabled,
-        created_by=user.github_login or user.email,
-    )
-    session.add(item)
-    await session.commit()
-    return {
-        "id": item.id,
-        "name": item.name,
-        "provider": item.provider,
-        "allocation": item.allocation,
-        "enabled": item.enabled,
     }

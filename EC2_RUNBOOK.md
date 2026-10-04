@@ -57,8 +57,8 @@ Two systemd units run the control plane:
 
 | Unit | Command | Purpose |
 | --- | --- | --- |
-| `ai4sbench-api.service` | `python -m uvicorn control_panel.main:create_app --factory --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *` | HTTP API, Dashboard static assets, GitHub OAuth, proposal submission |
-| `ai4sbench-jobs.service` | `python -m control_panel.job_runner` | Database-backed background job runner |
+| `ai4sbench-api.service` | `python -m uvicorn src.main:create_app --factory --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *` | HTTP API, Dashboard static assets, GitHub OAuth, proposal submission |
+| `ai4sbench-jobs.service` | `python -m src.jobs.runner` | Database-backed background job runner |
 
 Both units currently run as `ai4sbench:ai4sbench` with working directory
 `/opt/ai4sbench/backend`.
@@ -215,7 +215,7 @@ Compose, Buildx, and Harbor versions, installs the worker at the current (or
 compose version`, `docker buildx version`, `harbor --version`, worker import),
 stops the instance, registers the AMI, waits for it to become `available`, and
 terminates the builder instance. It never writes a job token, run ID, or AWS
-credential into the image; `control_panel.ami_build.assert_image_is_runtime_free`
+credential into the image; `src.control_panel.ami_build.assert_image_is_runtime_free`
 enforces that at build time.
 
 The AMI is tagged with `ai4sbench:worker-commit` and `ai4sbench:harbor-version`.
@@ -335,7 +335,7 @@ python scripts/ci.py
 ```
 
 When Dashboard source changes, CI verifies that `npm run build` has updated and
-committed `backend/control_panel/static/`. EC2 never builds or receives these
+committed `backend/src/static/`. EC2 never builds or receives these
 assets separately.
 
 ### 2. Record the reviewed `main` commit

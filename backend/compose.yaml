@@ -16,7 +16,7 @@ services:
     env_file: .env
     command:
       - uvicorn
-      - control_panel.main:create_app
+      - src.main:create_app
       - --factory
       - --host
       - 0.0.0.0
@@ -45,6 +45,20 @@ services:
       dockerfile: backend/Dockerfile
     env_file: .env
     command: ["ai4sbench-jobs"]
+    volumes:
+      - control-data:/var/lib/ai4sbench
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  harbor-v2-jobs:
+    profiles: ["harbor-v2"]
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    command: ["ai4sbench-v2-jobs"]
     volumes:
       - control-data:/var/lib/ai4sbench
     depends_on:

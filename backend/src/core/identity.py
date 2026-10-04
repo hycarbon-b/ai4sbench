@@ -17,8 +17,8 @@ from sqlalchemy import String
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .config import Settings, get_settings
-from .database import Base
+from src.core.config import Settings, get_settings
+from src.db.database import Base
 
 
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):

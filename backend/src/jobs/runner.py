@@ -11,23 +11,22 @@ import uuid
 
 from sqlalchemy import select
 
-from .ai_reviews import EVENT as AI_REVIEW_EVENT
-from .ai_reviews import publish_ai_delivery
-from .config import Settings, get_settings
-from .database import Base, create_database_engine, create_session_factory
-from .deliveries import claim_delivery, complete_delivery, fail_delivery, send_delivery
-from .job_queue import claim, complete, defer, fail
-from .models import DatabaseJob, OutboundDelivery
-from .providers import EC2Provider, provider_from_settings
-from .services import (
+from src.community.ai_reviews import EVENT as AI_REVIEW_EVENT
+from src.community.ai_reviews import publish_ai_delivery
+from src.community.deliveries import claim_delivery, complete_delivery, fail_delivery, send_delivery
+from src.control_panel.job_queue import claim, complete, defer, fail
+from src.control_panel.providers import EC2Provider, provider_from_settings
+from src.control_panel.services import (
     CapacityError,
-    begin_immediate,
     handle_launch,
     handle_terminate,
     mark_job_exhausted,
     reconcile,
     record_job_attempt_failure,
 )
+from src.core.config import Settings, get_settings
+from src.db.database import Base, begin_immediate, create_database_engine, create_session_factory
+from src.db.models import DatabaseJob, OutboundDelivery
 
 logger = logging.getLogger("ai4sbench.jobs")
 

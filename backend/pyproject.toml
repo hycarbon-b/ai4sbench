@@ -1,7 +1,7 @@
 [project]
-name = "ai4sbench-control-panel"
+name = "ai4sbench-backend"
 version = "0.2.0"
-description = "FastAPI control plane for Harbor benchmark workers on EC2"
+description = "FastAPI backend for AI4S-Bench community and EC2 benchmark execution"
 requires-python = ">=3.12"
 dependencies = [
   "aiosqlite>=0.21,<1",
@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 aws = ["boto3>=1.40,<2"]
+harbor-ec2 = ["harbor[ec2]==0.20.0"]
 dev = [
   "alembic>=1.16,<2",
   "pytest>=8.4,<9",
@@ -23,16 +24,17 @@ dev = [
 ]
 
 [project.scripts]
-ai4sbench-api = "control_panel.main:run"
-ai4sbench-jobs = "control_panel.job_runner:run"
-ai4sbench-worker = "control_panel.worker:main"
+ai4sbench-api = "src.main:run"
+ai4sbench-jobs = "src.jobs.runner:run"
+ai4sbench-worker = "src.control_panel.worker:main"
+ai4sbench-v2-jobs = "src.control_panel.v2.runner:run"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["control_panel"]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
