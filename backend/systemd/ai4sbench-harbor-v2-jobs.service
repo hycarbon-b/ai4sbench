@@ -10,6 +10,7 @@ Group=ai4sbench
 WorkingDirectory=/opt/ai4sbench/backend
 EnvironmentFile=/etc/ai4sbench/control-panel.env
 Environment=PYTHONIOENCODING=utf-8
+Environment=PATH=/opt/ai4sbench/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/opt/ai4sbench/backend/.venv/bin/ai4sbench-v2-jobs
 Restart=on-failure
 RestartSec=3
