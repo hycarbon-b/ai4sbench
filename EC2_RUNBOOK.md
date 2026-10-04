@@ -53,27 +53,30 @@ issues, pull requests, logs, or chat.
 
 ## Running services
 
-Two systemd units run the control plane:
+Two systemd units run the control plane. Harbor EC2 v2 adds a third, independent
+runner when enabled:
 
 | Unit | Command | Purpose |
 | --- | --- | --- |
 | `ai4sbench-api.service` | `python -m uvicorn src.main:create_app --factory --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *` | HTTP API, Dashboard static assets, GitHub OAuth, proposal submission |
 | `ai4sbench-jobs.service` | `python -m src.jobs.runner` | Database-backed background job runner |
+| `ai4sbench-harbor-v2-jobs.service` | `ai4sbench-v2-jobs` | Harbor CLI EC2 v2 queue runner; enabled separately |
 
-Both units currently run as `ai4sbench:ai4sbench` with working directory
-`/opt/ai4sbench/backend`.
+The API and v1 runner run as `ai4sbench:ai4sbench` with working directory
+`/opt/ai4sbench/backend`. The optional v2 runner uses the same account and
+working directory.
 
 ### How the instance and services start
 
 1. AWS starts the `t3.micro` instance.
 2. Amazon Linux boots systemd and reaches `network-online.target`.
-3. Because both units are `enabled` for `multi-user.target`, systemd loads
+3. Because the API and v1 runner are `enabled` for `multi-user.target`, systemd loads
    `/etc/ai4sbench/control-panel.env` and starts `ai4sbench-api.service`.
 4. The API launches Uvicorn on port `8080`.
 5. `ai4sbench-jobs.service` starts after the API unit and runs the SQLite job
    runner.
-6. If either process exits unexpectedly, systemd restarts it after three
-   seconds (`Restart=on-failure`).
+6. If a process exits unexpectedly, systemd restarts it after three seconds
+   (`Restart=on-failure`).
 
 Confirm startup wiring after a reboot or service change:
 
@@ -400,7 +403,34 @@ sudo systemctl restart ai4sbench-api.service ai4sbench-jobs.service
 sudo systemctl is-active ai4sbench-api.service ai4sbench-jobs.service
 ```
 
-Both commands must report `active`.
+The API and v1 runner must report `active`. When v2 is configured, also check
+`ai4sbench-harbor-v2-jobs.service`.
+
+### Deploying Harbor EC2 v2
+
+The v2 systemd unit is committed at
+`backend/systemd/ai4sbench-harbor-v2-jobs.service`. Before enabling it:
+
+1. Add `harbor[ec2]==0.20.0` to the service virtual environment with
+   `uv sync --frozen --extra aws --extra harbor-ec2 --extra dev`.
+2. Set `TBCP_HARBOR_V2_ENABLED=true`, `TBCP_HARBOR_V2_EC2_KEY_NAME`, and
+   `TBCP_HARBOR_V2_SSH_KEY_PATH` in the protected environment file. Reuse the
+   v1 AMI, subnet, security group, and region settings. The SSH private key
+   must be readable by `ai4sbench` and match the EC2 key pair.
+3. Install the unit, reload systemd, and enable it:
+
+   ```bash
+   sudo install -o root -g root -m 0644 backend/systemd/ai4sbench-harbor-v2-jobs.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now ai4sbench-harbor-v2-jobs.service
+   ```
+
+4. Check the v2 runner journal and `/docs/ec2/v2`. Harbor tags each worker
+   instance as `ai4sbench:v2-run=<run_id>` and terminates it after the job.
+
+The example operator configuration uses a Docker-ready v1 AMI and a public
+subnet. The security group must allow TCP 22 from the runner host to workers.
+For a private runner, use VPC routing and private addresses instead.
 
 ### 7. Verify locally and publicly
 

@@ -1,0 +1,19 @@
+[Unit]
+Description=AI4S-Bench Harbor EC2 v2 job runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai4sbench
+Group=ai4sbench
+WorkingDirectory=/opt/ai4sbench/backend
+EnvironmentFile=/etc/ai4sbench/control-panel.env
+Environment=PYTHONIOENCODING=utf-8
+ExecStart=/opt/ai4sbench/backend/.venv/bin/ai4sbench-v2-jobs
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
