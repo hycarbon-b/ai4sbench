@@ -11,6 +11,7 @@ import {
   History,
   LoaderCircle,
   LogOut,
+  Mail,
   Play,
   RefreshCw,
   Rocket,
@@ -71,6 +72,7 @@ import {
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
+import { MailComposer } from "./MailComposer";
 import {
   Table as UiTable,
   TableBody,
@@ -87,6 +89,7 @@ type View =
   | "runs"
   | "jobs"
   | "deliveries"
+  | "mail"
   | "cloud"
   | "snapshots"
   | "reviewers"
@@ -98,6 +101,7 @@ const views: View[] = [
   "runs",
   "jobs",
   "deliveries",
+  "mail",
   "cloud",
   "snapshots",
   "reviewers",
@@ -769,6 +773,7 @@ export default function App() {
               onSyncDiscussions={syncDiscussions}
               onDeleteProposal={removeProposal}
               onResendDelivery={resendDelivery}
+              onMailQueued={() => void loadOps()}
               onManageReviewer={manageReviewer}
               loading={loading}
             />
@@ -852,6 +857,7 @@ function AdminPanel({
   onSyncDiscussions,
   onDeleteProposal,
   onResendDelivery,
+  onMailQueued,
   onManageReviewer,
   onSaveDatabaseSnapshot,
   loading,
@@ -892,6 +898,7 @@ function AdminPanel({
   onSyncDiscussions: () => void;
   onDeleteProposal: (proposal: Proposal) => void;
   onResendDelivery: (delivery: OutboundDelivery) => void;
+  onMailQueued: () => void;
   onManageReviewer: (
     application: ReviewerApplication,
     update: ReviewerApplicationUpdate,
@@ -936,6 +943,7 @@ function AdminPanel({
         onResend={onResendDelivery}
       />
     );
+  if (view === "mail") return <MailComposer onQueued={onMailQueued} />;
   if (view === "reviewers")
     return (
       <ReviewerApplicationsPanel
@@ -2404,6 +2412,7 @@ function Sidebar({
         ["runs", "Run queue", Rocket],
         ["jobs", "Worker jobs", ServerCog],
         ["deliveries", "Outbound deliveries", Webhook],
+        ["mail", "Send email", Mail],
         ["cloud", "Cloud profiles", CloudCog],
         ["snapshots", "Database snapshots", History],
       ]

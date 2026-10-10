@@ -1,0 +1,7 @@
+{% extends "notification.html" %}
+{% block message %}
+{% for line in body_lines %}
+<p style="margin:0 0 12px;color:#33435B;font-size:15px;line-height:25px;">{{ line if line else " " }}</p>
+{% endfor %}
+<p style="margin:24px 0 0;color:#33435B;font-size:15px;line-height:25px;">{{ signature }}</p>
+{% endblock %}

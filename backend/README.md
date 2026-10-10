@@ -187,6 +187,18 @@ stored email body and SMTP credentials; administrators can still inspect the
 full queue through the existing delivery routes. Use an app-specific SMTP
 password in the protected runtime environment, never in the repository.
 
+The administrator-only Dashboard **Send email** page uses
+`GET /api/v1/admin-mail/recipients` and `POST /api/v1/admin-mail/deliveries`.
+It lists Proposal authors and reviewer applicants only when a saved GitHub
+OAuth email can be linked to them; the reviewer form's manually entered email
+is not used. The operator selects up to 100 people, writes a subject, body,
+and footer signature, and confirms the unique address count. The server
+renders the shared HTML/plain-text mail layout and enqueues one private SMTP
+delivery per unique address. The SMTP From address remains server-configured.
+The send request requires an `Idempotency-Key`; repeated submissions with the
+same key and content return the original delivery IDs. The page queues mail,
+not a synchronous SMTP send, and requires `TBCP_SMTP_ENABLED=true`.
+
 After a Proposal-created Discord delivery succeeds, the backend records its
 Discord permalink in `proposals.discord_message_url`. The field is returned by
 Proposal list, edit-detail, and public task-board APIs. Review notifications do
