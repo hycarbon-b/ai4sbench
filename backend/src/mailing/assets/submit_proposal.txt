@@ -1,0 +1,1 @@
+We received your proposal, {{ proposal_title }}, and it is now being processed. View your proposal: {{ proposal_url }}. If you have questions, please contact contact@ai4sbench.org.

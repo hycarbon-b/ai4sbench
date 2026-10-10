@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     contributor_github_emails: tuple[str, ...] = ()
     reviewer_github_logins: tuple[str, ...] = ()
     ai_review_service_key: SecretStr | None = None
+    mailing_service_key: SecretStr | None = None
     ai_review_github_token: SecretStr | None = None
     ai_review_discord_forum: bool = True
     ai_review_sync_labels: bool = False

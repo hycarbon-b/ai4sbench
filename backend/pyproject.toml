@@ -9,6 +9,7 @@ dependencies = [
   "fastapi-mail>=1.6,<2",
   "fastapi-users[oauth,sqlalchemy]>=15.0.5,<16",
   "httpx>=0.28,<1",
+  "jinja2>=3.1,<4",
   "pydantic-settings>=2.10,<3",
   "sqlalchemy>=2.0.43,<3",
   "uvicorn[standard]>=0.35,<1",

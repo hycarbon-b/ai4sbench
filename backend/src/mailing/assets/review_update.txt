@@ -1,0 +1,1 @@
+A scientific review update is available for your proposal, {{ proposal_title }}. View your proposal for the latest details: {{ proposal_url }}. If you have questions, please contact contact@ai4sbench.org.

@@ -125,21 +125,36 @@ class JobRunner:
                 delivery.event_type,
             )
         except Exception as exc:
-            logger.exception(
-                "failed delivery=%s type=%s event=%s",
-                delivery.id,
-                delivery.delivery_type,
-                delivery.event_type,
-            )
+            if delivery.delivery_type == "smtp":
+                # SMTP libraries may include credentials in exception messages.
+                error = f"{type(exc).__name__}: SMTP delivery failed"
+                logger.error(
+                    "failed delivery=%s type=smtp event=%s error=%s",
+                    delivery.id,
+                    delivery.event_type,
+                    error,
+                )
+            else:
+                error = f"{type(exc).__name__}: {exc}"
+                logger.exception(
+                    "failed delivery=%s type=%s event=%s",
+                    delivery.id,
+                    delivery.delivery_type,
+                    delivery.event_type,
+                )
             async with self.sessions() as session:
                 current = await session.get(OutboundDelivery, delivery.id)
                 if current is not None:
                     await fail_delivery(
                         session,
                         current,
-                        f"{type(exc).__name__}: {exc}",
-                        response_status=getattr(exc, "status_code", None),
-                        response_body=getattr(exc, "response_body", None),
+                        error,
+                        response_status=(
+                            getattr(exc, "status_code", None) if delivery.delivery_type != "smtp" else None
+                        ),
+                        response_body=(
+                            getattr(exc, "response_body", None) if delivery.delivery_type != "smtp" else None
+                        ),
                     )
                     await session.commit()
         return True
