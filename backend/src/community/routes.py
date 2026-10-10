@@ -38,6 +38,7 @@ from src.community.schemas import (
 from src.core.identity import OAuthAccount, User, current_active_user, current_optional_user
 from src.db.database import get_session
 from src.db.models import ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
+from src.mailing.notifications import enqueue_author_notification
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -992,6 +993,7 @@ async def publish_proposal_review(
         body,
         proposal.review_reviewer_login,
     )
+    await enqueue_author_notification(session, request.app.state.settings, proposal, "review_update")
     await session.commit()
     return {
         "proposal_id": proposal.id,
@@ -1047,6 +1049,9 @@ async def create_proposal(
         request.app.state.settings,
         item,
         submission.model_dump(mode="json"),
+    )
+    await enqueue_author_notification(
+        session, request.app.state.settings, item, "submit_proposal", fallback_email=user.email
     )
     await session.commit()
     return {

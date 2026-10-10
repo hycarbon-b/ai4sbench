@@ -13,11 +13,13 @@ def install_scoped_docs(
     ec2_routes: list[APIRoute],
     v2_routes: list[APIRoute],
     community_routes: list[APIRoute],
+    mailing_routes: list[APIRoute],
 ) -> None:
     scopes = {
         "ec2/v1": ("AI4S-Bench EC2 Control Panel v1 API", "1.0.0", ec2_routes),
         "ec2/v2": ("AI4S-Bench Harbor EC2 v2 API", "2.0.0", v2_routes),
         "community/v1": ("AI4S-Bench Community v1 API", "1.0.0", community_routes),
+        "mailing/v1": ("AI4S-Bench Mailing v1 API", "1.0.0", mailing_routes),
     }
     for scope, (title, version, routes) in scopes.items():
         _install_scope(app, scope, title, version, routes)

@@ -33,3 +33,16 @@ async def require_ai_review_service(
         credentials.credentials.encode(), key.get_secret_value().encode()
     ):
         raise HTTPException(status_code=401, detail="Invalid AI review service credential")
+
+
+async def require_mailing_service(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(HTTPBearer(auto_error=False))],
+) -> None:
+    key = request.app.state.settings.mailing_service_key
+    if not key or len(key.get_secret_value()) < 32:
+        raise HTTPException(status_code=503, detail="Mailing service is not configured")
+    if not credentials or not secrets.compare_digest(
+        credentials.credentials.encode(), key.get_secret_value().encode()
+    ):
+        raise HTTPException(status_code=401, detail="Invalid mailing service credential")

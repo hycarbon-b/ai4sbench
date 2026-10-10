@@ -278,8 +278,10 @@ async def _send_smtp(delivery: OutboundDelivery, settings: Settings) -> tuple[in
     message = MessageSchema(
         recipients=recipients,
         subject=subject,
-        body=html or text,
-        subtype=MessageType.html if html else MessageType.plain,
+        body=text,
+        subtype=MessageType.plain,
+        alternative_body=html or None,
+        multipart_subtype="alternative" if html else "mixed",
         reply_to=reply_to or [],
     )
     await FastMail(_smtp_config(settings)).send_message(message)

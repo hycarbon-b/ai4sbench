@@ -361,7 +361,7 @@ def test_smtp_delivery_failure_retries_and_becomes_terminal() -> None:
         delivery = asyncio.run(retry_state(app.state.session_factory, delivery_id))
         assert delivery.state == "failed"
         assert delivery.attempts == 1
-        assert delivery.last_error == "RuntimeError: SMTP unavailable"
+        assert delivery.last_error == "RuntimeError: SMTP delivery failed"
         asyncio.run(runner.engine.dispose())
         asyncio.run(app.state.engine.dispose())
 

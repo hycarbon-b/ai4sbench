@@ -1,0 +1,4 @@
+{% extends "notification.html" %}
+{% block message %}
+<p style="margin:0;color:#33435B;font-size:15px;line-height:25px;">A scientific review update is available for your proposal, <strong style="color:#0D1730;">{{ proposal_title }}</strong>. Please <a href="{{ proposal_url }}" style="color:#2474FF;text-decoration:underline;">view your proposal</a> for the latest details. If you have questions, please contact <a href="mailto:contact@ai4sbench.org" style="color:#2474FF;text-decoration:underline;">contact@ai4sbench.org</a>.</p>
+{% endblock %}

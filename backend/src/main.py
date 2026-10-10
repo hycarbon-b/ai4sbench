@@ -22,6 +22,7 @@ from src.control_panel.providers import EC2Provider, provider_from_settings
 from src.core.config import Settings, get_settings
 from src.core.identity import build_auth
 from src.db.database import Base, create_database_engine, create_session_factory
+from src.mailing.routes import mailing_router
 
 STATIC_DIR = Path(__file__).with_name("static")
 WEBSITE_DIST_DIR = Path(__file__).with_name("website_dist")
@@ -80,6 +81,10 @@ OPENAPI_TAGS = [
     {
         "name": "operations",
         "description": ("Administrator view of asynchronous database-backed jobs and outbound deliveries."),
+    },
+    {
+        "name": "mailing",
+        "description": "Service-authenticated asynchronous email delivery creation, status and retry.",
     },
     {
         "name": "worker",
@@ -162,6 +167,8 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.include_router(community_router)
     app.include_router(community_admin_router)
     app.include_router(ai_review_router)
+    app.include_router(mailing_router)
+    mailing_routes = list(mailing_router.routes)
     community_routes = [
         *community_router.routes,
         *community_admin_router.routes,
@@ -201,7 +208,11 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
             )
 
     install_scoped_docs(
-        app, ec2_routes=ec2_routes, v2_routes=v2_routes, community_routes=community_routes
+        app,
+        ec2_routes=ec2_routes,
+        v2_routes=v2_routes,
+        community_routes=community_routes,
+        mailing_routes=mailing_routes,
     )
 
     @app.get("/website", include_in_schema=False)

@@ -151,14 +151,41 @@ Administrators manage records through:
 An approved application grants review access only when it has a GitHub
 username. `TBCP_DISCORD_WEBHOOK_URL` enables queued Proposal and review
 notifications. The generic outbound queue also supports SMTP through
-FastAPI-Mail, but it is disabled by default and no current business flow queues
-email. Configure SMTP only when a later internal flow calls the queue service.
+FastAPI-Mail; it is disabled by default. When enabled, Proposal submission and
+scientific review publication queue author emails. The separate mailing service
+API also lets authorized services queue email.
 GitHub Discussion delivery is a reserved type; existing Discussion creation and
 review replies remain synchronous. The job runner sends enabled deliveries,
 while administrators inspect or retry them through:
 
 - `GET /api/v1/deliveries`
 - `POST /api/v1/deliveries/{delivery_id}/resend`
+
+Configure `TBCP_SMTP_*` for your SMTP provider and set a separate, random
+`TBCP_MAILING_SERVICE_KEY` (at least 32 characters). The service-facing routes
+use `Authorization: Bearer <mailing-service-key>` and are documented at
+`/docs/mailing/v1`:
+
+- `POST /api/v1/mailing/deliveries` creates and immediately queues an email.
+  It requires an `Idempotency-Key` header and JSON fields `recipients` (1–10
+  addresses), `subject`, `text`, and optional `html` and `reply_to`.
+- `GET /api/v1/mailing/deliveries/{delivery_id}` reports queue/send status.
+- `POST /api/v1/mailing/deliveries/{delivery_id}/retry` requeues only a
+  terminally failed email. SMTP acceptance means `completed`; it does not
+  guarantee inbox delivery.
+
+The sender always comes from server configuration. No attachments, template
+selection, or browser CORS access are provided by the API. Separately, successful
+proposal submissions and scientific review publications queue author-only SMTP
+notifications when `TBCP_SMTP_ENABLED=true`. The `submit_proposal` and
+`review_update` templates share `src/mailing/assets/notification.html`; both
+include a plain-text alternative, a Website proposal link, and
+`Reply-To: contact@ai4sbench.org`. They prefer the saved GitHub OAuth email
+over the original user email and skip mailing if no author address is available.
+Existing proposals are not backfilled. The external status response excludes the
+stored email body and SMTP credentials; administrators can still inspect the
+full queue through the existing delivery routes. Use an app-specific SMTP
+password in the protected runtime environment, never in the repository.
 
 After a Proposal-created Discord delivery succeeds, the backend records its
 Discord permalink in `proposals.discord_message_url`. The field is returned by
