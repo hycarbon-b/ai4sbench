@@ -51,6 +51,21 @@ def render_notification(kind: NotificationKind, title: str, proposal_url: str) -
     )
 
 
+def render_bulk_message(subject: str, body: str, signature: str) -> RenderedNotification:
+    context = {
+        "subject": subject,
+        "heading": subject,
+        "body_lines": body.splitlines(),
+        "body": body,
+        "signature": signature,
+    }
+    return RenderedNotification(
+        subject=subject,
+        text=_TEMPLATES.get_template("bulk_message.txt").render(context).strip(),
+        html=_TEMPLATES.get_template("bulk_message.html").render(context).strip(),
+    )
+
+
 async def author_email(session: AsyncSession, author_id: str, fallback: str | None = None) -> str | None:
     try:
         user_id = UUID(author_id)

@@ -142,6 +142,26 @@ export type OutboundDelivery = {
   updated_at: string;
 };
 
+export type MailRecipient = {
+  user_id: string;
+  email: string;
+  github_login: string | null;
+  proposal_count: number;
+  reviewer_statuses: string[];
+};
+
+export type BulkMailInput = {
+  recipient_ids: string[];
+  subject: string;
+  body: string;
+  signature: string;
+};
+
+export type BulkMailResult = {
+  queued_count: number;
+  delivery_ids: string[];
+};
+
 export type CloudProfile = {
   id: string;
   name: string;
@@ -222,6 +242,14 @@ export const signOut = () =>
 export const resendOutboundDelivery = (id: string) =>
   api<OutboundDelivery>(`/api/v1/deliveries/${encodeURIComponent(id)}/resend`, {
     method: "POST",
+  });
+export const listMailRecipients = () =>
+  api<{ items: MailRecipient[] }>("/api/v1/admin-mail/recipients");
+export const sendBulkMail = (input: BulkMailInput, idempotencyKey: string) =>
+  api<BulkMailResult>("/api/v1/admin-mail/deliveries", {
+    method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
   });
 export const listDatabaseSnapshots = () =>
   api<{ items: DatabaseSnapshot[] }>("/api/v1/database-snapshots");

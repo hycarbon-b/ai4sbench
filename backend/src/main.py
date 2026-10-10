@@ -22,6 +22,7 @@ from src.control_panel.providers import EC2Provider, provider_from_settings
 from src.core.config import Settings, get_settings
 from src.core.identity import build_auth
 from src.db.database import Base, create_database_engine, create_session_factory
+from src.mailing.admin_routes import admin_mailing_router
 from src.mailing.routes import mailing_router
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -168,6 +169,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.include_router(community_admin_router)
     app.include_router(ai_review_router)
     app.include_router(mailing_router)
+    app.include_router(admin_mailing_router)
     mailing_routes = list(mailing_router.routes)
     community_routes = [
         *community_router.routes,
