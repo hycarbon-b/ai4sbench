@@ -1,156 +1,88 @@
-# ai4sbench
+# AI4S-Bench Control Panel
 
-ai4sbench is the contribution and execution control plane for scientific
-Harbor benchmarks. It connects the public Website and GitHub Discussions to a
-private operator Dashboard, SQLite state, immutable task revisions, background
-jobs, and EC2 workers.
+[![CI](https://github.com/hycarbon-b/ai4sbench/actions/workflows/ci.yml/badge.svg)](https://github.com/hycarbon-b/ai4sbench/actions/workflows/ci.yml)
 
-## Repository layout
+The control panel and Website backend for the open [AI4S-Bench](https://ai4sbench.org/) project, an interdisciplinary benchmark for AI agents in science. This repository runs the contribution workflow, operator Dashboard, APIs, persistence, and benchmark execution orchestration. The public Website and benchmark tasks are maintained in separate repositories and included here as submodules.
 
-```text
-ai4sbench/
-|-- backend/                     FastAPI API, SQLite, migrations and EC2 lifecycle
-|-- dashboard-frontend/          React operator and contribution Dashboard
-|-- ai4s-bench-website/          Public Website submodule
-|-- benchmark-repository/        Public ai4s-benchmark task submodule
-`-- reference/                   Upstream reference implementations
-```
+> **Coming later:** We plan to open-source a separate, self-hosted task runner platform similar in spirit to Harbor Hub. It is not part of this repository yet. Stay tuned.
 
-- [`backend/`](backend/README.md) owns GitHub OAuth, proposal and review APIs,
-  Discussion synchronization, SQLite jobs, database snapshots, migrations, and
-  worker orchestration.
-- [`dashboard-frontend/frontend/`](dashboard-frontend/frontend/README.md) is
-  compiled into `backend/src/static/` and served at `/`.
-- `ai4s-bench-website/` is developed in its own repository. A reviewed static
-  build is committed under `backend/src/website_dist/` and served at
-  `/website`.
-- `benchmark-repository/` points to
-  `https://github.com/AI4S-Bench/ai4s-benchmark.git` and contains public task
-  definitions rather than private control-plane state.
+## Current capabilities
 
-## Clone and initialize
+- Submit and review scientific task proposals through the Website and GitHub Discussions.
+- Manage task revisions, execution jobs, and EC2 workers from the operator Dashboard.
+- Send Discord and SMTP notifications through a durable outbound delivery queue.
+- Serve the Dashboard and a reviewed Website snapshot from the FastAPI backend.
 
-Prerequisites are Git, Python 3.12 or newer, `uv`, Node.js, and npm.
+## What this repository contains
+
+| Area | Responsibility |
+| --- | --- |
+| [`backend/`](backend/README.md) | FastAPI APIs, GitHub OAuth and Discussion synchronization, proposals and reviews, SQLite migrations, outbound deliveries, jobs, and EC2 execution orchestration. |
+| [`dashboard-frontend/frontend/`](dashboard-frontend/frontend/README.md) | React operator and contribution Dashboard. Its build is served by the backend at `/`. |
+| [`ai4s-bench-website/`](https://github.com/hycarbon-b/ai4s-bench-website) | Public Website submodule. A reviewed static snapshot is served by the backend at `/website`. |
+| [`benchmark-repository/`](https://github.com/AI4S-Bench/ai4s-benchmark) | Public benchmark task definitions, included as a submodule. |
+| [`reference/`](reference/) | Upstream reference material; not the application runtime. |
+
+The Website submits proposals through the backend, which publishes and synchronizes the corresponding GitHub Discussions. Reviewers publish structured reviews; the Dashboard manages operations and task execution. Background runners handle durable jobs and outbound notifications. The backend keeps task revisions immutable so runs remain tied to the version they used.
+
+## Quick start
+
+You need Git, Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js, and npm. Clone with submodules:
 
 ```bash
-git clone --recurse-submodules <repository-url>
+git clone --recurse-submodules https://github.com/hycarbon-b/ai4sbench.git
 cd ai4sbench
-git submodule update --init --recursive
 ```
 
-Develop a submodule on a branch inside that submodule. Commit and push the
-submodule change first, then commit the updated submodule pointer in this
-repository. Do not make long-lived work on a detached submodule commit.
+Create `backend/.env` from [`backend/.env.example`](backend/.env.example). For local development, change the example's production settings to `TBCP_ENVIRONMENT=development`, `TBCP_EXECUTION_MODE=fake`, a local SQLite URL, and local host values. Keep SMTP disabled unless you intentionally test mail delivery. GitHub OAuth, Discussion publishing, and real EC2 runs require their own credentials and configuration; see the [backend guide](backend/README.md).
 
-## Run locally
-
-Create `backend/.env` from the documented variable names in
-`backend/.env.example`. Use development values and a local SQLite path; never
-copy production credentials into a commit.
+Start the API:
 
 ```bash
 cd backend
-uv sync --extra dev --extra aws
+uv sync --locked --extra dev --extra aws
 uv run alembic upgrade head
 uv run ai4sbench-api
 ```
 
-Run the durable job worker in a second terminal:
+Start the background job runner in a second terminal from `backend/`:
 
 ```bash
-cd backend
 uv run ai4sbench-jobs
 ```
 
-Build the Dashboard after changing React source:
+The local API serves the Dashboard at `http://127.0.0.1:8080/`, the Website snapshot at `/website`, API docs at `/docs`, and readiness at `/health/ready`. You can also start the application with `docker compose -f backend/compose.yaml up --build` from the repository root.
+
+When editing the Dashboard, run `npm ci`, `npm run check`, and `npm run build` in `dashboard-frontend/frontend/`. The build writes to `backend/src/static/`; commit the generated assets together with the source change. Website changes belong in its submodule first, followed by an updated submodule pointer and reviewed `backend/src/website_dist/` snapshot.
+
+## Development and CI
+
+Run the same repository-wide checks locally and in GitHub Actions:
 
 ```bash
-cd dashboard-frontend/frontend
-npm ci
-npm run check
-npm run build
-```
-
-The production build writes directly to `backend/src/static/`.
-Commit the generated `index.html` and hashed assets together with the source
-change. The API then serves:
-
-- Dashboard: `http://127.0.0.1:8080/`
-- Website snapshot: `http://127.0.0.1:8080/website`
-- Swagger UI: `http://127.0.0.1:8080/docs`
-- Readiness: `http://127.0.0.1:8080/health/ready`
-
-Docker Compose is also available from the repository root:
-
-```bash
-docker compose -f backend/compose.yaml up --build
-```
-
-## Verify a change
-
-Run backend and frontend verification before committing a release:
-
-```bash
-cd backend
-uv run pytest
-uv run ruff check src tests
-```
-
-```bash
-cd dashboard-frontend/frontend
-npm run check
-npm run build
-```
-
-If a migration is added, run Ruff on that new migration file and run
-`uv run alembic upgrade head` against a disposable SQLite database as well as
-the normal test suite.
-
-## Continuous integration
-
-Run the repository-wide checks from the repository root:
-
-```powershell
 python scripts/ci.py
 ```
 
-The command works from Windows and Linux. It installs locked backend and
-frontend dependencies, runs backend linting and tests, type-checks the
-Dashboard, builds the Dashboard, and confirms committed static assets are
-current. GitHub Actions only provides the Python, uv, and Node runtimes then
-invokes this same script; it contains no separate CI logic.
+The script installs locked dependencies, lints and tests the backend, type-checks and builds the Dashboard, and verifies that committed static assets are current. It runs on both Windows and Linux. GitHub Actions only provisions the runtimes and calls this script.
 
-## Proposal lifecycle
+For a change limited to one component, see the [backend](backend/README.md) or [Dashboard](dashboard-frontend/frontend/README.md) guide. Schema changes require an Alembic migration. Develop submodule changes on a branch inside the submodule, push that commit first, and only then update the parent repository's submodule pointer.
 
-1. A signed-in contributor previews or submits a Proposal.
-2. The backend validates the request with the same contract used when importing
-   a GitHub Discussion.
-3. The Proposal is rendered as a Discussion in the configured `Task Proposals`
-   category and tracked locally.
-4. Authorized reviewers publish structured review replies. Full Sync reparses
-   the Discussion and review into the local database.
-5. The Website task board reads only `GET /api/v1/public/proposals`.
+## Contributors
 
-The signed-in Website author can load an active Proposal with
-`GET /api/v1/proposals/{proposal_id}` and fully replace it with
-`PUT /api/v1/proposals/{proposal_id}`. The update uses the current
-`ProposalSubmission` contract and the original author's GitHub OAuth token to
-edit the Discussion before committing the corresponding local fields, so a
-GitHub failure cannot leave the database showing content that was not published.
+This list follows GitHub's [public repository contributors API](https://docs.github.com/en/rest/repos/repos#list-repository-contributors), which credits commits rather than all pull-request activity. It is refreshed weekly and can be refreshed manually through the [Update contributors workflow](https://github.com/hycarbon-b/ai4sbench/actions/workflows/update-contributors.yml). Contributions to the Website and benchmark task repositories are tracked in those repositories.
 
-Dashboard deletion is logical. `DELETE /api/v1/proposals/{proposal_id}` sets a
-`deleted_at` tombstone, hides the Proposal from Dashboard and Website lists,
-and preserves its GitHub Discussion and linked task revisions. Full Sync
-recognizes the tombstone and will not import that Discussion again.
+<!-- contributors:start -->
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/hycarbon-b"><img src="https://github.com/hycarbon-b.png?size=80" width="64" height="64" alt="@hycarbon-b" /><br /><sub>@hycarbon-b</sub></a></td>
+  </tr>
+</table>
+<!-- contributors:end -->
 
-## Production deployment
+Want to contribute? Open an issue or pull request with the problem, proposed change, and relevant tests. Run `python scripts/ci.py` before submitting when possible.
 
-Production is a Git-based systemd deployment. Application files are not copied
-directly with `scp`: push the reviewed branch, create an SQLite snapshot, pull
-the branch on EC2, run Alembic, restart the API and job services, and verify the
-public routes. See [`EC2_RUNBOOK.md`](EC2_RUNBOOK.md) for the current host,
-commands, rollback boundaries, and verification checklist.
+## Deployment and security
 
-Secrets remain in ignored local `backend/.env` files or the protected production
-environment file. They must never be added to the repository, generated static
-assets, logs, issues, or pull requests.
+Production uses a Git-based systemd deployment. Follow the [EC2 runbook](EC2_RUNBOOK.md) for database snapshots, migrations, service restarts, verification, and rollback. Do not copy application files directly to the server as a deployment shortcut.
+
+Keep `.env` files, OAuth and SMTP credentials, tokens, and SQLite operator data out of commits, generated assets, logs, issues, and pull requests. The checked-in [environment example](backend/.env.example) documents variable names without production values.

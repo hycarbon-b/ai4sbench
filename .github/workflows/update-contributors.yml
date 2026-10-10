@@ -1,0 +1,63 @@
+name: Update contributors
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-contributors
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.repository == 'hycarbon-b/ai4sbench' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const contributors = await github.paginate(github.rest.repos.listContributors, {
+              owner, repo, per_page: 100
+            });
+            const logins = contributors
+              .filter(user => user.type === 'User' && /^[A-Za-z0-9-]+$/.test(user.login || ''))
+              .map(user => user.login);
+            if (!logins.length) throw new Error('No contributors returned by GitHub');
+
+            const file = (await github.rest.repos.getContent({ owner, repo, path: 'README.md' })).data;
+            if (Array.isArray(file) || !file.content) throw new Error('README.md is not a file');
+            const readme = Buffer.from(file.content, 'base64').toString('utf8');
+            const start = '<!-- contributors:start -->';
+            const end = '<!-- contributors:end -->';
+            const from = readme.indexOf(start);
+            const to = readme.indexOf(end);
+            if (from < 0 || to < from || readme.indexOf(start, from + 1) >= 0 ||
+                readme.indexOf(end, to + 1) >= 0) throw new Error('Invalid contributor markers');
+
+            const rows = [];
+            for (let i = 0; i < logins.length; i += 6) {
+              rows.push('  <tr>');
+              for (const login of logins.slice(i, i + 6)) {
+                const profile = `https://github.com/${login}`;
+                rows.push(`    <td align="center"><a href="${profile}"><img src="${profile}.png?size=80" width="64" height="64" alt="@${login}" /><br /><sub>@${login}</sub></a></td>`);
+              }
+              rows.push('  </tr>');
+            }
+            const table = ['<table>', ...rows, '</table>'].join('\n');
+            const updated = readme.slice(0, from + start.length) + '\n' + table + '\n' + readme.slice(to);
+            if (updated === readme) return;
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path: 'README.md', branch: 'main', sha: file.sha,
+              message: 'docs: refresh contributors [skip ci]',
+              content: Buffer.from(updated).toString('base64'),
+              committer: {
+                name: 'github-actions[bot]',
+                email: '41898282+github-actions[bot]@users.noreply.github.com'
+              }
+            });
