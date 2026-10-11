@@ -708,6 +708,24 @@ def test_review_sync_updates_proposal_and_public_board_joins_latest_revision() -
             assert synced.json()["invalid_review_count"] == 0
 
             proposal = client.get("/api/v1/proposals").json()["items"][0]
+            review_url = f"/api/v1/proposals/{proposal['id']}/reviews"
+            assert len(client.get(review_url).json()) == 1
+            second_review = ProposalReview.model_validate(
+                {**review_payload(), "review_decision": "changes_requested"}
+            )
+            discussion["comments"]["nodes"].append({
+                "id": "DC_kwDOReview2",
+                "url": "https://github.com/example/repo/discussions/52#discussioncomment-2",
+                "body": second_review.render_comment(),
+                "author": {"login": "science-reviewer"},
+                "createdAt": "2026-09-01T02:00:00Z",
+                "updatedAt": "2026-09-01T02:00:00Z",
+            })
+            assert client.post("/api/v1/proposals/sync-discussions").status_code == 200
+            assert client.post("/api/v1/proposals/sync-discussions").status_code == 200
+            history = client.get(review_url).json()
+            assert [item["decision"] for item in history] == ["approved", "changes_requested"]
+            assert client.get("/api/v1/public/proposals").json()["items"][0]["human_reviews"] == history
             revision = client.post(
                 "/api/v1/task-revisions",
                 json={
@@ -726,7 +744,7 @@ def test_review_sync_updates_proposal_and_public_board_joins_latest_revision() -
             assert board.status_code == 200, board.text
             item = board.json()["items"][0]
             assert item["field_name"] == "Coastal oceanography"
-            assert item["status"] == "approved"
+            assert item["status"] == "changes_requested"
             assert item["review_short_description"] == review.review_short_description
             assert item["review_reviewer_login"] == "science-reviewer"
             assert item["revision_commit_sha"] == "a" * 40

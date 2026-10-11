@@ -544,6 +544,7 @@ class ProposalBoardItemResponse(BaseModel):
     review_created_at: datetime | None
     review_updated_at: datetime | None
     review_input_valid: bool
+    human_reviews: list[ProposalHumanReviewResponse]
 
     revision_id: str | None
     revision_repo_url: str | None
@@ -614,6 +615,17 @@ class ProposalReviewPublishedResponse(ProposalReviewPreviewResponse):
     discussion_url: str
     review_comment_node_id: str
     review_comment_url: str
+
+
+class ProposalHumanReviewResponse(BaseModel):
+    id: str
+    comment_url: str
+    reviewer_login: str
+    decision: str | None
+    input_valid: bool
+    document: dict[str, Any]
+    github_created_at: datetime | None
+    github_updated_at: datetime | None
 
 
 class ProposalSyncResponse(BaseModel):

@@ -22,6 +22,7 @@ from src.community.schemas import (
     ProposalBoardListResponse,
     ProposalDomainListResponse,
     ProposalEditDetailResponse,
+    ProposalHumanReviewResponse,
     ProposalListResponse,
     ProposalPreviewResponse,
     ProposalPublishedResponse,
@@ -37,7 +38,7 @@ from src.community.schemas import (
 )
 from src.core.identity import OAuthAccount, User, current_active_user, current_optional_user
 from src.db.database import get_session
-from src.db.models import ExecutionPlan, Proposal, ReviewerApplication, Run, TaskRevision
+from src.db.models import ExecutionPlan, Proposal, ProposalHumanReview, ReviewerApplication, Run, TaskRevision
 from src.mailing.notifications import enqueue_author_notification
 
 community_router = APIRouter(prefix="/api/v1", tags=["community"])
@@ -365,6 +366,7 @@ async def proposal_board_item(
         "review_created_at": item.review_created_at,
         "review_updated_at": item.review_updated_at,
         "review_input_valid": item.review_input_valid,
+        "human_reviews": await human_review_dicts(session, item.id),
         "revision_id": revision.id if revision else None,
         "revision_repo_url": revision.repo_url if revision else None,
         "revision_commit_sha": revision.commit_sha if revision else None,
@@ -375,6 +377,37 @@ async def proposal_board_item(
         "revision_created_at": revision.created_at if revision else None,
         "revision_agent_results": await revision_run_results(session, revision),
     }
+
+
+async def human_review_dicts(session: AsyncSession, proposal_id: str) -> list[dict[str, object]]:
+    reviews = await session.scalars(
+        select(ProposalHumanReview)
+        .where(ProposalHumanReview.proposal_id == proposal_id)
+        .order_by(ProposalHumanReview.github_created_at, ProposalHumanReview.created_at)
+    )
+    return [
+        {
+            "id": review.id,
+            "comment_url": review.comment_url,
+            "reviewer_login": review.reviewer_login,
+            "decision": review.decision,
+            "input_valid": review.input_valid,
+            "document": review.document,
+            "github_created_at": review.github_created_at,
+            "github_updated_at": review.github_updated_at,
+        }
+        for review in reviews
+    ]
+
+
+@community_router.get(
+    "/proposals/{proposal_id}/reviews",
+    response_model=list[ProposalHumanReviewResponse],
+    tags=["community"],
+)
+async def list_proposal_reviews(proposal_id: str, session: SessionDep) -> list[dict[str, object]]:
+    await active_proposal(session, proposal_id)
+    return await human_review_dicts(session, proposal_id)
 
 
 @community_router.get(
@@ -660,6 +693,42 @@ def review_values_from_discussion(
         }
     )
     return values, True, False
+
+
+def human_review_comments(node: dict[str, Any], reviewer_logins: set[str]) -> list[dict[str, Any]]:
+    """Only authorized human replies belong in the review history."""
+    return [
+        comment
+        for comment in (node.get("comments") or {}).get("nodes") or []
+        if REVIEW_COMMENT_MARKER in str(comment.get("body") or "")
+        and "<!-- ai4sbench-proposal-ai-review:v1 -->" not in str(comment.get("body") or "")
+        and str((comment.get("author") or {}).get("login") or "").lower() in reviewer_logins
+    ]
+
+
+async def save_human_review(
+    session: AsyncSession, proposal: Proposal, values: dict[str, object]
+) -> None:
+    comment_id = str(values["review_comment_node_id"])
+    existing = await session.scalar(
+        select(ProposalHumanReview).where(ProposalHumanReview.comment_node_id == comment_id)
+    )
+    record = {
+        "proposal_id": proposal.id,
+        "comment_node_id": comment_id,
+        "comment_url": str(values["review_comment_url"] or ""),
+        "reviewer_login": str(values["review_reviewer_login"] or ""),
+        "decision": str(values["review_decision"]) if values["review_input_valid"] else None,
+        "input_valid": bool(values["review_input_valid"]),
+        "document": values["review_document"],
+        "github_created_at": values["review_created_at"],
+        "github_updated_at": values["review_updated_at"],
+    }
+    if existing is None:
+        session.add(ProposalHumanReview(**record))
+    else:
+        for field, value in record.items():
+            setattr(existing, field, value)
 
 
 def slugify(value: str) -> str:
@@ -986,6 +1055,18 @@ async def publish_proposal_review(
         "body": rendered,
     }
     proposal.status = body.review_decision
+    await save_human_review(
+        session,
+        proposal,
+        {**review_values,
+         "review_reviewer_login": proposal.review_reviewer_login,
+         "review_comment_node_id": proposal.review_comment_node_id,
+         "review_comment_url": proposal.review_comment_url,
+         "review_created_at": proposal.review_created_at,
+         "review_updated_at": proposal.review_updated_at,
+         "review_input_valid": True,
+         "review_document": proposal.review_document},
+    )
     await enqueue_review_notification(
         session,
         request.app.state.settings,
@@ -1271,13 +1352,19 @@ async def sync_proposal_discussions(
         }
         if existing is None:
             author_id = str(uuid.uuid5(uuid.NAMESPACE_URL, values["discussion_url"]))
-            session.add(Proposal(author_id=author_id, **values))
+            existing = Proposal(author_id=author_id, **values)
+            session.add(existing)
+            await session.flush()
             created_count += 1
-            continue
-        if any(getattr(existing, key) != value for key, value in values.items()):
+        elif any(getattr(existing, key) != value for key, value in values.items()):
             for key, value in values.items():
                 setattr(existing, key, value)
             updated_count += 1
+        for comment in human_review_comments(node, reviewer_logins):
+            comment_values, _, _ = review_values_from_discussion(
+                {"comments": {"nodes": [comment]}}, reviewer_logins
+            )
+            await save_human_review(session, existing, comment_values)
     await session.commit()
     return {
         "scanned_count": scanned_count,
