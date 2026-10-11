@@ -20,6 +20,7 @@ aws = ["boto3>=1.40,<2"]
 harbor-ec2 = ["harbor[ec2]==0.20.0"]
 dev = [
   "alembic>=1.16,<2",
+  "mkdocs==1.6.1",
   "pytest>=8.4,<9",
   "ruff>=0.12,<1",
 ]

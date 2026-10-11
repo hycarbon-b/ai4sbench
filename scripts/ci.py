@@ -7,6 +7,7 @@ from a Windows checkout as well as from GitHub Actions.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "dashboard-frontend" / "frontend"
 STATIC_ASSETS = ROOT / "backend" / "src" / "static"
+DOCUMENT_ASSETS = ROOT / "backend" / "src" / "document"
+BENCHMARK = ROOT / "benchmark-repository"
 NPM = "npm.cmd" if sys.platform == "win32" else "npm"
 
 
@@ -25,7 +28,12 @@ def require(command: str) -> None:
         raise SystemExit(f"Required command not found on PATH: {command}")
 
 
-def run(*command: str, cwd: Path = ROOT, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+def run(
+    *command: str,
+    cwd: Path = ROOT,
+    capture_output: bool = False,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     print(f"\n$ {' '.join(command)}  (cwd: {cwd})", flush=True)
     return subprocess.run(
         command,
@@ -33,6 +41,7 @@ def run(*command: str, cwd: Path = ROOT, capture_output: bool = False) -> subpro
         check=True,
         text=True,
         capture_output=capture_output,
+        env=env,
     )
 
 
@@ -55,11 +64,41 @@ def assert_static_assets_are_current() -> None:
         )
 
 
+def assert_document_assets_are_current() -> None:
+    result = run(
+        "git",
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        DOCUMENT_ASSETS.relative_to(ROOT).as_posix(),
+        capture_output=True,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+        raise SystemExit(
+            "Documentation assets are out of date. Build MkDocs from the pinned "
+            "benchmark submodule and commit backend/src/document."
+        )
+
+
 def main() -> None:
     for command in ("git", "uv", NPM):
         require(command)
 
     run("uv", "sync", "--locked", "--extra", "dev", "--extra", "aws", cwd=BACKEND)
+    run("git", "submodule", "update", "--init", "benchmark-repository")
+    source_date_epoch = run(
+        "git", "show", "-s", "--format=%ct", "HEAD", cwd=BENCHMARK, capture_output=True
+    ).stdout.strip()
+    run(
+        "uv", "run", "mkdocs", "build", "--strict",
+        "--config-file", str(BENCHMARK / "mkdocs.yml"),
+        "--site-dir", str(DOCUMENT_ASSETS),
+        cwd=BACKEND,
+        env={**os.environ, "SOURCE_DATE_EPOCH": source_date_epoch},
+    )
+    assert_document_assets_are_current()
     run("uv", "run", "ruff", "check", "src", "tests", cwd=BACKEND)
     run("uv", "run", "pytest", cwd=BACKEND)
 

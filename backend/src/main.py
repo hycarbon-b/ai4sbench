@@ -27,6 +27,7 @@ from src.mailing.routes import mailing_router
 
 STATIC_DIR = Path(__file__).with_name("static")
 WEBSITE_DIST_DIR = Path(__file__).with_name("website_dist")
+DOCUMENT_DIR = Path(__file__).with_name("document")
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 OPENAPI_TAGS = [
     {
@@ -216,6 +217,12 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
         community_routes=community_routes,
         mailing_routes=mailing_routes,
     )
+
+    @app.get("/document", include_in_schema=False)
+    async def document_root() -> RedirectResponse:
+        return RedirectResponse("/document/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+    app.mount("/document", StaticFiles(directory=DOCUMENT_DIR, html=True), name="document")
 
     @app.get("/website", include_in_schema=False)
     async def website_root() -> RedirectResponse:
