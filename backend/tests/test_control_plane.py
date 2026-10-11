@@ -264,6 +264,28 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(reviewer_form.status_code, 200)
         self.assertIn("20260921-3", reviewer_form.text)
 
+    def test_document_site_and_swagger_routes(self) -> None:
+        redirect = self.client.get("/document", follow_redirects=False)
+        self.assertEqual(redirect.status_code, 307)
+        self.assertEqual(redirect.headers["location"], "/document/")
+
+        home = self.client.get("/document/")
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("AI4S-Bench contributor guide", home.text)
+        self.assertIn('href="css/base.css"', home.text)
+
+        page = self.client.get("/document/submit-proposal/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Submit a proposal", page.text)
+
+        css = self.client.get("/document/css/base.css")
+        self.assertEqual(css.status_code, 200)
+        self.assertIn("text/css", css.headers["content-type"])
+
+        swagger = self.client.get("/docs")
+        self.assertEqual(swagger.status_code, 200)
+        self.assertIn("swagger-ui", swagger.text.lower())
+
     def test_every_json_api_route_declares_a_response_schema(self) -> None:
         excluded_binary_route = "/api/v1/database-snapshots/{name}/download"
         undocumented = [
