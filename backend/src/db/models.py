@@ -170,6 +170,25 @@ class Proposal(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class ProposalHumanReview(Base):
+    """One GitHub Discussion review reply; edits update this reply, not its siblings."""
+
+    __tablename__ = "proposal_human_reviews"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    proposal_id: Mapped[str] = mapped_column(String(36), ForeignKey("proposals.id"), index=True)
+    comment_node_id: Mapped[str] = mapped_column(String(100), unique=True)
+    comment_url: Mapped[str] = mapped_column(String(500))
+    reviewer_login: Mapped[str] = mapped_column(String(100))
+    decision: Mapped[str | None] = mapped_column(String(32))
+    input_valid: Mapped[bool] = mapped_column(default=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    github_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    github_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ReviewerApplication(Base):
     """A Website reviewer application and its administrator decision."""
 

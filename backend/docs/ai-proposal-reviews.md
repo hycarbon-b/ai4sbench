@@ -34,11 +34,11 @@ configuration fails closed. The AI model key is only needed in Actions.
 
 In the benchmark repository, configure:
 
-- Secret `OPENROUTER_API_KEY`: selected OpenRouter account key.
+- Secret `LLM_API_KEY`: selected OpenRouter account key.
 - Secret `AI_REVIEW_SERVICE_KEY`: same value as the backend service key.
 - Variable `AI_REVIEW_BACKEND_URL`: backend HTTPS origin, e.g. `https://dashboard.ai4sbench.org`.
 
-The chosen model is `z-ai/glm-5.2:free` at `https://openrouter.ai/api/v1`.
+The current model is `dots-studio/dots-3-note-preview:free` at `https://openrouter.ai/api/v1`.
 The script uses the synthetic `openai/` prefix solely to select the upstream SDK;
 OpenRouter receives the exact selected model ID. There is no paid fallback.
 
@@ -57,7 +57,7 @@ OpenRouter receives the exact selected model ID. There is no paid fallback.
   "run_attempt": 1,
   "workflow_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "upstream_sha": "f55c14ea065243c8d094e02c0aa156d5fd22fdd4",
-  "model": "z-ai/glm-5.2:free",
+  "model": "dots-studio/dots-3-note-preview:free",
   "proposal_digest": "<sha256 of title + newline + body>",
   "status": "completed",
   "result": {
@@ -139,6 +139,19 @@ human approval status. Missing optional labels are skipped.
 - Workflow: `actionlint .github/workflows/proposal-review.yml .github/workflows/proposal-review-tests.yml`.
 - Live smoke test after deployment: new proposal, authorized/unauthorized `/review`,
   dispatch, model failure, Discord failure and a successful rerun updating both messages.
+
+For the proposal-to-review path, run the opt-in live test from the repository root:
+
+```powershell
+$env:AI_REVIEW_LIVE = "1"
+python backend/tests/test_live_ai_review_e2e.py
+```
+
+It uses `GITHUB_TOKEN` or `GH_TOKEN`, falling back to the locally authenticated
+`gh` token. It publishes a public Task Proposals Discussion, waits up to 20 minutes
+for a completed AI review comment, and verifies the linked Actions run. To resume
+without creating another Discussion, set `AI_REVIEW_E2E_DISCUSSION_NUMBER` to the
+number printed by the first run. This test intentionally writes to production.
 
 The free endpoint is text-only. Image links remain in the proposal but are not
 fetched, and published reviews disclose this limitation. The runner conservatively
