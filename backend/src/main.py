@@ -158,6 +158,8 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
         response.headers["X-Content-Type-Options"] = "nosniff"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path == "/document" or request.url.path.startswith("/document/"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
 
     app.include_router(public_router)
