@@ -2,6 +2,17 @@
    AI4S-Benchmark · Page-level layouts
    ============================================================ */
 
+/* ================= Account profile ================= */
+
+.profile-layout { display: grid; gap: var(--space-5); padding-block: var(--space-7); max-width: 55rem; margin-inline: auto; }
+.profile-panel { padding: var(--space-5); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.profile-panel h2 { margin: 0 0 var(--space-4); }
+#profile-identity { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+#profile-identity p { flex-basis: 100%; margin: 0; color: var(--ink-secondary); }
+.profile-proposal-list { list-style: none; padding: 0; margin: 0; }
+.profile-proposal-list li { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) 0; border-top: 1px solid var(--border-faint); }
+.profile-proposal-list li span { color: var(--ink-secondary); font-size: var(--text-sm); text-transform: capitalize; white-space: nowrap; }
+
 /* ================= Homepage ================= */
 
 .hero {

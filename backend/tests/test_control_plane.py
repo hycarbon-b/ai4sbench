@@ -262,7 +262,7 @@ class ControlPanelIntegrationTests(unittest.TestCase):
 
         reviewer_form = self.client.get("/website/reviewers/")
         self.assertEqual(reviewer_form.status_code, 200)
-        self.assertIn("20260921-3", reviewer_form.text)
+        self.assertIn("20261012-1", reviewer_form.text)
 
     def test_document_site_and_swagger_routes(self) -> None:
         redirect = self.client.get("/document", follow_redirects=False)

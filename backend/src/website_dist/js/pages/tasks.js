@@ -4,10 +4,10 @@
    Filters render only when the data actually contains values.
    ============================================================ */
 
-import { getTasks, ROOT } from "../data.js?v=20260921-3";
-import { taskCard, emptyState, esc } from "../components.js?v=20260921-3";
-import { displayStatus, isApproved, STATUS_INFO, STATUS_ORDER } from "../lifecycle.js?v=20260921-3";
-import { mountMath } from "../richtext.js?v=20260921-3";
+import { getTasks, ROOT } from "../data.js?v=20261012-1";
+import { taskCard, emptyState, esc } from "../components.js?v=20261012-1";
+import { displayStatus, isApproved, STATUS_INFO, STATUS_ORDER, PROPOSAL_STAGE_STATUSES } from "../lifecycle.js?v=20261012-1";
+import { mountMath } from "../richtext.js?v=20261012-1";
 
 const state = {
   query: "",
@@ -61,22 +61,22 @@ function renderStats() {
 
 /* ---- Data-driven filter selects ---- */
 function buildFilters() {
-  // Every stage is listed with its count, so the filter also shows the
-  // shape of the pipeline — including stages no task has reached yet.
+  // Review outcomes are always listed with their count. Later stages (task
+  // PR, agent testing, release) are not settled yet, so they are listed
+  // only once a task has actually reached them.
   const stageCounts = new Map(STATUS_ORDER.map((key) => [key, 0]));
   allTasks.forEach((task) => stageCounts.set(displayStatus(task), (stageCounts.get(displayStatus(task)) ?? 0) + 1));
   const defs = [
     {
       key: "stage",
       label: "Stage",
-      values: STATUS_ORDER,
+      values: STATUS_ORDER.filter((v) => PROPOSAL_STAGE_STATUSES.includes(v) || stageCounts.get(v) > 0),
       display: (v) => `${STATUS_INFO[v].label} (${stageCounts.get(v)})`,
       title: (v) => STATUS_INFO[v].description,
       disabled: (v) => stageCounts.get(v) === 0,
     },
     { key: "domain", label: "Domain", values: uniq(allTasks.flatMap(proposalDomains)) },
     { key: "field_name", label: "Field", values: uniq(allTasks.map((task) => task.field_name)), display: shorten, title: (v) => v },
-    { key: "review_difficulty", label: "Difficulty", values: uniq(allTasks.map((task) => task.review_difficulty)) },
     { key: "revision_release", label: "Release", values: uniq(allTasks.map((task) => task.revision_release)) },
   ];
 
@@ -127,7 +127,6 @@ function matches(task) {
   if (state.filters.stage && displayStatus(task) !== state.filters.stage) return false;
   if (state.filters.domain && !proposalDomains(task).includes(state.filters.domain)) return false;
   if (state.filters.field_name && task.field_name !== state.filters.field_name) return false;
-  if (state.filters.review_difficulty && task.review_difficulty !== state.filters.review_difficulty) return false;
   if (state.filters.revision_release && task.revision_release !== state.filters.revision_release) return false;
   return true;
 }

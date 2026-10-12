@@ -2,9 +2,9 @@
    AI4S-Benchmark · Shared render helpers
    ============================================================ */
 
-import { ROOT } from "./data.js?v=20260921-3";
-import { displayStatus, lifecycle, STATUS_INFO } from "./lifecycle.js?v=20260921-3";
-import { excerptHTML } from "./richtext.js?v=20260921-3";
+import { ROOT } from "./data.js?v=20261012-1";
+import { displayStatus, publicLifecycle, STATUS_INFO } from "./lifecycle.js?v=20261012-1";
+import { excerptHTML } from "./richtext.js?v=20261012-1";
 
 /** Escape untrusted-ish text before inserting into HTML strings. */
 export function esc(value) {
@@ -74,7 +74,7 @@ export function statusBadge(status) {
  * proposal → review → task PR → evaluation → release.
  */
 export function stageMeter(task) {
-  const stages = lifecycle(task);
+  const stages = publicLifecycle(task);
   const now = stages.find((s) => ["current", "attention", "stopped"].includes(s.state)) ?? stages[stages.length - 1];
   const summary = `Stage ${now.index + 1} of ${stages.length}: ${now.label} — ${now.note}`;
   return `<span class="stage-meter" title="${esc(summary)}" role="img" aria-label="${esc(summary)}">
@@ -169,17 +169,8 @@ export function peopleLine(people, fallback) {
  * environment, evaluation) lives on the task page.
  */
 export function taskCard(task) {
-  const chips = [
-    ...(task.field_name ? [chip(task.field_name)] : []),
-    ...(task.review_tags ?? []).map((tag) => chip(tag)),
-  ].join("");
-
-  const metricLabel = task.review_primary_metric_short ?? task.review_primary_metric;
-  const facts = [
-    metricLabel ? esc(shortMetric(metricLabel)) : "",
-    task.review_difficulty ? esc(task.review_difficulty) : "",
-    task.revision_release ? esc(task.revision_release) : "",
-  ].filter(Boolean);
+  const chips = task.field_name ? chip(task.field_name) : "";
+  const facts = [task.revision_release ? esc(task.revision_release) : ""].filter(Boolean);
 
   const identifier = task.discussion_number ? `Proposal #${task.discussion_number}` : task.task_slug;
 
@@ -189,7 +180,7 @@ export function taskCard(task) {
       <h3 class="task-row__title"><a href="${taskURL(task)}">${esc(task.title)}</a></h3>
       <span class="task-row__badges">${statusBadge(displayStatus(task))}</span>
     </div>
-    <p class="task-row__desc">${excerptHTML(task.review_short_description ?? task.problem)}</p>
+    <p class="task-row__desc">${excerptHTML(task.problem)}</p>
     <div class="task-row__foot">
       <span class="task-row__chips">${chips}</span>
       ${stageMeter(task)}
@@ -198,8 +189,3 @@ export function taskCard(task) {
   </article>`;
 }
 
-/** Compress long metric descriptions for card display. */
-function shortMetric(metric) {
-  if (metric.length <= 34) return metric;
-  return metric.slice(0, 32) + "…";
-}
