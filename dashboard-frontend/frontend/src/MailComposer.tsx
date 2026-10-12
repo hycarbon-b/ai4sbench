@@ -1,19 +1,28 @@
-import { RefreshCw, Send } from "lucide-react";
+import { CheckCircle2, ChevronRight, RefreshCw, Send } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { listMailRecipients, sendBulkMail, type BulkMailInput, type MailRecipient } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Textarea } from "./components/ui/textarea";
 
 type Audience = "proposals" | "reviewers";
 
-export function MailComposer({ onQueued }: { onQueued: () => void }) {
+export function MailComposer({
+  onQueued,
+  onOpenDeliveries,
+}: {
+  onQueued: () => void;
+  onOpenDeliveries: () => void;
+}) {
   const [recipients, setRecipients] = useState<MailRecipient[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [draftSelected, setDraftSelected] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [audience, setAudience] = useState<Audience>("proposals");
   const [search, setSearch] = useState("");
   const [subject, setSubject] = useState("");
@@ -32,6 +41,7 @@ export function MailComposer({ onQueued }: { onQueued: () => void }) {
       const response = await listMailRecipients();
       setRecipients(response.items);
       setSelected((current) => current.filter((id) => response.items.some((item) => item.user_id === id)));
+      setDraftSelected((current) => current.filter((id) => response.items.some((item) => item.user_id === id)));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load OAuth email recipients.");
     } finally {
@@ -53,15 +63,27 @@ export function MailComposer({ onQueued }: { onQueued: () => void }) {
   }, [group, search]);
   const selectedRecipients = recipients.filter((item) => selected.includes(item.user_id));
   const addressCount = new Set(selectedRecipients.map((item) => item.email.toLowerCase())).size;
-  const allVisibleSelected = visible.length > 0 && visible.every((item) => selected.includes(item.user_id));
+  const draftRecipients = recipients.filter((item) => draftSelected.includes(item.user_id));
+  const draftAddressCount = new Set(draftRecipients.map((item) => item.email.toLowerCase())).size;
+  const allVisibleSelected = visible.length > 0 && visible.every((item) => draftSelected.includes(item.user_id));
 
-  const toggle = (id: string) => setSelected((current) =>
+  const openPicker = () => {
+    setDraftSelected(selected);
+    setSearch("");
+    setPickerOpen(true);
+  };
+  const toggle = (id: string) => setDraftSelected((current) =>
     current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
   );
-  const toggleVisible = () => setSelected((current) => allVisibleSelected
+  const toggleVisible = () => setDraftSelected((current) => allVisibleSelected
     ? current.filter((id) => !visible.some((item) => item.user_id === id))
     : [...new Set([...current, ...visible.map((item) => item.user_id)])],
   );
+  const applyRecipients = () => {
+    setSelected(draftSelected);
+    setPickerOpen(false);
+    setResult("");
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -81,7 +103,7 @@ export function MailComposer({ onQueued }: { onQueued: () => void }) {
     setResult("");
     try {
       const response = await sendBulkMail(input, key);
-      setResult(`${response.queued_count} individual email${response.queued_count === 1 ? "" : "s"} queued. Check Outbound deliveries for progress.`);
+      setResult(`${response.queued_count} individual email${response.queued_count === 1 ? "" : "s"} queued.`);
       setSelected([]);
       lastRequest.current = null;
       onQueued();
@@ -94,25 +116,78 @@ export function MailComposer({ onQueued }: { onQueued: () => void }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+      <div className="border-b border-slate-800 pb-3">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sky-300">Outbound operations</p>
           <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">Send email</h1>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">Select saved GitHub OAuth addresses and queue one private delivery per address.</p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading || sending}>
-          <RefreshCw className={`size-3 ${loading ? "animate-spin" : ""}`} /> Refresh
-        </Button>
       </div>
       {error && <p role="alert" className="border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}
-      {result && <p role="status" className="border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">{result}</p>}
-      <div className="grid gap-4 xl:grid-cols-[minmax(20rem,0.9fr)_minmax(24rem,1.1fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recipients</CardTitle>
-            <CardDescription>{addressCount} unique OAuth address{addressCount === 1 ? "" : "es"} selected. The same person in both lists receives one email.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+      {result && (
+        <div role="status" className="flex max-w-4xl gap-3 border border-emerald-900 bg-emerald-950/40 p-4 text-sm text-emerald-200">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-medium">{result}</p>
+            <p className="text-xs text-emerald-100/80">Delivery continues in the background. Queued does not mean the SMTP server has accepted the message yet.</p>
+            <p className="text-xs text-emerald-100/80">
+              Find the results in System → <button type="button" className="font-medium underline underline-offset-2 hover:text-white" onClick={onOpenDeliveries}>Outbound deliveries</button> → type <code>smtp</code>, event <code>admin_bulk_email</code>.
+            </p>
+          </div>
+        </div>
+      )}
+      <form className="max-w-4xl" onSubmit={(event) => void submit(event)}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Message</CardTitle>
+              <CardDescription>Uses the existing AI4S-Bench email layout. The SMTP sender address remains configured on the server.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-recipients">Recipients</Label>
+                <button id="mail-recipients" type="button" className="flex w-full items-center justify-between gap-3 rounded-sm border border-slate-700 bg-slate-950 px-3 py-2 text-left text-sm text-slate-200 hover:border-sky-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400" onClick={openPicker} disabled={sending}>
+                  <span>{addressCount ? `${addressCount} unique OAuth address${addressCount === 1 ? "" : "es"} selected` : "Choose proposal authors or reviewer applicants"}</span>
+                  <ChevronRight className="size-4 shrink-0 text-slate-400" />
+                </button>
+                <p className="text-xs text-slate-500">Each address receives a separate email; duplicate addresses are sent only once.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-subject">Subject</Label>
+                <Input id="mail-subject" maxLength={200} required value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="A short, specific subject" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-body">Body</Label>
+                <Textarea id="mail-body" className="min-h-48" maxLength={20000} required value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write the message here…" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mail-signature">Footer sender / signature</Label>
+                <Input id="mail-signature" maxLength={120} required value={signature} onChange={(event) => setSignature(event.target.value)} />
+              </div>
+              <details className="border border-slate-800 bg-slate-950/50 p-4">
+                <summary className="cursor-pointer text-xs text-slate-400">Email preview</summary>
+                <p className="mt-3 font-semibold text-slate-100">{subject || "Subject"}</p>
+                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">{body || "Your message will appear here."}</p>
+                <p className="mt-5 text-sm text-slate-300">{signature || "Signature"}</p>
+              </details>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">Maximum 100 people per send.</p>
+                <Button type="submit" disabled={sending || !addressCount || selected.length > 100 || !subject.trim() || !body.trim() || !signature.trim()}>
+                  <Send className="size-3.5" /> {sending ? "Queueing…" : `Send to ${addressCount}`}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+      </form>
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold text-white">Choose recipients</DialogTitle>
+            <DialogDescription className="text-sm text-slate-400">
+              Select saved GitHub OAuth addresses. Form-entered reviewer email addresses are not used.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {error && <p role="alert" className="border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}
             <div className="flex gap-2">
               <Button type="button" size="sm" variant={audience === "proposals" ? "default" : "outline"} onClick={() => setAudience("proposals")}>
                 Proposal authors ({recipients.filter((item) => item.proposal_count > 0).length})
@@ -121,17 +196,22 @@ export function MailComposer({ onQueued }: { onQueued: () => void }) {
                 Reviewer applications ({recipients.filter((item) => item.reviewer_statuses.length > 0).length})
               </Button>
             </div>
-            <Input aria-label="Search OAuth recipients" placeholder="Search GitHub login or email" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <div className="flex gap-2">
+              <Input aria-label="Search OAuth recipients" placeholder="Search GitHub login or email" value={search} onChange={(event) => setSearch(event.target.value)} />
+              <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading} aria-label="Refresh recipients">
+                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+              </Button>
+            </div>
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span>{visible.length} shown</span>
-              <Button type="button" variant="ghost" size="sm" onClick={toggleVisible} disabled={!visible.length || sending}>
+              <Button type="button" variant="ghost" size="sm" onClick={toggleVisible} disabled={!visible.length || loading}>
                 {allVisibleSelected ? "Clear shown" : "Select shown"}
               </Button>
             </div>
-            <div className="max-h-[27rem] overflow-y-auto border border-slate-800">
+            <div className="max-h-[22rem] overflow-y-auto border border-slate-800">
               {visible.map((item) => (
                 <label key={item.user_id} className="flex cursor-pointer items-start gap-3 border-b border-slate-800 px-3 py-2.5 last:border-0 hover:bg-slate-900/60">
-                  <input type="checkbox" className="mt-1 accent-sky-400" checked={selected.includes(item.user_id)} onChange={() => toggle(item.user_id)} disabled={sending} />
+                  <input type="checkbox" className="mt-1 accent-sky-400" checked={draftSelected.includes(item.user_id)} onChange={() => toggle(item.user_id)} disabled={loading} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm text-slate-100">{item.github_login ? `@${item.github_login}` : item.email}</span>
                     <span className="block truncate text-xs text-slate-400">{item.email}</span>
@@ -145,44 +225,19 @@ export function MailComposer({ onQueued }: { onQueued: () => void }) {
               {!loading && !visible.length && <p className="p-4 text-sm text-slate-500">No matching OAuth email addresses.</p>}
               {loading && <p className="p-4 text-sm text-slate-500">Loading recipients…</p>}
             </div>
-            <p className="text-xs text-slate-500">Only addresses saved through GitHub OAuth are shown; application form email fields are not used.</p>
-          </CardContent>
-        </Card>
-        <form onSubmit={(event) => void submit(event)}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Message</CardTitle>
-              <CardDescription>Uses the existing AI4S-Bench email layout. The SMTP sender address remains configured on the server.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="mail-subject">Subject</Label>
-                <Input id="mail-subject" maxLength={200} required value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="A short, specific subject" />
+            <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-3">
+              <p className={`text-xs ${draftSelected.length > 100 ? "text-rose-300" : "text-slate-400"}`}>
+                {draftSelected.length} people · {draftAddressCount} unique address{draftAddressCount === 1 ? "" : "es"}
+                {draftSelected.length > 100 && " · Select at most 100 people"}
+              </p>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(false)}>Cancel</Button>
+                <Button type="button" size="sm" onClick={applyRecipients} disabled={loading || draftSelected.length > 100}>Use recipients</Button>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mail-body">Body</Label>
-                <Textarea id="mail-body" className="min-h-48" maxLength={20000} required value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write the message here…" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mail-signature">Footer sender / signature</Label>
-                <Input id="mail-signature" maxLength={120} required value={signature} onChange={(event) => setSignature(event.target.value)} />
-              </div>
-              <div className="border border-slate-800 bg-slate-950/50 p-4">
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">Email preview</p>
-                <p className="mt-3 font-semibold text-slate-100">{subject || "Subject"}</p>
-                <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-300">{body || "Your message will appear here."}</p>
-                <p className="mt-5 text-sm text-slate-300">{signature || "Signature"}</p>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-slate-500">Maximum 100 unique addresses per send.</p>
-                <Button type="submit" disabled={sending || !addressCount || addressCount > 100 || !subject.trim() || !body.trim() || !signature.trim()}>
-                  <Send className="size-3.5" /> {sending ? "Queueing…" : `Send to ${addressCount}`}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </form>
-      </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
