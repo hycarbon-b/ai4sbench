@@ -7,14 +7,11 @@ from a Windows checkout as well as from GitHub Actions.
 
 from __future__ import annotations
 
-import hashlib
 import os
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import unquote, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
@@ -23,8 +20,6 @@ STATIC_ASSETS = ROOT / "backend" / "src" / "static"
 DOCUMENT_ASSETS = ROOT / "backend" / "src" / "document"
 BENCHMARK = ROOT / "benchmark-repository"
 NPM = "npm.cmd" if sys.platform == "win32" else "npm"
-ASSET_ATTRIBUTE_RE = re.compile(r'(?P<prefix>\b(?:href|src)=")(?P<url>[^"]+)(?P<suffix>")')
-DOCUMENT_ASSET_EXTENSIONS = {".css", ".js", ".ico", ".svg", ".png", ".jpg", ".jpeg"}
 
 
 def require(command: str) -> None:
@@ -86,43 +81,8 @@ def assert_document_assets_are_current() -> None:
         )
 
 
-def version_document_assets(benchmark_commit: str) -> None:
-    """Give local MkDocs resources a new URL whenever their build inputs change."""
-    digest = hashlib.sha256(benchmark_commit.encode() + (BACKEND / "uv.lock").read_bytes())
-    version = digest.hexdigest()[:12]
-    document_root = DOCUMENT_ASSETS.resolve()
-
-    for page in DOCUMENT_ASSETS.rglob("*.html"):
-        original = page.read_bytes().decode("utf-8")
-
-        def version_reference(match: re.Match[str], page_path: Path = page) -> str:
-            url = match.group("url")
-            parsed = urlsplit(url)
-            if parsed.scheme or parsed.netloc or parsed.query:
-                return match.group(0)
-            if Path(parsed.path).suffix.lower() not in DOCUMENT_ASSET_EXTENSIONS:
-                return match.group(0)
-            if parsed.path.startswith("/document/"):
-                target = (document_root / unquote(parsed.path.removeprefix("/document/"))).resolve()
-            elif parsed.path.startswith("/"):
-                return match.group(0)
-            else:
-                target = (page_path.parent / unquote(parsed.path)).resolve()
-            if not target.is_relative_to(document_root) or not target.is_file():
-                return match.group(0)
-            versioned = urlunsplit(("", "", parsed.path, f"v={version}", parsed.fragment))
-            return f"{match.group('prefix')}{versioned}{match.group('suffix')}"
-
-        updated = ASSET_ATTRIBUTE_RE.sub(version_reference, original)
-        if updated != original:
-            page.write_bytes(updated.encode("utf-8"))
-
-
 def build_document_assets() -> None:
     run("git", "submodule", "update", "--init", "benchmark-repository")
-    benchmark_commit = run(
-        "git", "rev-parse", "HEAD", cwd=BENCHMARK, capture_output=True
-    ).stdout.strip()
     source_date_epoch = run(
         "git", "show", "-s", "--format=%ct", "HEAD", cwd=BENCHMARK, capture_output=True
     ).stdout.strip()
@@ -133,7 +93,6 @@ def build_document_assets() -> None:
         cwd=BACKEND,
         env={**os.environ, "SOURCE_DATE_EPOCH": source_date_epoch},
     )
-    version_document_assets(benchmark_commit)
 
 
 def main() -> None:

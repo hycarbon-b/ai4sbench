@@ -273,13 +273,13 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         home = self.client.get("/document/")
         self.assertEqual(home.status_code, 200)
         self.assertIn("AI4S-Bench contributor guide", home.text)
-        self.assertIn('href="css/theme.css?v=', home.text)
+        self.assertIn('href="css/theme.css"', home.text)
         self.assertEqual(home.headers["cache-control"], "no-cache, must-revalidate")
 
         page = self.client.get("/document/submit-proposal/")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Submit a proposal", page.text)
-        self.assertIn('href="../css/theme.css?v=', page.text)
+        self.assertIn('href="../css/theme.css"', page.text)
         self.assertEqual(page.headers["cache-control"], "no-cache, must-revalidate")
 
         css = self.client.get("/document/css/theme.css")
