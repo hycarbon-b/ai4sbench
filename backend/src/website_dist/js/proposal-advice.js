@@ -6,9 +6,9 @@
    Advice only — it never blocks saving or submitting.
    ============================================================ */
 
-import { checkProposal, summarize, FIELD_NAMES } from "./proposal-check.js?v=20261012-1";
-import { esc, taskURL } from "./components.js?v=20261012-1";
-import { getTasks } from "./data.js?v=20261012-1";
+import { checkProposal, summarize, FIELD_NAMES } from "./proposal-check.js?v=20261012-2";
+import { esc, taskURL } from "./components.js?v=20261012-2";
+import { getTasks } from "./data.js?v=20261012-2";
 
 const ICON = {
   warn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.8 15 14H1z"/><path d="M8 6.2v3.6M8 11.9v.1"/></svg>',

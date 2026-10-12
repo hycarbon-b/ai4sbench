@@ -8,9 +8,9 @@
    motion.
    ============================================================ */
 
-import { getSite, getTasks, getReleases, getNews, ROOT } from "../data.js?v=20261012-1";
-import { esc, formatDate } from "../components.js?v=20261012-1";
-import { displayStatus } from "../lifecycle.js?v=20261012-1";
+import { getSite, getTasks, getReleases, getNews, ROOT } from "../data.js?v=20261012-2";
+import { esc, formatDate } from "../components.js?v=20261012-2";
+import { displayStatus } from "../lifecycle.js?v=20261012-2";
 
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
