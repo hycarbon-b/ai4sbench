@@ -272,13 +272,13 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         home = self.client.get("/document/")
         self.assertEqual(home.status_code, 200)
         self.assertIn("AI4S-Bench contributor guide", home.text)
-        self.assertIn('href="css/base.css"', home.text)
+        self.assertIn('href="css/theme.css"', home.text)
 
         page = self.client.get("/document/submit-proposal/")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Submit a proposal", page.text)
 
-        css = self.client.get("/document/css/base.css")
+        css = self.client.get("/document/css/theme.css")
         self.assertEqual(css.status_code, 200)
         self.assertIn("text/css", css.headers["content-type"])
 
