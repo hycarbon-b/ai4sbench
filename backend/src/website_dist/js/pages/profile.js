@@ -1,7 +1,7 @@
 /* The profile uses the same cookie session and public proposal board as the rest of the site. */
-import { currentUser, signInWithGitHub } from "../app.js?v=20261012-1";
-import { getTasks } from "../data.js?v=20261012-1";
-import { displayStatus } from "../lifecycle.js?v=20261012-1";
+import { currentUser, signInWithGitHub } from "../app.js?v=20261012-2";
+import { getTasks } from "../data.js?v=20261012-2";
+import { displayStatus } from "../lifecycle.js?v=20261012-2";
 
 const state = document.getElementById("profile-state");
 const identity = document.getElementById("profile-identity");

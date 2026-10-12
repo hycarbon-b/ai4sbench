@@ -3,8 +3,8 @@
    Global behavior: navigation, GitHub links, footer, a11y bits.
    ============================================================ */
 
-import { getSite, ROOT } from "./data.js?v=20261012-1";
-import "./motion.js?v=20261012-1";
+import { getSite, ROOT } from "./data.js?v=20261012-2";
+import "./motion.js?v=20261012-2";
 
 const controlPlaneConfig = getSite().then((site) => String(site.control_plane_url || "").replace(/\/$/, ""));
 
@@ -177,9 +177,12 @@ function renderAccount(user, { unavailable = false } = {}) {
 
   const identity = document.createElement("div");
   identity.className = "site-nav__account-identity";
+  const caption = document.createElement("span");
+  caption.className = "site-nav__account-caption";
+  caption.textContent = "Signed in as";
   const name = document.createElement("strong");
   name.textContent = `@${login}`;
-  identity.append(name);
+  identity.append(caption, name);
   if (user.can_review) {
     const badge = document.createElement("span");
     badge.className = "site-nav__reviewer-badge";
@@ -200,6 +203,7 @@ function renderAccount(user, { unavailable = false } = {}) {
   }
   const logout = document.createElement("button");
   logout.type = "button";
+  logout.className = "site-nav__signout";
   logout.textContent = "Sign out";
   logout.addEventListener("click", async () => {
     logout.disabled = true;
