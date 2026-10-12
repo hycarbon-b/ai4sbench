@@ -774,6 +774,7 @@ export default function App() {
               onDeleteProposal={removeProposal}
               onResendDelivery={resendDelivery}
               onMailQueued={() => void loadOps()}
+              onOpenDeliveries={() => setView("deliveries")}
               onManageReviewer={manageReviewer}
               loading={loading}
             />
@@ -858,6 +859,7 @@ function AdminPanel({
   onDeleteProposal,
   onResendDelivery,
   onMailQueued,
+  onOpenDeliveries,
   onManageReviewer,
   onSaveDatabaseSnapshot,
   loading,
@@ -899,6 +901,7 @@ function AdminPanel({
   onDeleteProposal: (proposal: Proposal) => void;
   onResendDelivery: (delivery: OutboundDelivery) => void;
   onMailQueued: () => void;
+  onOpenDeliveries: () => void;
   onManageReviewer: (
     application: ReviewerApplication,
     update: ReviewerApplicationUpdate,
@@ -943,7 +946,7 @@ function AdminPanel({
         onResend={onResendDelivery}
       />
     );
-  if (view === "mail") return <MailComposer onQueued={onMailQueued} />;
+  if (view === "mail") return <MailComposer onQueued={onMailQueued} onOpenDeliveries={onOpenDeliveries} />;
   if (view === "reviewers")
     return (
       <ReviewerApplicationsPanel
