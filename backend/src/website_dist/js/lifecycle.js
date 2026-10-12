@@ -96,6 +96,26 @@ export const STATUS_ORDER = [
   "released",
 ];
 
+/**
+ * Stages shown publicly. Only proposal and review are settled; the task
+ * PR, evaluation and release flow is still being designed, so the
+ * timeline and stage meter stop after review until it is. Raise this
+ * (up to STAGES.length) when those stages go live.
+ */
+export const PUBLIC_STAGE_COUNT = 2;
+
+/** Statuses that belong to the proposal and review stages. */
+export const PROPOSAL_STAGE_STATUSES = ["pending", "changes_requested", "approved", "rejected"];
+
+/** lifecycle(task) trimmed to the public stages; the last shown step is
+    marked done when the task has moved past it. */
+export function publicLifecycle(task) {
+  const steps = lifecycle(task).slice(0, PUBLIC_STAGE_COUNT);
+  const last = steps[steps.length - 1];
+  if (currentStageIndex(task) >= PUBLIC_STAGE_COUNT && last.state !== "stopped") last.state = "done";
+  return steps;
+}
+
 const DECISIONS = new Set(["approved", "changes_requested", "rejected"]);
 
 const hasRevision = (t) => Boolean(t?.revision_id || t?.revision_pull_request_url || t?.revision_commit_sha);

@@ -4,16 +4,24 @@
    Missing fields render gracefully — early proposals are sparse.
    ============================================================ */
 
-import { controlPlaneFetch, currentUser } from "../app.js?v=20260921-3";
-import { statusBadge, chip, esc, emptyState, ICONS, formatDate } from "../components.js?v=20260921-3";
-import { getSite, getTask, invalidateTasks, ROOT } from "../data.js?v=20260921-3";
-import { reviewDraft, reviewPayload } from "../review.js?v=20260921-3";
-import { richBlock, mountMath } from "../richtext.js?v=20260921-3";
-import { splitContributors } from "../people.js?v=20260921-3";
-import { canEdit, mountEditor, editingAvailable } from "./task-edit.js?v=20260921-3";
-import { displayStatus } from "../lifecycle.js?v=20260921-3";
-import { timelineHTML } from "../timeline.js?v=20260921-3";
-import { adviseOn, checklistHTML } from "../proposal-advice.js?v=20260921-3";
+import { currentUser } from "../app.js?v=20261012-1";
+import { statusBadge, esc, emptyState, ICONS, formatDate } from "../components.js?v=20261012-1";
+import { getSite, getTask, invalidateTasks, ROOT } from "../data.js?v=20261012-1";
+import {
+  loadReviews,
+  reviewsPanelHTML,
+  reviewsAsideHTML,
+  ownLatest,
+  openReviewDrawer,
+  closeReviewDrawer,
+} from "./task-reviews.js?v=20261012-1";
+import { latestPerReviewer } from "../reviews.js?v=20261012-1";
+import { richBlock, mountMath } from "../richtext.js?v=20261012-1";
+import { splitContributors } from "../people.js?v=20261012-1";
+import { canEdit, mountEditor, editingAvailable } from "./task-edit.js?v=20261012-1";
+import { displayStatus } from "../lifecycle.js?v=20261012-1";
+import { timelineHTML } from "../timeline.js?v=20261012-1";
+import { adviseOn, checklistHTML } from "../proposal-advice.js?v=20261012-1";
 
 const params = new URLSearchParams(location.search);
 const key = params.get("id");
@@ -56,205 +64,107 @@ function para(text) {
   return richBlock(text);
 }
 
-function pendingLine(text) {
-  return `<p class="text-muted" style="font-size: var(--text-sm);">${esc(text)}</p>`;
+/* ---- Reviews: tabs, aside card, drawer ---- */
+const reviewState = new Map(); // task.id → loaded reviews
+let ctx = { task: null, user: null };
+
+function tabFromHash() {
+  return /^#(reviews|review-)/.test(location.hash) ? "reviews" : "proposal";
 }
 
-function listOrDash(items) {
-  if (!items || items.length === 0) return null;
-  return `<ul>${items.map((i) => `<li class="text-secondary">${esc(i)}</li>`).join("")}</ul>`;
+function selectTab(name, { focus = true, updateHash = false } = {}) {
+  document.querySelectorAll(".td-tabs [role=tab]").forEach((tab) => {
+    const on = tab.dataset.tab === name;
+    tab.setAttribute("aria-selected", String(on));
+    tab.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll(".td-panel").forEach((panel) => {
+    panel.hidden = panel.id !== `panel-${name}`;
+  });
+  if (updateHash) history.replaceState(null, "", name === "reviews" ? "#reviews" : location.pathname + location.search);
+  if (focus) document.querySelector(".td-tabs")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function fieldLabel(label, optional = false) {
-  return `${esc(label)}${optional ? ' <span class="optional">Optional</span>' : ""}`;
-}
-
-function reviewInput(name, label, value, { optional = false, min = null, max = null, hint = "", readonly = false } = {}) {
-  return `<div class="form-field">
-    <label for="${name}">${fieldLabel(label, optional)}</label>
-    <input id="${name}" name="${name}" type="text" value="${esc(value)}"
-      ${optional ? "" : "required"}${min ? ` minlength="${min}"` : ""}${max ? ` maxlength="${max}"` : ""}${readonly ? " readonly" : ""}>
-    ${hint ? `<p class="hint">${esc(hint)}</p>` : ""}
-  </div>`;
-}
-
-function reviewTextarea(
-  name,
-  label,
-  value,
-  { optional = false, min = null, max = null, hint = "", rows = 4 } = {}
-) {
-  return `<div class="form-field">
-    <label for="${name}">${fieldLabel(label, optional)}</label>
-    <textarea id="${name}" name="${name}" rows="${rows}"
-      ${optional ? "" : "required"}${min ? ` minlength="${min}"` : ""}${max ? ` maxlength="${max}"` : ""}>${esc(value)}</textarea>
-    ${hint ? `<p class="hint">${esc(hint)}</p>` : ""}
-  </div>`;
-}
-
-function reviewWorkbench(task, user) {
-  const draft = reviewDraft(task);
-  const decisions = [
-    ["approved", "Approved", "Ready for implementation"],
-    ["changes_requested", "Changes requested", "Author revision needed"],
-    ["rejected", "Rejected", "Not suitable for the benchmark"],
-  ];
-  return `<section id="review-workbench" class="review-workbench" aria-labelledby="review-workbench-h">
-    <div class="review-workbench__head">
-      <div>
-        <span class="eyebrow">Reviewer workspace</span>
-        <h2 id="review-workbench-h">Publish scientific review</h2>
-        <p>Signed in as <strong>@${esc(user.github_login)}</strong>. Publishing adds a structured reply to the proposal Discussion.</p>
-      </div>
-      <span class="review-workbench__current">${task.review_input_valid ? "Current review loaded" : "First review"}</span>
-    </div>
-    <form id="proposal-review-form" class="review-workbench__form" novalidate>
-      <!-- The schema version is not shown: reviewPayload() always sends REVIEW_SCHEMA_VERSION. -->
-
-      <fieldset class="review-decision">
-        <legend>Decision</legend>
-        <div class="review-decision__rail">
-          ${decisions
-            .map(
-              ([value, label, note]) => `<label class="review-decision__option review-decision__option--${value}">
-                <input type="radio" name="review_decision" value="${value}" ${draft.review_decision === value ? "checked" : ""} required>
-                <span><strong>${label}</strong><small>${note}</small></span>
-              </label>`
-            )
-            .join("")}
-        </div>
-      </fieldset>
-
-      <div class="review-workbench__group">
-        <div class="review-workbench__group-title"><span>01</span><div><h3>Review framing</h3><p>Give readers a compact description, classification and difficulty.</p></div></div>
-        ${reviewTextarea("review_short_description", "Short description", draft.review_short_description, { min: 20, max: 2000, rows: 3 })}
-        <div class="field-row">
-          ${reviewTextarea("review_tags", "Tags", draft.review_tags, { hint: "One tag per line. At least one is required.", rows: 4 })}
-          ${reviewInput("review_difficulty", "Difficulty", draft.review_difficulty, { min: 2, max: 80, hint: "For example: Moderate, Hard, or Expert." })}
-        </div>
-      </div>
-
-      <div class="review-workbench__group">
-        <div class="review-workbench__group-title"><span>02</span><div><h3>Scientific assessment</h3><p>Define why the task matters and how success will be measured.</p></div></div>
-        ${reviewTextarea("review_scientific_value", "Scientific value", draft.review_scientific_value, { min: 20, max: 8000, rows: 5 })}
-        ${reviewTextarea("review_primary_metric", "Primary metric", draft.review_primary_metric, { min: 2, max: 1000, rows: 3 })}
-        <div class="field-row">
-          ${reviewInput("review_primary_metric_short", "Primary metric short", draft.review_primary_metric_short, { optional: true, max: 240 })}
-          ${reviewTextarea("review_secondary_metrics", "Secondary metrics", draft.review_secondary_metrics, { optional: true, hint: "One metric per line.", rows: 3 })}
-        </div>
-        ${reviewTextarea("review_verification_method", "Verification method", draft.review_verification_method, { min: 20, max: 8000, rows: 5 })}
-      </div>
-
-      <div class="review-workbench__group">
-        <div class="review-workbench__group-title"><span>03</span><div><h3>Operational detail</h3><p>Optional estimates and evidence make implementation easier to scope.</p></div></div>
-        <div class="field-row">
-          ${reviewInput("review_estimated_runtime", "Estimated runtime", draft.review_estimated_runtime, { optional: true, max: 240 })}
-          ${reviewInput("review_compute_budget", "Compute budget", draft.review_compute_budget, { optional: true, max: 240 })}
-        </div>
-        ${reviewInput("review_token_budget", "Token budget", draft.review_token_budget, { optional: true, max: 240 })}
-        <div class="field-row">
-          ${reviewTextarea("review_baseline_results", "Baseline results", draft.review_baseline_results, { optional: true, hint: "One result per line.", rows: 4 })}
-          ${reviewTextarea("review_failure_modes", "Failure modes", draft.review_failure_modes, { optional: true, hint: "One failure mode per line.", rows: 4 })}
-        </div>
-        ${reviewTextarea("review_notes", "Review notes", draft.review_notes, { optional: true, max: 8000, rows: 4 })}
-      </div>
-
-      <div class="review-workbench__actions">
-        <div>
-          <p id="proposal-review-status" class="submit-status" role="status" aria-live="polite"></p>
-        </div>
-        <div class="submit-actions">
-          <button type="button" class="btn btn--secondary" id="proposal-review-preview">Preview reply</button>
-          <button type="submit" class="btn btn--primary" id="proposal-review-publish">Publish review</button>
-        </div>
-      </div>
-      <details class="preview-details" id="proposal-review-preview-details" hidden>
-        <summary>Discussion reply preview</summary>
-        <pre class="proposal-preview" id="proposal-review-preview-body"></pre>
-      </details>
-    </form>
-  </section>`;
-}
-
-function wireReviewWorkbench(task, notice = null) {
-  const form = document.getElementById("proposal-review-form");
-  if (!form) return;
-  const statusEl = document.getElementById("proposal-review-status");
-  const previewButton = document.getElementById("proposal-review-preview");
-  const publishButton = document.getElementById("proposal-review-publish");
-  const previewDetails = document.getElementById("proposal-review-preview-details");
-  const previewBody = document.getElementById("proposal-review-preview-body");
-
-  const setStatus = (message, state = "") => {
-    statusEl.textContent = message;
-    statusEl.className = `submit-status${state ? ` is-${state}` : ""}`;
-  };
-  const setBusy = (busy) => {
-    previewButton.disabled = busy;
-    publishButton.disabled = busy;
-  };
-  const validPayload = () => {
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      setStatus("Complete the required review fields.", "error");
-      return null;
-    }
-    return reviewPayload(form);
-  };
-  const showPreview = (body) => {
-    previewBody.textContent = body;
-    previewDetails.hidden = false;
-    previewDetails.open = true;
-  };
-
-  if (notice) {
-    setStatus(notice.message, "success");
-    if (notice.body) showPreview(notice.body);
+/* Everything that depends on the loaded reviews, repainted in place. */
+function paintReviews(state) {
+  const { task, user } = ctx;
+  if (!task) return;
+  const panel = document.getElementById("panel-reviews");
+  if (panel && state) {
+    panel.innerHTML = reviewsPanelHTML(task, state, user);
+    void mountMath(panel);
   }
-
-  previewButton.addEventListener("click", async () => {
-    const payload = validPayload();
-    if (!payload) return;
-    setBusy(true);
-    setStatus("Rendering the Discussion reply…");
-    try {
-      const result = await controlPlaneFetch("/api/v1/proposals/reviews/preview", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      showPreview(result.comment.body);
-      setStatus("Preview ready.", "success");
-    } catch (error) {
-      setStatus(error.message || "The review preview could not be rendered.", "error");
-    } finally {
-      setBusy(false);
-    }
-  });
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const payload = validPayload();
-    if (!payload) return;
-    setBusy(true);
-    setStatus("Publishing the review…");
-    try {
-      const result = await controlPlaneFetch(`/api/v1/proposals/${encodeURIComponent(task.id)}/reviews`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      invalidateTasks();
-      await render({
-        message: "Review published. The current proposal view now reflects this decision.",
-        body: result.comment.body,
-      });
-    } catch (error) {
-      setStatus(error.message || "The review could not be published.", "error");
-      setBusy(false);
-    }
-  });
+  document.getElementById("td-reviews-card")?.replaceWith(
+    Object.assign(document.createElement("div"), { innerHTML: reviewsAsideHTML(state, user) }).firstElementChild
+  );
+  const count = state ? latestPerReviewer(state.items).length : 0;
+  document.querySelectorAll("[data-review-count]").forEach((el) => (el.textContent = count ? String(count) : ""));
+  const mine = ownLatest(state, user);
+  document.querySelectorAll("[data-review-label]").forEach((el) => (el.textContent = mine ? "Update your review" : "Write a review"));
+  // A deep link to one review (#review-123) lands on it once it exists.
+  if (state && /^#review-\d+$/.test(location.hash)) document.querySelector(location.hash)?.scrollIntoView({ block: "start" });
 }
 
-async function render(reviewNotice = null) {
+/* After a publish: the drawer already patched the task; repaint the bits
+   that show its status instead of reloading the whole page. */
+function afterPublished() {
+  const { task } = ctx;
+  els.badges.querySelector(".badge")?.replaceWith(
+    Object.assign(document.createElement("div"), { innerHTML: statusBadge(displayStatus(task)) }).firstElementChild
+  );
+  document.getElementById("td-lifecycle").innerHTML = timelineHTML(task);
+  const glanceStatus = els.aside.querySelector(".aside-card li .badge");
+  if (glanceStatus) glanceStatus.outerHTML = statusBadge(displayStatus(task));
+  paintReviews(reviewState.get(task.id) ?? null);
+  selectTab("reviews", { focus: false, updateHash: true });
+  // The board and other pages read the control plane fresh next time.
+  invalidateTasks();
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-review-open], [data-tab], [data-tab-link], [data-review-jump], [data-reviews-retry]");
+  if (!target || !ctx.task) return;
+  const { task, user } = ctx;
+  if (target.matches("[data-review-open]")) {
+    if (!user?.can_review) return;
+    openReviewDrawer({
+      task,
+      user,
+      state: reviewState.get(task.id) ?? null,
+      onPublished: afterPublished,
+    });
+  } else if (target.matches("[data-tab]")) {
+    selectTab(target.dataset.tab, { focus: false, updateHash: true });
+  } else if (target.matches("[data-tab-link]")) {
+    event.preventDefault();
+    selectTab(target.dataset.tabLink, { updateHash: true });
+  } else if (target.matches("[data-review-jump]")) {
+    event.preventDefault();
+    selectTab("reviews", { focus: false });
+    history.replaceState(null, "", target.getAttribute("href"));
+    document.querySelector(target.getAttribute("href"))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (target.matches("[data-reviews-retry]")) {
+    target.disabled = true;
+    loadReviews(task, { fresh: true }).then((state) => {
+      reviewState.set(task.id, state);
+      paintReviews(state);
+    });
+  }
+});
+
+// Arrow keys move between the two tabs (WAI-ARIA tabs pattern).
+document.addEventListener("keydown", (event) => {
+  const tab = event.target.closest?.(".td-tabs [role=tab]");
+  if (!tab || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const next = tab.dataset.tab === "proposal" ? "reviews" : "proposal";
+  selectTab(event.key === "Home" ? "proposal" : event.key === "End" ? "reviews" : next, { focus: false, updateHash: true });
+  document.querySelector(".td-tabs [aria-selected=true]")?.focus();
+});
+
+window.addEventListener("hashchange", () => selectTab(tabFromHash(), { focus: false }));
+
+async function render() {
   const [task, user, canEditOnSite, site] = await Promise.all([
     key ? getTask(key) : null,
     currentUser().catch(() => null),
@@ -265,7 +175,7 @@ async function render(reviewNotice = null) {
   const identifier = task.discussion_number ? `Proposal #${task.discussion_number}` : task.task_slug;
   document.title = `${identifier} · ${task.title} | AI4S-Benchmark`;
   const desc = document.querySelector('meta[name="description"]');
-  if (desc) desc.setAttribute("content", task.review_short_description ?? task.problem);
+  if (desc) desc.setAttribute("content", String(task.problem || "").slice(0, 300));
 
   /* ---- Hero ---- */
   els.badges.innerHTML = `
@@ -276,7 +186,7 @@ async function render(reviewNotice = null) {
 
   const metaBits = [
     `<span><span class="mono-label">Domain</span> &nbsp;<strong style="color:var(--navy);">${esc(task.domain)}</strong></span>`,
-    `<span><span class="mono-label">Release</span> &nbsp;<span class="mono">${task.revision_release ? esc(task.revision_release) : "—"}</span></span>`,
+    task.revision_release ? `<span><span class="mono-label">Release</span> &nbsp;<span class="mono">${esc(task.revision_release)}</span></span>` : "",
     `<span><span class="mono-label">Updated</span> &nbsp;<span class="mono">${esc(formatDate(task.updated_at))}</span></span>`,
     `<span class="task-hero__field"><span class="mono-label">Field</span> &nbsp;${esc(task.field_name)}</span>`,
   ];
@@ -289,14 +199,20 @@ async function render(reviewNotice = null) {
   const editsHere = isAuthor && canEditOnSite;
 
   const actions = [];
+  // Reviewers review from here: the drawer opens beside the proposal.
+  if (user?.can_review) {
+    actions.push(
+      `<button type="button" class="btn btn--primary" data-review-open data-review-label>Write a review</button>`
+    );
+  }
   if (editsHere) {
     actions.push(
-      `<button type="button" class="btn btn--primary" id="td-edit">Edit proposal</button>`
+      `<button type="button" class="btn btn--${user?.can_review ? "secondary" : "primary"}" id="td-edit">Edit proposal</button>`
     );
   }
   if (task.discussion_url) {
     actions.push(
-      `<a class="btn btn--${editsHere ? "secondary" : "primary"}" href="${esc(task.discussion_url)}" target="_blank" rel="noopener">${editsHere ? "View review Discussion" : "Open proposal Discussion"} <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
+      `<a class="btn btn--${editsHere || user?.can_review ? "secondary" : "primary"}" href="${esc(task.discussion_url)}" target="_blank" rel="noopener">${editsHere ? "View review Discussion" : "Open proposal Discussion"} <svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg></a>`
     );
   }
   // Set by the control plane when a proposal notification reached Discord.
@@ -351,27 +267,8 @@ async function render(reviewNotice = null) {
   ].filter(Boolean);
   const envHTML = `<dl class="def-grid" style="grid-template-columns: 1fr;">${envRows.join("")}</dl>`;
 
-  const reviewRows = [
-    task.review_difficulty ? `<div><dt>Difficulty</dt><dd>${esc(task.review_difficulty)}</dd></div>` : "",
-    task.review_primary_metric ? `<div><dt>Primary metric</dt><dd>${esc(task.review_primary_metric)}</dd></div>` : "",
-    task.review_secondary_metrics?.length
-      ? `<div><dt>Secondary metrics</dt><dd>${task.review_secondary_metrics.map(esc).join(", ")}</dd></div>`
-      : "",
-    task.review_estimated_runtime ? `<div><dt>Estimated runtime</dt><dd>${esc(task.review_estimated_runtime)}</dd></div>` : "",
-    task.review_compute_budget ? `<div><dt>Compute budget</dt><dd>${esc(task.review_compute_budget)}</dd></div>` : "",
-    task.review_token_budget ? `<div><dt>Token budget</dt><dd>${esc(task.review_token_budget)}</dd></div>` : "",
-  ].filter(Boolean);
-  const reviewHTML = task.review_input_valid
-    ? `${para(task.review_short_description)}
-       ${para(task.review_scientific_value)}
-       ${reviewRows.length ? `<dl class="def-grid" style="grid-template-columns: 1fr;">${reviewRows.join("")}</dl>` : ""}
-       <div class="verify-panel" style="margin-top: var(--space-4);">
-         <div class="verify-panel__title">${ICONS.shield} Verification</div>
-         ${richBlock(task.review_verification_method)}
-       </div>
-       ${task.review_notes ? para(task.review_notes) : ""}`
-    : pendingLine("No structured review has been synchronized yet.");
-
+  // Later stages (task PR, repository revision, agent runs) are not
+  // settled yet, so they only appear once the control plane records them.
   const resultsHTML = task.revision_agent_results?.length
     ? `<div class="table-wrap"><table class="data-table">
         <thead><tr><th scope="col">Agent</th><th scope="col">Model</th><th scope="col">State</th><th scope="col">Date</th></tr></thead>
@@ -382,12 +279,7 @@ async function render(reviewNotice = null) {
             <td>${esc(r.state)}</td><td class="mono">${esc(formatDate(r.created_at))}</td></tr>`
           )
           .join("")}</tbody></table></div>`
-    : emptyState({
-        title: "No agent evaluations yet",
-        text: task.revision_id
-          ? "Agent results will appear here once official evaluations run."
-          : "Evaluation begins after an approved proposal is linked to a repository revision.",
-      });
+    : "";
 
   const revisionHTML = task.revision_id
     ? `<dl class="def-grid" style="grid-template-columns: 1fr;">
@@ -395,29 +287,36 @@ async function render(reviewNotice = null) {
         <div><dt>Repository path</dt><dd class="mono">${esc(task.revision_task_path)}</dd></div>
         <div><dt>Resource requirements</dt><dd class="mono">${esc(JSON.stringify(task.revision_resource_requirements ?? {}))}</dd></div>
       </dl>`
-    : pendingLine("No repository revision is linked to this proposal yet.");
+    : "";
 
-  els.main.innerHTML = [
+  const proposalHTML = [
     section("Scientific problem", para(task.problem)),
     section("Solvability", para(task.solvability)),
     section("References & resources", para(task.references)),
     section("Requested environment", envHTML),
     section("Expected workflow & outputs", para(task.workflow)),
     section("Proposed evaluation", para(task.evaluation) + `<div class="notice notice--rich" style="margin-top: var(--space-4);">${ICONS.info}<div><strong>Leakage risk</strong>${richBlock(task.leakage)}</div></div>`, "evaluation"),
-    section("Scientific review", reviewHTML, "review"),
-    task.review_baseline_results?.length ? section("Baseline results", listOrDash(task.review_baseline_results)) : "",
-    task.review_failure_modes?.length ? section("Failure analysis", listOrDash(task.review_failure_modes)) : "",
     section("Repository revision", revisionHTML, "revision"),
     section("Agent results", resultsHTML, "results"),
-    user?.can_review ? reviewWorkbench(task, user) : "",
   ].join("");
+
+  const cached = reviewState.get(task.id) ?? null;
+  els.main.innerHTML = `
+    <div class="td-tabs" role="tablist" aria-label="Proposal and reviews">
+      <button type="button" role="tab" id="tab-proposal" aria-controls="panel-proposal" data-tab="proposal">Proposal</button>
+      <button type="button" role="tab" id="tab-reviews" aria-controls="panel-reviews" data-tab="reviews">Reviews <span class="td-tabs__count" data-review-count></span></button>
+    </div>
+    <div class="td-panel" id="panel-proposal" role="tabpanel" aria-labelledby="tab-proposal" tabindex="-1">${proposalHTML}</div>
+    <section class="td-panel rv-panel" id="panel-reviews" role="tabpanel" aria-labelledby="reviews-h" tabindex="-1">${reviewsPanelHTML(task, cached, user)}</section>`;
+  const firstPaint = !els.main.dataset.painted;
+  els.main.dataset.painted = "1";
+  // A shared #reviews link opens the Reviews tab and brings it into view.
+  selectTab(tabFromHash(), { focus: firstPaint && tabFromHash() === "reviews" && location.hash === "#reviews" });
   void mountMath(els.main);
 
   /* ---- Aside ---- */
   const glance = [
     ["Status", statusBadge(displayStatus(task))],
-    ["Difficulty", task.review_difficulty ? esc(task.review_difficulty) : '<span class="text-muted">Pending review</span>'],
-    ["Release", `<span class="mono">${task.revision_release ? esc(task.revision_release) : "—"}</span>`],
     ["Created", `<span class="mono">${esc(formatDate(task.created_at))}</span>`],
     ["Updated", `<span class="mono">${esc(formatDate(task.updated_at))}</span>`],
   ];
@@ -429,11 +328,9 @@ async function render(reviewNotice = null) {
       (p, i) => `<div class="person"><span class="person__name">${esc(p.name)}</span>${p.affiliation ? `<span class="person__affil">${esc(p.affiliation)}</span>` : ""}${i === 0 ? `<span class="person__affil">@${esc(task.github)}</span>` : ""}</div>`
     )
     .join("");
-  const reviewerHTML = task.review_reviewer_login
-    ? `<div class="person"><span class="person__name">@${esc(task.review_reviewer_login)}</span>${task.review_comment_url ? `<a class="person__affil" href="${esc(task.review_comment_url)}" target="_blank" rel="noopener">Open review reply</a>` : ""}</div>`
-    : `<p class="text-muted" style="font-size: var(--text-sm); margin:0;">Reviewer assignment pending.</p>`;
 
   els.aside.innerHTML = `
+    ${reviewsAsideHTML(cached, user)}
     <div class="aside-card">
       <h3>At a glance</h3>
       <ul>${glance.map(([k, v]) => `<li><span class="mono-label">${esc(k)}</span><span>${v}</span></li>`).join("")}</ul>
@@ -441,17 +338,16 @@ async function render(reviewNotice = null) {
     <div class="aside-card">
       <h3>${people.length > 1 ? "Task contributors" : "Task contributor"}</h3>
       ${authorHTML}
-    </div>
-    <div class="aside-card">
-      <h3>Scientific reviewers</h3>
-      ${reviewerHTML}
-    </div>
-    ${
-      (task.review_tags ?? []).length
-        ? `<div class="aside-card"><h3>Review tags</h3><div style="display:flex;flex-wrap:wrap;gap:0.4rem;">${task.review_tags.map((tag) => chip(tag)).join("")}</div></div>`
-        : ""
-    }`;
-  wireReviewWorkbench(task, reviewNotice);
+    </div>`;
+
+  ctx = { task, user };
+  paintReviews(cached);
+  if (!cached) {
+    loadReviews(task).then((state) => {
+      reviewState.set(task.id, state);
+      if (ctx.task === task) paintReviews(state);
+    });
+  }
 
   // Proposal checklist for the people who act on it: the author (to improve
   // the proposal) and reviewers (as hints, never a verdict).
@@ -468,7 +364,9 @@ async function render(reviewNotice = null) {
           ? `Only you and reviewers see this.${editsHere ? " Use <strong>Edit proposal</strong> to address it." : ""}`
           : "Automated hints for reviewers, not a verdict.",
       });
-      els.aside.prepend(card);
+      const reviewsCard = els.aside.querySelector("#td-reviews-card");
+      if (reviewsCard) reviewsCard.after(card);
+      else els.aside.prepend(card);
     });
   }
 }
@@ -511,5 +409,6 @@ render().catch((err) => {
 });
 
 document.addEventListener("ai4sbench:authchange", () => {
+  closeReviewDrawer();
   void render();
 });

@@ -1,12 +1,12 @@
 /* ============================================================
    AI4S-Benchmark · Lifecycle timeline
-   Renders lifecycle(task) (js/lifecycle.js) as the five-stage
+   Renders publicLifecycle(task) (js/lifecycle.js) as the stage
    track shown at the top of every task page.
    ============================================================ */
 
-import { esc, formatDate, ICONS } from "./components.js?v=20260921-3";
-import { lifecycle } from "./lifecycle.js?v=20260921-3";
-import { ROOT } from "./data.js?v=20260921-3";
+import { esc, formatDate, ICONS } from "./components.js?v=20261012-1";
+import { publicLifecycle } from "./lifecycle.js?v=20261012-1";
+import { ROOT } from "./data.js?v=20261012-1";
 
 const EXT =
   '<svg class="ext-arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 11.25 11.25 4.75M5.9 4.75h5.35v5.35"/></svg><span class="visually-hidden"> (opens in a new tab)</span>';
@@ -39,11 +39,11 @@ function stepHTML(step) {
 
 /** The timeline section for one task. Safe HTML. */
 export function timelineHTML(task) {
-  const steps = lifecycle(task);
+  const steps = publicLifecycle(task);
   const at = steps.find((s) => NOW_LABEL[s.state]) ?? steps[steps.length - 1];
   return `<section class="stagetrack" aria-labelledby="lifecycle-h">
     <div class="stagetrack__head">
-      <h2 id="lifecycle-h">Task lifecycle</h2>
+      <h2 id="lifecycle-h">Proposal progress</h2>
       <p>Stage ${at.index + 1} of ${steps.length} · <a href="${ROOT}guide/">How a proposal becomes a task</a></p>
     </div>
     <ol class="stagetrack__track">${steps.map(stepHTML).join("")}</ol>
