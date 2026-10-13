@@ -182,6 +182,7 @@ class ReviewerApplicationSubmission(BaseModel):
     field: str | None = Field(default=None, max_length=79)
     subfield: str | None = Field(default=None, max_length=200)
     research_background: str = Field(min_length=60, max_length=4_000)
+    email_verification_token: str | None = Field(default=None, min_length=32, max_length=128)
 
     @field_validator(
         "name",
@@ -445,6 +446,7 @@ class AuthenticatedUserResponse(BaseModel):
 
 class AuthConfigResponse(BaseModel):
     github_login_enabled: bool
+    form_mail_require_otp: bool
 
 
 class ProposalListItemResponse(BaseModel):

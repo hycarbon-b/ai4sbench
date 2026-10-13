@@ -65,7 +65,7 @@ OPENAPI_TAGS = [
     {
         "name": "reviewers",
         "description": (
-            "Public reviewer applications plus administrator-only application review and access decisions."
+            "GitHub-authenticated reviewer applications plus administrator-only review and access decisions."
         ),
     },
     {

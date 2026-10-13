@@ -5,13 +5,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 import httpx
-from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
+from fastapi_mail import FastMail, MessageSchema, MessageType
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.schemas import ProposalReview
 from src.core.config import Settings
 from src.db.models import OutboundDelivery, Proposal
+from src.mailing.smtp import smtp_connection_config
 
 DeliveryType = Literal["discord", "github_discussion", "smtp"]
 
@@ -235,26 +236,6 @@ async def _send_discord(delivery: OutboundDelivery) -> tuple[int, str, str | Non
     return response.status_code, body, message_url
 
 
-def _smtp_config(settings: Settings) -> ConnectionConfig:
-    if not settings.smtp_enabled:
-        raise DeliveryConfigurationError("SMTP delivery is disabled")
-    if not settings.smtp_server or not settings.smtp_from:
-        raise DeliveryConfigurationError("SMTP server and sender are not configured")
-    return ConnectionConfig(
-        MAIL_USERNAME=settings.smtp_username,
-        MAIL_PASSWORD=settings.smtp_password.get_secret_value() if settings.smtp_password else "",
-        MAIL_FROM=settings.smtp_from,
-        MAIL_PORT=settings.smtp_port,
-        MAIL_SERVER=settings.smtp_server,
-        MAIL_FROM_NAME=settings.smtp_from_name,
-        MAIL_STARTTLS=settings.smtp_starttls,
-        MAIL_SSL_TLS=settings.smtp_ssl_tls,
-        USE_CREDENTIALS=bool(settings.smtp_username),
-        VALIDATE_CERTS=settings.smtp_validate_certs,
-        TIMEOUT=settings.smtp_timeout_seconds,
-    )
-
-
 async def _send_smtp(delivery: OutboundDelivery, settings: Settings) -> tuple[int, str, None]:
     recipients = delivery.payload.get("recipients")
     subject = str(delivery.payload.get("subject") or "").strip()
@@ -284,7 +265,7 @@ async def _send_smtp(delivery: OutboundDelivery, settings: Settings) -> tuple[in
         multipart_subtype="alternative" if html else "mixed",
         reply_to=reply_to or [],
     )
-    await FastMail(_smtp_config(settings)).send_message(message)
+    await FastMail(smtp_connection_config(settings)).send_message(message)
     return 250, "SMTP accepted message", None
 
 

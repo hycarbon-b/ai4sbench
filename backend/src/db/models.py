@@ -216,6 +216,25 @@ class ReviewerApplication(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class EmailVerificationChallenge(Base):
+    """Short-lived email proof scoped to one purpose and optional account."""
+
+    __tablename__ = "email_verification_challenges"
+    __table_args__ = (Index("ix_email_verifications_email_created", "email", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email: Mapped[str] = mapped_column(String(200))
+    purpose: Mapped[str] = mapped_column(String(32))
+    subject_id: Mapped[str] = mapped_column(String(100), default="")
+    code_hash: Mapped[str] = mapped_column(String(64))
+    token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[int] = mapped_column(Integer)
+    verified_at: Mapped[int | None] = mapped_column(Integer)
+    consumed_at: Mapped[int | None] = mapped_column(Integer)
+
+
 class ContributionDashboardSnapshot(Base):
     """One immutable, schema-versioned TBS-compatible GitHub projection."""
 

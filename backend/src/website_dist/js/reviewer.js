@@ -2,13 +2,14 @@
    AI4S-Benchmark · Reviewer application model
    Pure functions (no DOM) that turn the reviewer form's answers
    into (a) the control plane's ReviewerApplication document and
-   (b) a Markdown fallback. Kept DOM-free so it can be unit-tested
+   (b) a Markdown copy. Kept DOM-free so it can be unit-tested
    with Node and reused by other pages — same shape as proposal.js.
 
    Backend contract:
      POST {control_plane_url}/api/v1/reviewers
      body: ReviewerApplication, schema tb-reviewer-application/v1
-     expected: 201 with the created record, 422 on validation error.
+     expected: 201 with the created record, 401 without GitHub sign-in,
+     422 on validation error.
 
    The reviewer endpoint is independent from task-proposal submission;
    its `role` field is the person's position and its slugs are
@@ -17,7 +18,7 @@
 
 import { slugAlpha } from "./proposal.js?v=20261012-2";
 
-/** Public intake path on the control plane. */
+/** GitHub-authenticated intake path on the control plane. */
 export const REVIEWER_ENDPOINT = "/api/v1/reviewers";
 
 export const SCHEMA_VERSION = "tb-reviewer-application/v1";
@@ -105,7 +106,7 @@ export function buildReviewerDocument(raw) {
   };
 }
 
-/** Markdown rendering of the same answers (GitHub issue / email fallback). */
+/** Markdown rendering of the same answers for the copy action. */
 export function buildMarkdown(raw) {
   const a = normalizeAnswers(raw);
   const line = (label, value) => `**${label}:** ${value || "—"}\n`;
