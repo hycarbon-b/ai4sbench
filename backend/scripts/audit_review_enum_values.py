@@ -91,7 +91,12 @@ async def main() -> int:
                 values = {value: count for value, count in rows}
                 if key == "proposal_ai_reviews.decision":
                     values.pop(None, None)  # Unavailable reviews have no decision.
-                invalid = {value: count for value, count in values.items() if value not in allowed}
+                nullable = key in {"proposals.review_decision", "proposal_human_reviews.decision"}
+                invalid = {
+                    value: count
+                    for value, count in values.items()
+                    if value not in allowed and not (nullable and value is None)
+                }
                 print(f"{key}: total={sum(values.values())}, values={values}")
                 if invalid:
                     issue_count += sum(invalid.values())
