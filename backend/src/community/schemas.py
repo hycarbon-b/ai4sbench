@@ -7,6 +7,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.core.enums import (
+    AIReviewDecision,
+    AIReviewStatus,
+    ProposalReviewDecision,
+    ProposalStatus,
+    ReviewerApplicationStatus,
+)
+
 PROPOSAL_DOMAIN_OPTIONS = (
     "Materials Science",
     "Physics",
@@ -265,7 +273,7 @@ class ReviewerApplicationCreatedResponse(BaseModel):
     field: str | None
     subfield: str | None
     research_background: str
-    status: Literal["pending", "approved", "rejected"]
+    status: ReviewerApplicationStatus
     submitted_by_login: str | None
     created_at: datetime
     updated_at: datetime
@@ -288,7 +296,7 @@ class ReviewerApplicationUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    status: Literal["pending", "approved", "rejected"] | None = None
+    status: ReviewerApplicationStatus | None = None
     github: str | None = Field(default=None, max_length=100)
     admin_notes: str | None = Field(default=None, max_length=8_000)
 
@@ -332,7 +340,7 @@ class ProposalReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     review_schema_version: Literal["ai4sbench-proposal-review/v1"] = REVIEW_SCHEMA_VERSION
-    review_decision: Literal["approved", "changes_requested", "rejected"]
+    review_decision: ProposalReviewDecision
     review_short_description: str = Field(min_length=20, max_length=2_000)
     review_tags: list[str] = Field(min_length=1, max_length=30)
     review_difficulty: str = Field(min_length=2, max_length=80)
@@ -455,7 +463,7 @@ class ProposalListItemResponse(BaseModel):
     domain: str
     field: str
     task_slug: str
-    status: str
+    status: ProposalStatus
     discussion_url: str | None
     discussion_number: int | None
     discord_message_url: str | None
@@ -489,7 +497,7 @@ class ProposalEditValuesResponse(BaseModel):
 
 class ProposalEditDetailResponse(BaseModel):
     id: str
-    status: str
+    status: ProposalStatus
     discussion_url: str | None
     discussion_number: int | None
     discord_message_url: str | None
@@ -517,7 +525,7 @@ class ProposalBoardItemResponse(BaseModel):
     affiliation: str
     github: str
     task_slug: str
-    status: str
+    status: ProposalStatus
     discussion_url: str | None
     discussion_number: int | None
     discord_message_url: str | None
@@ -526,7 +534,7 @@ class ProposalBoardItemResponse(BaseModel):
     updated_at: datetime
 
     review_schema_version: str | None
-    review_decision: Literal["approved", "changes_requested", "rejected"] | None
+    review_decision: ProposalReviewDecision | None
     review_short_description: str | None
     review_tags: list[str]
     review_difficulty: str | None
@@ -590,13 +598,13 @@ class ProposalPreviewResponse(BaseModel):
 
 class ProposalPublishedResponse(ProposalPreviewResponse):
     id: str
-    status: str
+    status: ProposalStatus
     discussion_url: str
 
 
 class ProposalUpdatedResponse(BaseModel):
     id: str
-    status: str
+    status: ProposalStatus
     discussion_url: str
     input: ProposalSubmission
     derived: ProposalDerivedResponse
@@ -623,7 +631,7 @@ class ProposalHumanReviewResponse(BaseModel):
     id: str
     comment_url: str
     reviewer_login: str
-    decision: str | None
+    decision: ProposalReviewDecision | None
     input_valid: bool
     document: dict[str, Any]
     github_created_at: datetime | None
@@ -650,7 +658,7 @@ class AIReviewResult(BaseModel):
     """TBS rubric output, deliberately separate from human ProposalReview."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    decision: Literal["Strong Reject", "Reject", "Uncertain", "Accept", "Strong Accept"]
+    decision: AIReviewDecision
     review: str = Field(min_length=1, max_length=30_000)
     decision_reason: str | None = Field(default=None, max_length=2_000)
     scientific_domain: str | None = Field(default=None, max_length=500)
@@ -678,7 +686,7 @@ class AIReviewSubmission(BaseModel):
     upstream_sha: str = Field(pattern=r"^[a-f0-9]{40}$")
     model: str = Field(min_length=1, max_length=200)
     proposal_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
-    status: Literal["completed", "unavailable"]
+    status: AIReviewStatus
     result: AIReviewResult | None = None
     error_summary: str | None = Field(default=None, max_length=500)
 

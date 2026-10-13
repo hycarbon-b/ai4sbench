@@ -1,0 +1,15 @@
+site_name: AI4S-Bench Backend Developer Wiki
+repo_url: https://github.com/AI4S-Bench/ai4s-benchmark
+edit_uri: edit/main/backend/docs/
+docs_dir: docs
+theme: readthedocs
+extra_css:
+  - css/toc-right.css
+exclude_docs: |
+  draft/**
+nav:
+  - Overview: index.md
+  - Architecture: architecture.md
+  - Runtime and Configuration: runtime-configuration.md
+  - Automatic Workflow:
+      - AI Proposal Reviews: ai-proposal-reviews.md

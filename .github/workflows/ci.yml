@@ -24,3 +24,9 @@ jobs:
           cache: npm
           cache-dependency-path: dashboard-frontend/frontend/package-lock.json
       - run: python scripts/ci.py
+      - name: Upload backend documentation build
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-docs
+          path: backend/dist/docs/
+          if-no-files-found: error

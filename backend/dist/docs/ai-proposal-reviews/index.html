@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>AI Proposal Reviews - AI4S-Bench Backend Developer Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../css/toc-right.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "AI Proposal Reviews";
+        var mkdocs_page_input_path = "ai-proposal-reviews.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AI4S-Bench Backend Developer Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Overview</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../runtime-configuration/">Runtime and Configuration</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Automatic Workflow</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">AI Proposal Reviews</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#configuration">Configuration</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#api">API</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#delivery-and-recovery">Delivery and recovery</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#verification-and-operational-limits">Verification and operational limits</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#validation-note">Validation note</a>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AI4S-Bench Backend Developer Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Automatic Workflow</li>
+      <li class="breadcrumb-item active">AI Proposal Reviews</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/AI4S-Bench/ai4s-benchmark/edit/main/backend/docs/ai-proposal-reviews.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="ai-proposal-review-integration">AI proposal review integration</h1>
+<p>The workflow lives in <code>AI4S-Bench/ai4s-benchmark</code>, the repository hosting proposal
+Discussions. The backend stores AI recommendations independently of human
+<code>Proposal.review_*</code> fields and approval status. Full Sync ignores the AI marker,
+even if a model quotes a human-review template.</p>
+<h2 id="configuration">Configuration</h2>
+<p>Deploy migration <code>20260924_0017</code>, the API and the job runner before enabling the
+benchmark workflow. Configure these backend settings in the protected environment:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TBCP_GITHUB_REPOSITORY</code></td>
+<td><code>AI4S-Bench/ai4s-benchmark</code></td>
+</tr>
+<tr>
+<td><code>TBCP_AI_REVIEW_SERVICE_KEY</code></td>
+<td>Independent random secret, at least 32 characters</td>
+</tr>
+<tr>
+<td><code>TBCP_AI_REVIEW_GITHUB_TOKEN</code></td>
+<td>Dedicated bot PAT with repository Discussions write access</td>
+</tr>
+<tr>
+<td><code>TBCP_DISCORD_WEBHOOK_URL</code></td>
+<td>Discord destination webhook</td>
+</tr>
+<tr>
+<td><code>TBCP_AI_REVIEW_DISCORD_FORUM</code></td>
+<td><code>true</code> for a forum, <code>false</code> for a text channel</td>
+</tr>
+<tr>
+<td><code>TBCP_AI_REVIEW_SYNC_LABELS</code></td>
+<td>Optional, defaults to <code>false</code></td>
+</tr>
+<tr>
+<td><code>TBCP_AI_REVIEW_REVIEWERS_BY_FIELD</code></td>
+<td>Optional JSON object, e.g. <code>{"physics":["your-reviewer"]}</code></td>
+</tr>
+<tr>
+<td><code>TBCP_AI_REVIEW_REVIEWER_LOGINS</code></td>
+<td>Optional comma-separated backup reviewers</td>
+</tr>
+</tbody>
+</table>
+<p>Use a long-lived dedicated bot PAT for this implementation. A GitHub App
+installation token can be supplied, but automatic token minting/refresh is not
+implemented, so short-lived tokens require external rotation. The token owner
+must be able to edit its own Discussion comments. The OAuth cookie used by human
+reviewers is not involved.</p>
+<p>The service key is only accepted by the two internal AI review routes. It cannot
+access administrator or human-review APIs. Keys are read at runtime and are not
+stored in AI delivery payloads. Missing service authentication or publishing
+configuration fails closed. The AI model key is only needed in Actions.</p>
+<p>In the benchmark repository, configure:</p>
+<ul>
+<li>Secret <code>LLM_API_KEY</code>: selected OpenRouter account key.</li>
+<li>Secret <code>AI_REVIEW_SERVICE_KEY</code>: same value as the backend service key.</li>
+<li>Variable <code>AI_REVIEW_BACKEND_URL</code>: backend HTTPS origin, e.g. <code>https://dashboard.ai4sbench.org</code>.</li>
+</ul>
+<p>The current model is <code>dots-studio/dots-3-note-preview:free</code> at <code>https://openrouter.ai/api/v1</code>.
+The script uses the synthetic <code>openai/</code> prefix solely to select the upstream SDK;
+OpenRouter receives the exact selected model ID. There is no paid fallback.</p>
+<h2 id="api">API</h2>
+<p><code>POST /api/v1/internal/proposal-ai-reviews</code>, authenticated with
+<code>Authorization: Bearer &lt;service-key&gt;</code>, accepts <code>AIReviewSubmission</code> (see OpenAPI).</p>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: &quot;ai4sbench-proposal-ai-review/v1&quot;,
+  &quot;repository&quot;: &quot;AI4S-Bench/ai4s-benchmark&quot;,
+  &quot;discussion_number&quot;: 33,
+  &quot;discussion_node_id&quot;: &quot;D_example&quot;,
+  &quot;run_id&quot;: 123456,
+  &quot;run_attempt&quot;: 1,
+  &quot;workflow_sha&quot;: &quot;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&quot;,
+  &quot;upstream_sha&quot;: &quot;f55c14ea065243c8d094e02c0aa156d5fd22fdd4&quot;,
+  &quot;model&quot;: &quot;dots-studio/dots-3-note-preview:free&quot;,
+  &quot;proposal_digest&quot;: &quot;&lt;sha256 of title + newline + body&gt;&quot;,
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;result&quot;: {
+    &quot;decision&quot;: &quot;Accept&quot;,
+    &quot;review&quot;: &quot;Full rubric review in Markdown&quot;,
+    &quot;summary&quot;: &quot;Review summary&quot;,
+    &quot;author_fit&quot;: null,
+    &quot;coi&quot;: null
+  }
+}
+</code></pre>
+<p><code>unavailable</code> requires <code>result: null</code>; provider errors are never rendered into
+public comments. Completed results must use the original TBS five-level decision
+enum. The backend verifies Discussion identity, category and content digest using
+GitHub, and checks deletion tombstones. A local Proposal row need not exist yet;
+AI records join to proposals using the Discussion node ID, including after Full Sync.</p>
+<p>Response <code>202</code> contains <code>review_id</code>, <code>publication_id</code>, and each destination's
+delivery ID/state. It means persisted/queued, not externally published.
+<code>GET /api/v1/internal/proposal-ai-reviews/{review_id}</code> returns current states with
+the same service key. Operators also see AI jobs in the existing delivery dashboard.</p>
+<p>Identical callbacks for the same repository/run/attempt return the existing record.
+Conflicting content returns 409. A newer accepted run supersedes older queued
+publications; old callbacks return 409. A rerun of an older run does not replace a
+newer run. During an active publication lease, new ingestion returns 503 with
+<code>Retry-After: 10</code>; the workflow retries. No SQLite transaction spans network I/O.
+Changed proposal content or deletion blocks pending publication. Repeat <code>/review</code>
+with write/admin permissions to produce a fresh review after editing a proposal.</p>
+<h2 id="delivery-and-recovery">Delivery and recovery</h2>
+<p>GitHub gets one bot-owned sticky comment; Discord gets one review message/forum
+thread updated on later reviews. Human comments and the initial proposal Discord
+announcement are unchanged. A GitHub retry searches all Discussion-comment pages
+for the AI marker owned by the publishing bot, which recovers a lost create response.
+A different author's marker is never adopted or edited. The bot must retain its
+identity and permissions across deployments.</p>
+<p>Each channel retries independently. A Discord retry does not republish GitHub.
+Known Discord message IDs are PATCHed. Explicit rejection such as HTTP 429 can
+retry creation. A timeout, server error or process crash during initial creation
+is ambiguous: the job stops rather than automatically creating a duplicate.</p>
+<p>An administrator can reconcile an uncertain initial send via:</p>
+<p><code>POST /api/v1/ai-review-publications/{publication_id}/recover-discord</code></p>
+<p>Use the normal administrator session. If the message exists, submit its ID and
+forum thread ID:</p>
+<pre><code class="language-json">{&quot;message_id&quot;: &quot;123456789&quot;, &quot;thread_id&quot;: &quot;987654321&quot;}
+</code></pre>
+<p>The backend fetches it using the configured webhook and verifies its AI-review
+footer. It then queues an update. For a regular text channel omit <code>thread_id</code>.
+Only after inspecting Discord and confirming no message was created, submit:</p>
+<pre><code class="language-json">{&quot;confirmed_not_sent&quot;: true}
+</code></pre>
+<p>This clears the uncertainty flag and requeues the latest Discord job. Ordinary
+Resend cannot bypass the uncertainty guard. Do not rotate to a different webhook
+channel while pending deliveries exist; old message IDs belong to the old webhook.</p>
+<p>Optional reviewer assignment selects the least-loaded reviewer in the configured
+field pool, then backup pool, and preserves that reviewer on reruns. Optional
+labels reflect current author-fit; COI disclosure is add-only. No AI label changes
+human approval status. Missing optional labels are skipped.</p>
+<h2 id="verification-and-operational-limits">Verification and operational limits</h2>
+<ul>
+<li>Backend: <code>uv run pytest</code> and <code>uv run ruff check control_panel tests</code>.</li>
+<li>Migration: <code>uv run alembic upgrade head</code> against a disposable SQLite database.</li>
+<li>Benchmark: <code>python -m unittest discover -s ci_checks -p test_proposal_review.py</code>.</li>
+<li>Workflow: <code>actionlint .github/workflows/proposal-review.yml .github/workflows/proposal-review-tests.yml</code>.</li>
+<li>Live smoke test after deployment: new proposal, authorized/unauthorized <code>/review</code>,
+  dispatch, model failure, Discord failure and a successful rerun updating both messages.</li>
+</ul>
+<p>For the proposal-to-review path, run the opt-in live test from the repository root:</p>
+<pre><code class="language-powershell">$env:AI_REVIEW_LIVE = &quot;1&quot;
+python backend/tests/test_live_ai_review_e2e.py
+</code></pre>
+<p>It uses <code>GITHUB_TOKEN</code> or <code>GH_TOKEN</code>, falling back to the locally authenticated
+<code>gh</code> token. It publishes a public Task Proposals Discussion, waits up to 20 minutes
+for a completed AI review comment, and verifies the linked Actions run. To resume
+without creating another Discussion, set <code>AI_REVIEW_E2E_DISCUSSION_NUMBER</code> to the
+number printed by the first run. This test intentionally writes to production.</p>
+<p>The free endpoint is text-only. Image links remain in the proposal but are not
+fetched, and published reviews disclose this limitation. The runner conservatively
+bounds combined rubric/input to 28,000 UTF-8 bytes to reserve output space inside
+the endpoint's 32,768-token context; oversized proposals produce an unavailable
+review. Empty/truncated model output also produces an unavailable review. The
+optional author-fit pass can fail without suppressing a valid primary review.</p>
+<p>Workflow artifacts retain result, proposal and sanitized diagnostics for seven
+days. A failed backend callback fails Actions and preserves those artifacts.
+Publishing remains asynchronous; inspect backend delivery state after Actions
+acceptance. Disabling the workflow or service key stops new ingestion, while
+already queued publication continues until the job runner is stopped.</p>
+<h3 id="validation-note">Validation note</h3>
+<p>The repository-wide <code>alembic check</code> already reports differences in the original
+<code>user</code>, <code>oauth_account</code> and <code>proposals</code> metadata at the inspected baseline commit.
+This change does not alter those tables. The focused migration regression checks
+both new AI tables against their models, downgrades to <code>20260924_0016</code>, and upgrades
+again while preserving the existing outbound-delivery table.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../runtime-configuration/" class="btn btn-neutral float-left" title="Runtime and Configuration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/AI4S-Bench/ai4s-benchmark" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../runtime-configuration/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

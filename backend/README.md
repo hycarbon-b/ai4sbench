@@ -243,6 +243,16 @@ uv run alembic upgrade head
 uv run alembic current
 ```
 
+Before applying the proposal/reviewer enum constraints, audit the configured
+database read-only from this directory:
+
+```bash
+uv run python scripts/audit_review_enum_values.py
+```
+
+Resolve any reported invalid values or review/status mismatches before running
+`uv run alembic upgrade head`.
+
 Create a consistent backup from the Dashboard's **Database snapshots** page or
 `POST /api/v1/database-snapshots` before migrations, bulk sync, or other data
 changes. Do not treat a raw copy of the live WAL database file as a consistent

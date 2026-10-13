@@ -4,13 +4,27 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from src.core.enums import ProposalReviewDecision, ProposalStatus, ReviewerApplicationStatus
 from src.db.database import Base
 
 
 def utcnow() -> datetime:
+    """返回带 UTC 时区的当前时间，供模型时间字段使用。"""
     return datetime.now(UTC)
 
 
@@ -124,50 +138,141 @@ class Proposal(Base):
 
     __tablename__ = "proposals"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    author_id: Mapped[str] = mapped_column(String(36), index=True)
-    author_login: Mapped[str | None] = mapped_column(String(100))
-    title: Mapped[str] = mapped_column(String(160))
-    abstract: Mapped[str] = mapped_column(Text)
-    domain: Mapped[str] = mapped_column(String(80))
-    field: Mapped[str] = mapped_column(String(80))
-    task_slug: Mapped[str] = mapped_column(String(100))
-    evidence: Mapped[str] = mapped_column(Text)
-    document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    input_valid: Mapped[bool] = mapped_column(default=True)
-    status: Mapped[str] = mapped_column(String(32), default="draft")
-    discussion_url: Mapped[str | None] = mapped_column(String(500))
-    discussion_node_id: Mapped[str | None] = mapped_column(String(100), unique=True)
-    discussion_number: Mapped[int | None] = mapped_column(Integer)
-    discord_message_url: Mapped[str | None] = mapped_column(String(500))
-    github_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    github_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    review_schema_version: Mapped[str | None] = mapped_column(String(80))
-    review_decision: Mapped[str | None] = mapped_column(String(32))
-    review_short_description: Mapped[str | None] = mapped_column(Text)
-    review_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
-    review_difficulty: Mapped[str | None] = mapped_column(String(80))
-    review_scientific_value: Mapped[str | None] = mapped_column(Text)
-    review_primary_metric: Mapped[str | None] = mapped_column(Text)
-    review_primary_metric_short: Mapped[str | None] = mapped_column(String(240))
-    review_secondary_metrics: Mapped[list[str]] = mapped_column(JSON, default=list)
-    review_verification_method: Mapped[str | None] = mapped_column(Text)
-    review_estimated_runtime: Mapped[str | None] = mapped_column(String(240))
-    review_compute_budget: Mapped[str | None] = mapped_column(String(240))
-    review_token_budget: Mapped[str | None] = mapped_column(String(240))
-    review_baseline_results: Mapped[list[str]] = mapped_column(JSON, default=list)
-    review_failure_modes: Mapped[list[str]] = mapped_column(JSON, default=list)
-    review_notes: Mapped[str | None] = mapped_column(Text)
-    review_reviewer_login: Mapped[str | None] = mapped_column(String(100))
-    review_comment_node_id: Mapped[str | None] = mapped_column(String(100), unique=True)
-    review_comment_url: Mapped[str | None] = mapped_column(String(500))
-    review_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    review_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    review_input_valid: Mapped[bool] = mapped_column(default=False)
-    review_document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        comment="Unique identifier for the proposal.",
+    )
+    author_id: Mapped[str] = mapped_column(
+        String(36), index=True, comment="Identifier of the proposal author."
+    )
+    author_login: Mapped[str | None] = mapped_column(
+        String(100), comment="GitHub login of the proposal author."
+    )
+    title: Mapped[str] = mapped_column(String(160), comment="Proposal title.")
+    abstract: Mapped[str] = mapped_column(Text, comment="Short summary of the proposed task.")
+    domain: Mapped[str] = mapped_column(String(80), comment="Scientific domain of the proposal.")
+    field: Mapped[str] = mapped_column(String(80), comment="Research field within the domain.")
+    task_slug: Mapped[str] = mapped_column(
+        String(100), comment="URL-friendly identifier for the proposed task."
+    )
+    evidence: Mapped[str] = mapped_column(Text, comment="Evidence supporting the proposal.")
+    document: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, comment="Structured proposal content."
+    )
+    input_valid: Mapped[bool] = mapped_column(
+        default=True, comment="Whether the submitted proposal input passed validation."
+    )
+    status: Mapped[ProposalStatus] = mapped_column(
+        SAEnum(
+            ProposalStatus,
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            name="ck_proposals_status",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        default=ProposalStatus.DRAFT,
+        comment="Current proposal lifecycle status.",
+    )
+    discussion_url: Mapped[str | None] = mapped_column(
+        String(500), comment="URL of the mirrored GitHub Discussion."
+    )
+    discussion_node_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, comment="Global node ID of the GitHub Discussion."
+    )
+    discussion_number: Mapped[int | None] = mapped_column(Integer, comment="Number of the GitHub Discussion.")
+    discord_message_url: Mapped[str | None] = mapped_column(
+        String(500), comment="URL of the related Discord message."
+    )
+    github_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Creation time reported by GitHub."
+    )
+    github_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Last update time reported by GitHub."
+    )
+    review_schema_version: Mapped[str | None] = mapped_column(
+        String(80), comment="Schema version used for the review document."
+    )
+    review_decision: Mapped[ProposalReviewDecision | None] = mapped_column(
+        SAEnum(
+            ProposalReviewDecision,
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            name="ck_proposals_review_decision",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        comment="Decision recorded by the review.",
+    )
+    review_short_description: Mapped[str | None] = mapped_column(
+        Text, comment="Concise description produced by the review."
+    )
+    review_tags: Mapped[list[str]] = mapped_column(JSON, default=list, comment="Tags assigned by the review.")
+    review_difficulty: Mapped[str | None] = mapped_column(String(80), comment="Estimated task difficulty.")
+    review_scientific_value: Mapped[str | None] = mapped_column(
+        Text, comment="Assessment of the proposal scientific value."
+    )
+    review_primary_metric: Mapped[str | None] = mapped_column(
+        Text, comment="Primary metric used to evaluate the task."
+    )
+    review_primary_metric_short: Mapped[str | None] = mapped_column(
+        String(240), comment="Short display form of the primary metric."
+    )
+    review_secondary_metrics: Mapped[list[str]] = mapped_column(
+        JSON, default=list, comment="Additional evaluation metrics."
+    )
+    review_verification_method: Mapped[str | None] = mapped_column(
+        Text, comment="Method for verifying task results."
+    )
+    review_estimated_runtime: Mapped[str | None] = mapped_column(
+        String(240), comment="Estimated runtime for the task."
+    )
+    review_compute_budget: Mapped[str | None] = mapped_column(
+        String(240), comment="Estimated compute resource budget."
+    )
+    review_token_budget: Mapped[str | None] = mapped_column(String(240), comment="Estimated token budget.")
+    review_baseline_results: Mapped[list[str]] = mapped_column(
+        JSON, default=list, comment="Expected or known baseline results."
+    )
+    review_failure_modes: Mapped[list[str]] = mapped_column(
+        JSON, default=list, comment="Known or anticipated failure modes."
+    )
+    review_notes: Mapped[str | None] = mapped_column(Text, comment="Additional reviewer notes.")
+    review_reviewer_login: Mapped[str | None] = mapped_column(
+        String(100), comment="GitHub login of the reviewer."
+    )
+    review_comment_node_id: Mapped[str | None] = mapped_column(
+        String(100), unique=True, comment="Global node ID of the GitHub review comment."
+    )
+    review_comment_url: Mapped[str | None] = mapped_column(
+        String(500), comment="URL of the GitHub review comment."
+    )
+    review_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Creation time of the GitHub review comment."
+    )
+    review_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Last update time of the GitHub review comment."
+    )
+    review_input_valid: Mapped[bool] = mapped_column(
+        default=False, comment="Whether the review input passed validation."
+    )
+    review_document: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, comment="Structured review content."
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True, comment="Time when the proposal was soft-deleted."
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, comment="Time when the proposal record was created."
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        comment="Time when the proposal record was last updated.",
+    )
 
 
 class ProposalHumanReview(Base):
@@ -175,18 +280,52 @@ class ProposalHumanReview(Base):
 
     __tablename__ = "proposal_human_reviews"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    proposal_id: Mapped[str] = mapped_column(String(36), ForeignKey("proposals.id"), index=True)
-    comment_node_id: Mapped[str] = mapped_column(String(100), unique=True)
-    comment_url: Mapped[str] = mapped_column(String(500))
-    reviewer_login: Mapped[str] = mapped_column(String(100))
-    decision: Mapped[str | None] = mapped_column(String(32))
-    input_valid: Mapped[bool] = mapped_column(default=False)
-    document: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    github_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    github_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        comment="Unique identifier for the human review.",
+    )
+    proposal_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("proposals.id"), index=True, comment="Identifier of the reviewed proposal."
+    )
+    comment_node_id: Mapped[str] = mapped_column(
+        String(100), unique=True, comment="Global node ID of the GitHub review comment."
+    )
+    comment_url: Mapped[str] = mapped_column(String(500), comment="URL of the GitHub review comment.")
+    reviewer_login: Mapped[str] = mapped_column(String(100), comment="GitHub login of the human reviewer.")
+    decision: Mapped[ProposalReviewDecision | None] = mapped_column(
+        SAEnum(
+            ProposalReviewDecision,
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            name="ck_proposal_human_reviews_decision",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        comment="Decision recorded by the reviewer.",
+    )
+    input_valid: Mapped[bool] = mapped_column(
+        default=False, comment="Whether the submitted review input passed validation."
+    )
+    document: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, comment="Structured human review content."
+    )
+    github_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Creation time reported by GitHub."
+    )
+    github_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Last update time reported by GitHub."
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, comment="Time when the review record was created."
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        comment="Time when the review record was last updated.",
+    )
 
 
 class ReviewerApplication(Base):
@@ -207,7 +346,18 @@ class ReviewerApplication(Base):
     field: Mapped[str | None] = mapped_column(String(80))
     subfield: Mapped[str | None] = mapped_column(String(200))
     research_background: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+    status: Mapped[ReviewerApplicationStatus] = mapped_column(
+        SAEnum(
+            ReviewerApplicationStatus,
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            name="ck_reviewer_applications_status",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        default=ReviewerApplicationStatus.PENDING,
+        index=True,
+    )
     admin_notes: Mapped[str | None] = mapped_column(Text)
     submitted_by_login: Mapped[str | None] = mapped_column(String(100))
     reviewed_by: Mapped[str | None] = mapped_column(String(100))
@@ -324,11 +474,24 @@ class AIReviewPublication(Base):
 class ProposalAIReview(Base):
     __tablename__ = "proposal_ai_reviews"
     __table_args__ = (UniqueConstraint("repository", "run_id", "run_attempt"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    publication_id: Mapped[str] = mapped_column(ForeignKey("ai_review_publications.id"), index=True)
-    repository: Mapped[str] = mapped_column(String(200))
-    run_id: Mapped[int] = mapped_column(Integer)
-    run_attempt: Mapped[int] = mapped_column(Integer)
-    request_digest: Mapped[str] = mapped_column(String(64))
-    document: Mapped[dict[str, Any]] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        comment="Unique identifier for the AI review.",
+    )
+    publication_id: Mapped[str] = mapped_column(
+        ForeignKey("ai_review_publications.id"),
+        index=True,
+        comment="Identifier of the associated review publication.",
+    )
+    repository: Mapped[str] = mapped_column(
+        String(200), comment="GitHub repository that owns the workflow run."
+    )
+    run_id: Mapped[int] = mapped_column(Integer, comment="GitHub Actions workflow run ID.")
+    run_attempt: Mapped[int] = mapped_column(Integer, comment="Attempt number for the workflow run.")
+    request_digest: Mapped[str] = mapped_column(String(64), comment="Digest identifying the review request.")
+    document: Mapped[dict[str, Any]] = mapped_column(JSON, comment="Structured AI review content.")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, comment="Time when the AI review record was created."
+    )

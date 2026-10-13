@@ -18,6 +18,7 @@ BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "dashboard-frontend" / "frontend"
 STATIC_ASSETS = ROOT / "backend" / "src" / "static"
 DOCUMENT_ASSETS = ROOT / "backend" / "src" / "document"
+BACKEND_DOCS_DIST = BACKEND / "dist" / "docs"
 BENCHMARK = ROOT / "benchmark-repository"
 NPM = "npm.cmd" if sys.platform == "win32" else "npm"
 
@@ -81,6 +82,34 @@ def assert_document_assets_are_current() -> None:
         )
 
 
+def build_backend_docs() -> None:
+    run(
+        "uv", "run", "mkdocs", "build", "--strict",
+        "--config-file", "mkdocs.yml",
+        "--site-dir", "dist/docs",
+        cwd=BACKEND,
+    )
+
+
+def assert_backend_docs_are_current() -> None:
+    result = run(
+        "git",
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        BACKEND_DOCS_DIST.relative_to(ROOT).as_posix(),
+        capture_output=True,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+        raise SystemExit(
+            "Backend documentation build output is out of date. Run "
+            "`uv run mkdocs build --strict --site-dir dist/docs` from backend "
+            "and commit the resulting backend/dist/docs changes."
+        )
+
+
 def build_document_assets() -> None:
     run("git", "submodule", "update", "--init", "benchmark-repository")
     source_date_epoch = run(
@@ -100,6 +129,8 @@ def main() -> None:
         require(command)
 
     run("uv", "sync", "--locked", "--extra", "dev", "--extra", "aws", cwd=BACKEND)
+    build_backend_docs()
+    assert_backend_docs_are_current()
     build_document_assets()
     assert_document_assets_are_current()
     run("uv", "run", "ruff", "check", "src", "tests", cwd=BACKEND)

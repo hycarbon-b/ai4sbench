@@ -4,6 +4,8 @@ Revision ID: 20261013_0020
 Revises: 20261011_0019
 """
 
+from __future__ import annotations
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -29,7 +31,9 @@ def upgrade() -> None:
         sa.Column("consumed_at", sa.Integer()),
     )
     op.create_index(
-        "ix_email_verifications_email_created", "email_verification_challenges", ["email", "created_at"]
+        "ix_email_verifications_email_created",
+        "email_verification_challenges",
+        ["email", "created_at"],
     )
 
 
