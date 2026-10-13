@@ -43,8 +43,14 @@ class ProposalSubmission(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=12, max_length=160)
-    domain: str = Field(min_length=2, max_length=160)
-    field_name: str = Field(min_length=2, max_length=160)
+    domain: str = Field(
+        min_length=2,
+        max_length=160,
+        description="Ordered comma-separated domains. The first is primary; remaining domains are secondary.",
+    )
+    field_name: str = Field(
+        min_length=2, max_length=160, description="Research field within the first (primary) domain."
+    )
     problem: str = Field(min_length=80, max_length=12000)
     solvability: str = Field(min_length=20, max_length=12000)
     references: str = Field(min_length=40, max_length=12000)
@@ -90,7 +96,7 @@ class ProposalSubmission(BaseModel):
     @field_validator("domain")
     @classmethod
     def normalize_domain_list(cls, value: str) -> str:
-        """Preserve readable domain names in one canonical comma-separated string."""
+        """Preserve selection order and readable names; the first domain is primary."""
 
         domains = [item.strip() for item in value.split(",") if item.strip()]
         if not domains:
@@ -112,6 +118,11 @@ class ProposalSubmission(BaseModel):
     @staticmethod
     def slugify(value: str) -> str:
         return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9]+", "-", value.lower())))[:80]
+
+    @property
+    def primary_domain(self) -> str:
+        """Return the first domain without changing the stored comma-separated value."""
+        return self.domain.split(",", 1)[0].strip()
 
     @property
     def field_slug(self) -> str:
@@ -460,7 +471,7 @@ class AuthConfigResponse(BaseModel):
 class ProposalListItemResponse(BaseModel):
     id: str
     title: str
-    domain: str
+    domain: str = Field(description="Ordered comma-separated domains; the first is primary.")
     field: str
     task_slug: str
     status: ProposalStatus
@@ -479,7 +490,7 @@ class ProposalEditValuesResponse(BaseModel):
     """Unvalidated stored values used to prefill the administrator editor."""
 
     title: str
-    domain: str
+    domain: str = Field(description="Ordered comma-separated domains; the first is primary.")
     field_name: str
     problem: str
     solvability: str
@@ -510,7 +521,7 @@ class ProposalBoardItemResponse(BaseModel):
 
     id: str
     title: str
-    domain: str
+    domain: str = Field(description="Ordered comma-separated domains; the first is primary.")
     field_name: str
     problem: str
     solvability: str
@@ -578,7 +589,7 @@ class ProposalDomainListResponse(BaseModel):
 
 
 class ProposalDerivedResponse(BaseModel):
-    domain: str
+    domain: str = Field(description="Ordered comma-separated domains; the first is primary.")
     field: str
     task_slug: str
 

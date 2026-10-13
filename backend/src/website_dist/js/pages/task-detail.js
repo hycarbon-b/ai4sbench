@@ -185,7 +185,7 @@ async function render() {
   document.getElementById("td-lifecycle").innerHTML = timelineHTML(task);
 
   const metaBits = [
-    `<span><span class="mono-label">Domain</span> &nbsp;<strong style="color:var(--navy);">${esc(task.domain)}</strong></span>`,
+    `<span><span class="mono-label">Primary domain</span> &nbsp;<strong style="color:var(--navy);">${esc(String(task.domain ?? "").split(",")[0].trim())}</strong> <span class="hint">(all domains: ${esc(task.domain)})</span></span>`,
     task.revision_release ? `<span><span class="mono-label">Release</span> &nbsp;<span class="mono">${esc(task.revision_release)}</span></span>` : "",
     `<span><span class="mono-label">Updated</span> &nbsp;<span class="mono">${esc(formatDate(task.updated_at))}</span></span>`,
     `<span class="task-hero__field"><span class="mono-label">Field</span> &nbsp;${esc(task.field_name)}</span>`,

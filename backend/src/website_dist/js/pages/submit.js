@@ -1,3 +1,4 @@
+import { mountPrimaryDomain } from "../domains.js";
 /* ============================================================
    AI4S-Benchmark · Task proposal form
    Four sections + review. On submit, the proposal is sent to the
@@ -54,6 +55,7 @@ document.querySelectorAll(".preview-toggle__btn").forEach((btn) => {
   });
 });
 
+let domainSelection = null;
 let current = 0;
 const visited = new Set([0]);
 let user = null; // signed-in control-plane user, or null
@@ -70,7 +72,7 @@ function answers() {
   const out = Object.fromEntries(data.entries());
   delete out.contributor_name;
   delete out.contributor_affiliation;
-  out.domain = data.getAll("domain"); // multi-select: every checked domain
+  out.domain = domainSelection?.read() ?? data.getAll("domain"); // primary first
   const people = contributors.value();
   out.name = people.name;
   out.affiliation = people.affiliation;
@@ -115,6 +117,7 @@ controlPlaneFetch("/api/v1/proposal-domains")
           `<label class="choice"><input type="checkbox" name="domain" value="${esc(domain)}" id="f-domain-${index}"> ${esc(domain)}</label>`
       )
       .join("");
+    domainSelection = mountPrimaryDomain(document.getElementById("f-domain"));
     restoreDraft();
   })
   .catch((err) => console.error("Proposal domain options failed to load:", err));
@@ -143,6 +146,7 @@ function restoreDraft() {
       if (key === "domain") {
         const chosen = new Set(Array.isArray(value) ? value : [value]);
         form.querySelectorAll('input[name="domain"]').forEach((cb) => { cb.checked = chosen.has(cb.value); });
+        domainSelection?.setPrimary(Array.isArray(value) ? value[0] : String(value).split(",")[0].trim());
         continue;
       }
       const el = form.elements[key];

@@ -43,8 +43,8 @@ export const STEP_FIELDS = [
 
 export const FIELD_LABELS = {
   title: "Task title",
-  domain: "Domain",
-  field_name: "Specific field",
+  domain: "Domains (primary first)",
+  field_name: "Field within the primary domain",
   problem: "Problem specification",
   solvability: "Solvability",
   references: "References & resources",
@@ -97,7 +97,7 @@ export const DOMAIN_SEPARATOR = ", ";
 export function normalizeAnswers(raw = {}) {
   const out = {};
   for (const key of Object.keys(LIMITS)) out[key] = String(raw[key] ?? "").trim();
-  // domain may arrive as an array (checkbox group) or an already-joined string
+  // Ordered domains: first is primary. Preserve order in the comma-separated API value.
   const domains = Array.isArray(raw.domain) ? raw.domain : [raw.domain];
   out.domain = domains.map((d) => String(d ?? "").trim()).filter(Boolean).join(DOMAIN_SEPARATOR);
   // People paste handles with the @ still attached; accept it either way.
@@ -126,6 +126,8 @@ export function validateAnswers(raw) {
 
   if (!a.domain) {
     errors.domain = "Choose at least one domain.";
+  } else if (a.domain.length > 160) {
+    errors.domain = "Combined domains must be at most 160 characters.";
   }
   if (!errors.field_name && !ALPHA_SLUG.test(slugAlpha(a.field_name))) {
     errors.field_name = "Specific field must contain at least two letters (e.g. “Coastal oceanography”).";

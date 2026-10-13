@@ -1441,9 +1441,13 @@ async def pull_request_instructions(
             status_code=403, detail="Only the proposal author or an administrator can open its PR guide"
         )
     repository = request.app.state.settings.github_repository
+    # The first stored domain is primary; keep secondary domains out of task paths.
+    primary_domain = slugify(proposal.primary_domain)
+    if not primary_domain or primary_domain == "unknown" or proposal.field == "unknown":
+        raise HTTPException(status_code=422, detail="A primary domain and research field are required")
     return {
-        "branch": f"task/{proposal.domain}-{proposal.field}-{proposal.task_slug}",
-        "task_path": f"tasks/{proposal.domain}/{proposal.field}/{proposal.task_slug}",
+        "branch": f"task/{primary_domain}-{proposal.field}-{proposal.task_slug}",
+        "task_path": f"tasks/{primary_domain}/{proposal.field}/{proposal.task_slug}",
         "proposal_url": proposal.discussion_url or "",
         "compare_url": f"https://github.com/{repository}/compare/main..." if repository else "",
     }

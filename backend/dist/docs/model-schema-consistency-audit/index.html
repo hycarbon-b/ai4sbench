@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Model / Schema Consistency Audit - AI4S-Bench Backend Developer Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../css/toc-right.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Model / Schema Consistency Audit";
+        var mkdocs_page_input_path = "model-schema-consistency-audit.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> AI4S-Bench Backend Developer Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="..">Overview</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../runtime-configuration/">Runtime and Configuration</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Automatic Workflow</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../ai-proposal-reviews/">AI Proposal Reviews</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">AI4S-Bench Backend Developer Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+      <li class="breadcrumb-item active">Model / Schema Consistency Audit</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/AI4S-Bench/ai4s-benchmark/edit/main/backend/docs/model-schema-consistency-audit.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="model-schema-consistency-audit">Model / Schema Consistency Audit</h1>
+<p><strong>Audit date:</strong> 2026-10-13 (baseline branch audit; latest-main follow-up noted below)<br />
+<strong>Scope:</strong> SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.<br />
+<strong>Method:</strong> static comparison of model fields, schemas and route payload construction; review of migration chain; read-only production queries (<code>quick_check</code>, enum/value checks, relationship/document checks). No production data was changed.</p>
+<h2 id="executive-summary">Executive summary</h2>
+<p>The highest-risk inconsistency is in proposal taxonomy: the proposal accepts multiple human-readable domains, but the PR guide interpolates that combined value directly into a repository path. This can yield an invalid <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;slug&gt;</code> path. The proposal form's domain list also does not match the AI review rubric's scientific scope (tracked upstream as Issues <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">#44</a> and <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/46">#46</a>).</p>
+<p>Proposal, human-review, reviewer-application, and AI-review decision/status enums are shared between ORM and Pydantic where they represent the same vocabulary. Operational run/job/delivery states are less consistently constrained: most are plain strings, while selected schemas use <code>Literal</code>. Outbound delivery type is the clearest model/schema contract gap. The public task lifecycle is a separate derived vocabulary and should remain explicitly documented as a projection of proposal/review/revision evidence.</p>
+<p>The production snapshot had no observed invalid proposal/reviewer/review enum values or review-column/document drift. The deployed DB was at Alembic revision <code>20261013_0020</code>; local revision <code>20261013_0021</code> adds enum checks and therefore had not yet been applied at the time of the snapshot.</p>
+<h2 id="findings">Findings</h2>
+<h3 id="a1-proposal-domain-is-not-safe-to-use-as-a-task-directory-segment-high">A1 — Proposal domain is not safe to use as a task-directory segment — High</h3>
+<p><code>ProposalSubmission.domain</code> accepts a comma-separated list, canonicalizes it as readable labels, and does not validate entries against the selectable domain list. The PR-instructions route then uses <code>proposal.domain</code> verbatim in <code>tasks/{domain}/{field}/{task_slug}</code> and in the branch name. A multi-domain value such as <code>Biology, AI / ML</code> therefore becomes multiple path components and includes spaces/punctuation. Even a single readable label such as <code>Materials Science</code> does not match the benchmark repository's lowercase hyphenated directory convention. This is an implementation-level contract mismatch, not just missing documentation.</p>
+<p><strong>Evidence:</strong> <code>backend/src/community/schemas.py</code> (<code>PROPOSAL_DOMAIN_OPTIONS</code>, <code>ProposalSubmission.normalize_domain_list</code>); <code>backend/src/community/routes.py:1390-1391</code> (branch/path construction); upstream Issue <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">#44</a>.</p>
+<p><strong>Impact:</strong> contributors can receive a PR guide that points to a non-existent/non-conforming folder. Persisting display labels in <code>Proposal.domain</code> also means a future path fix needs an explicit canonical slug or a deterministic primary-domain rule.</p>
+<p><strong>Recommendation:</strong> settle the allowed scientific domain/field taxonomy first; store structured selected domains separately from a single canonical task-directory domain and field slug. Generate repository paths only from validated canonical identifiers. Decide the primary-folder rule for genuinely cross-domain proposals and document <code>task.toml</code> metadata keys alongside it.</p>
+<h3 id="a2-proposal-form-ai-rubric-and-task-taxonomy-have-different-scopes-high-policy-decision">A2 — Proposal form, AI rubric, and task taxonomy have different scopes — High / policy decision</h3>
+<p>The API publishes seven selectable labels: Materials Science, Physics, Chemistry, Biology, AI / ML, Applied Mathematics, and Interdisciplinary. The review rubric describes the covered sciences as life, physical, earth, mathematical, and engineering sciences, and says an in-scope method such as ML does not make an out-of-scope subject in-scope. Earth and engineering sciences are absent from the form; AI / ML and Interdisciplinary are selectable as if they were scientific domains. <code>field_name</code> is free text and <code>field_slug</code> is generated mechanically, but there is no canonical mapping from form labels/fields to repository folder slugs or task metadata.</p>
+<p><strong>Evidence:</strong> <code>backend/src/community/schemas.py</code> (<code>PROPOSAL_DOMAIN_OPTIONS</code>, <code>ProposalSubmission.field_name</code>, <code>field_slug</code>); upstream rubric <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/rubrics/task-proposal.md">task-proposal.md</a>; Issues <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">#44</a> and <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/46">#46</a>.</p>
+<p><strong>Impact:</strong> applicant-facing categories do not reliably predict AI-review scope decisions or the task's eventual directory. A task may be accepted/rejected based on its actual subject while the form's primary label suggests a different policy.</p>
+<p><strong>Recommendation:</strong> treat #44 and #46 as one taxonomy decision. Decide whether categories denote scientific subject, methods, or cross-cutting tags; align the form, reviewer rubric, folder taxonomy, <code>task.toml</code>, and API model in one change. Do not make a code-only slug mapping until that policy is agreed.</p>
+<h3 id="a3-delivery-contract-is-stricter-in-pydantic-than-in-the-orm-medium">A3 — Delivery contract is stricter in Pydantic than in the ORM — Medium</h3>
+<p><code>OutboundDelivery.delivery_type</code> and <code>OutboundDelivery.state</code> are unrestricted SQLAlchemy strings. <code>OutboundDeliveryResponse.delivery_type</code> only permits <code>discord</code>, <code>github_discussion</code>, or <code>smtp</code>, while its <code>state</code> is an unrestricted string. Thus ORM/database writes can create a delivery type that cannot be serialized by the admin response schema. The mailing-specific response independently constrains state to <code>pending | sending | completed | failed</code>, but that response is a projection of the same durable delivery workflow and does not constrain the database column.</p>
+<p><strong>Evidence:</strong> <code>backend/src/db/models.py</code> (<code>OutboundDelivery</code>); <code>backend/src/community/schemas.py</code> (<code>OutboundDeliveryResponse</code>); <code>backend/src/mailing/schemas.py</code> (<code>MailingDeliveryResponse</code>); <code>backend/src/community/admin_routes.py</code> and <code>backend/src/mailing/routes.py</code> response models.</p>
+<p><strong>Impact:</strong> unsupported delivery type values can cause response validation failures; unknown states can pass through to callers and UI code without an explicit contract. Multiple independently maintained vocabularies can drift.</p>
+<p><strong>Recommendation:</strong> define shared string enums for delivery type and durable delivery state, use them in model and schemas, and keep any response-specific subset as a separately named projection if it is intentional. Verify that all existing values are represented before adding database constraints.</p>
+<h3 id="a4-operational-lifecycle-states-have-uneven-validation-strength-medium-consistency-debt">A4 — Operational lifecycle states have uneven validation strength — Medium / consistency debt</h3>
+<p><code>ExecutionPlan.state</code>, <code>Run.state</code>, <code>DatabaseJob.state</code>, <code>OutboundDelivery.state</code>, <code>HarborRunV2.state</code>, and <code>User.role</code> are stored as strings. Their schemas vary: v1 plan/run/job responses use <code>str</code>; Harbor v2 response uses a <code>Literal</code>; worker completion accepts only <code>succeeded | failed</code>; mailing response uses a four-value <code>Literal</code>; <code>AuthenticatedUserResponse.role</code> uses <code>str</code>. This is not evidence that the stored rows are currently wrong, but the ORM does not reject typos and a few response surfaces enforce vocabularies that other surfaces do not.</p>
+<p><strong>Evidence:</strong> <code>backend/src/db/models.py</code>; <code>backend/src/control_panel/v2/models.py</code>; <code>backend/src/core/identity.py</code>; <code>backend/src/control_panel/schemas.py</code>; <code>backend/src/control_panel/v2/schemas.py</code>; <code>backend/src/community/schemas.py</code>; <code>backend/src/mailing/schemas.py</code>.</p>
+<p><strong>Recommendation:</strong> inventory the actual transition graphs before enum-typing these columns. Then share enums for persisted finite state machines (plan, run, job, delivery, user role) across SQLAlchemy and Pydantic. Keep provider-reported <code>Run.instance_state</code> separate because its vocabulary is owned by AWS and may evolve independently. Worker completion can remain a narrower command schema if that is deliberate.</p>
+<h3 id="a5-proposal-status-vs-public-lifecycle-status-is-a-dual-vocabulary-and-should-be-made-explicit-low-documentation">A5 — Proposal status vs public lifecycle status is a dual vocabulary and should be made explicit — Low / documentation</h3>
+<p>The ORM/Pydantic proposal status enum is <code>draft | pending | approved | changes_requested | rejected</code>. The website also displays derived values such as <code>implementation</code>, <code>agent_testing</code>, and <code>released</code> based on review columns and task-revision data. The frontend explicitly describes this derivation: it combines <code>status</code>, <code>review_*</code>, and <code>revision_*</code> because proposal status alone does not represent downstream work. This is a valid read-model design, but clients may mistake the display status for a persisted proposal status. The website's <code>site.json</code> additionally uses editorial labels such as <code>proposed</code> / <code>under_review</code>.</p>
+<p><strong>Evidence:</strong> <code>backend/src/core/enums.py</code> (<code>ProposalStatus</code>); <code>backend/src/community/schemas.py</code> (<code>ProposalBoardItemResponse</code>); <code>ai4s-bench-website/js/lifecycle.js</code> (<code>displayStatus</code>, <code>STATUS_INFO</code>); <code>ai4s-bench-website/data/site.json</code> (<code>statuses</code>).</p>
+<p><strong>Recommendation:</strong> name and document the API's persisted proposal status separately from the website's derived task lifecycle status. Maintain one explicit mapping/projection test when additional workflow stages become live.</p>
+<h3 id="a6-email-verification-gap-in-the-baseline-branch-was-resolved-on-latest-main">A6 — Email-verification gap in the baseline branch was resolved on latest <code>main</code></h3>
+<p>At the baseline branch revision audited above, migration <code>20261013_0020</code> created <code>email_verification_challenges</code> but there was no ORM model or application code using it. After updating local <code>main</code> to <code>origin/main</code> and carrying the local unpushed backend-contract commit, the gap is resolved: <code>EmailVerificationChallenge</code> is now in <code>backend/src/db/models.py</code>; <code>backend/src/mailing/verification.py</code> implements challenge issuance, code hashing, expiry, attempt/rate limits, proof-token verification and one-time consumption; <code>backend/src/community/reviewer_otp.py</code> adapts this service for reviewer intake; reviewer routes and the website form call the OTP endpoints. The GitHub OAuth <code>is_verified_by_default=True</code> setting remains separate and does not implement the email-code flow.</p>
+<p><strong>Evidence:</strong> <code>backend/migrations/versions/20261013_0020_email_verification.py</code>; <code>backend/src/db/models.py</code> (<code>EmailVerificationChallenge</code>); <code>backend/src/mailing/verification.py</code>; <code>backend/src/community/reviewer_otp.py</code>; reviewer OTP endpoints in <code>backend/src/community/routes.py</code>; website reviewer form in <code>backend/src/website_dist/js/pages/reviewer.js</code>.</p>
+<p><strong>Status:</strong> implemented on latest <code>main</code>; this finding only describes the earlier baseline. The feature is controlled by <code>TBCP_FORM_MAIL_REQUIRE_OTP</code>. The audit did not execute its tests during the branch transfer.</p>
+<h2 id="reviewed-design-differences-not-counted-as-defects">Reviewed design differences (not counted as defects)</h2>
+<ol>
+<li><strong>Proposal latest-review snapshot and human-review history:</strong> <code>Proposal.review_*</code> stores the latest review projection, while <code>ProposalHumanReview</code> stores individual GitHub review replies. The board schema deliberately combines both. This duplication can drift unless synchronization is kept transactional/idempotent, but it is useful for a latest-value query and audit history. Current production cross-check showed no mismatch in the reviewed rows.</li>
+<li><strong>AI review and human review are separate contracts:</strong> AI review decisions (<code>Strong Reject</code>…<code>Strong Accept</code>) and machine statuses (<code>completed | unavailable</code>) are not the same vocabulary as human proposal decisions (<code>approved | changes_requested | rejected</code>). They should not share an enum merely because both contain “decision/status”. AI review is stored as versioned JSON in <code>ProposalAIReview.document</code>; human review history has dedicated columns and a JSON document.</li>
+<li><strong>Board response is a projection:</strong> <code>ProposalBoardItemResponse</code> intentionally combines proposal fields, latest human review fields, human-review history, and task-revision/run evidence. Its extra/flattened fields are not expected to map one-to-one to a single ORM table.</li>
+<li><strong>Task revisions and execution runs:</strong> revision resources are stored as JSON and execution snapshots are copied into runs by design. This preserves the immutable inputs used for a run; it is not a schema mismatch.</li>
+</ol>
+<h2 id="deployed-database-snapshot">Deployed database snapshot</h2>
+<p>Read-only snapshot through the project EC2 environment, database <code>control-panel.sqlite3</code>:</p>
+<ul>
+<li><code>PRAGMA quick_check</code> returned <code>ok</code>.</li>
+<li>Database Alembic revision was <code>20261013_0020</code>; local head was <code>20261013_0021</code>.</li>
+<li>Proposal rows: 48 total, of which 29 are active and 19 soft-deleted. Statuses are 46 <code>pending</code> and 2 <code>changes_requested</code>; the active rows are 27 <code>pending</code> and 2 <code>changes_requested</code>. No invalid proposal status or review decision was found.</li>
+<li>Human review decisions: 2 <code>changes_requested</code>; no invalid value found.</li>
+<li>Reviewer applications: 24 (<code>approved</code> 19, <code>pending</code> 4, <code>rejected</code> 1); no invalid value found.</li>
+<li>AI review records: 5 (1 <code>completed</code>, 4 <code>unavailable</code>); no invalid status/result shape found.</li>
+<li>Parsed proposal-review document fields matched their duplicated latest-review columns for the reviewed records; no malformed review JSON was found in the scan.</li>
+<li>The enum <code>CHECK</code> constraints in local revision <code>0021</code> were not present in production because that migration had not yet run. This is expected rollout lag, not a local migration-chain defect; deploy only after the normal migration window and re-run the same integrity query.</li>
+</ul>
+<p>The snapshot verifies current values only; it does not prove that unconstrained operational-state columns cannot accumulate invalid values later.</p>
+<h3 id="live-domain-field-recheck">Live domain / field recheck</h3>
+<p>A second read-only query compared all 48 stored proposal rows against their JSON form payloads and the current slug-generation rules:</p>
+<ul>
+<li><strong>20 active, <code>input_valid=true</code> proposals:</strong> <code>domain</code> matches the form payload, <code>field</code> matches the slug derived from <code>field_name</code>, and <code>task_slug</code> matches the title-derived slug. No current valid-row field offset was found.</li>
+<li><strong>9 active, <code>input_valid=false</code> legacy/incomplete rows:</strong> five have <code>field="unknown"</code> because the imported payload has no usable <code>field_name</code>; four have legacy domain strings longer than the ORM's <code>String(80)</code> limit (up to 101 characters). These are invalid inputs, but they remain active and can still be returned by administrative/listing paths.</li>
+<li>Of all 48 rows, 24 use the older sync-document shape (<code>form_payload</code> plus <code>source</code>/<code>validation_errors</code>) and 24 use the direct form payload shape. Historical readable domain values and normalized slug values differ on some invalid legacy rows; do not bulk-normalize those without distinguishing source/validity.</li>
+<li>The longest stored <code>field</code> is 79 characters, within the model's <code>String(80)</code> and the slug generator's 79-character cap. There are no field values longer than the model column.</li>
+<li>The <code>ProposalSubmission.domain</code> schema permits up to 160 characters while <code>Proposal.domain</code> is <code>String(80)</code>. Four existing invalid active values already exceed 80; the selectable labels also permit comma-separated combinations. SQLite does not enforce the declared VARCHAR length, so these values persisted. This is a model/schema capacity mismatch that can fail if moved to a length-enforcing database.</li>
+<li>Every one of the 20 active valid proposals stores display labels (including multi-select comma-separated values) in <code>Proposal.domain</code>, rather than a repository path slug. The PR-guide route uses that column as a path segment. The field slug is consistent; the domain-to-folder value is not.</li>
+</ul>
+<p><strong>Resolution implication:</strong> <code>field</code> is currently aligned for valid active data. The immediate mismatch is <code>domain</code> semantics and capacity, plus legacy invalid records. Agree on canonical domain/folder mapping before changing stored values; then either widen the database/model column to the schema's valid maximum or cap/validate domain input consistently, and quarantine/repair the nine active invalid legacy records without treating them as current form submissions.</p>
+<h2 id="coverage-inventory">Coverage inventory</h2>
+<table>
+<thead>
+<tr>
+<th>Flow / model family</th>
+<th>ORM / persistence</th>
+<th>Pydantic / API</th>
+<th>Audit result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Task revision, execution plan, run, worker credentials/events, cloud profile</td>
+<td><code>backend/src/db/models.py</code></td>
+<td><code>backend/src/control_panel/schemas.py</code></td>
+<td>A4: lifecycle state types are mostly unconstrained; resource/path validation exists on selected inputs.</td>
+</tr>
+<tr>
+<td>Harbor v2 run</td>
+<td><code>backend/src/control_panel/v2/models.py</code></td>
+<td><code>backend/src/control_panel/v2/schemas.py</code></td>
+<td>Response has a finite <code>Literal</code>; ORM column remains unconstrained (A4).</td>
+</tr>
+<tr>
+<td>Proposal submission/edit/publish/board</td>
+<td><code>Proposal</code> in <code>backend/src/db/models.py</code></td>
+<td><code>backend/src/community/schemas.py</code>, <code>routes.py</code></td>
+<td>A1/A2 path and taxonomy contract conflict; A5 persisted vs derived statuses.</td>
+</tr>
+<tr>
+<td>Human proposal review</td>
+<td><code>ProposalHumanReview</code> plus latest snapshot columns on <code>Proposal</code></td>
+<td><code>ProposalReview</code>, <code>ProposalHumanReviewResponse</code></td>
+<td>Shared decision enum; production snapshot had no detected data mismatch.</td>
+</tr>
+<tr>
+<td>AI review publication/results/delivery</td>
+<td><code>AIReviewPublication</code>, <code>ProposalAIReview</code>, <code>OutboundDelivery</code></td>
+<td>AI review schemas and delivery response</td>
+<td>AI vs human vocabularies correctly separate; delivery type/state consistency gap A3.</td>
+</tr>
+<tr>
+<td>Reviewer application</td>
+<td><code>ReviewerApplication</code></td>
+<td>submission, update, created/admin response schemas</td>
+<td>Status enum shared; domains/display domains and field/subfield slug pairs are checked at request boundary.</td>
+</tr>
+<tr>
+<td>Auth identity</td>
+<td>FastAPI Users <code>User</code> / <code>OAuthAccount</code></td>
+<td><code>AuthenticatedUserResponse</code> projection</td>
+<td>role remains free-form string in both layers (A4); user response is an intentional projection.</td>
+</tr>
+<tr>
+<td>Mailing</td>
+<td>Shared <code>OutboundDelivery</code> table</td>
+<td><code>MailingDeliveryCreate</code> / <code>MailingDeliveryResponse</code></td>
+<td>Request is strongly validated; response is a state-limited projection (A3/A4).</td>
+</tr>
+<tr>
+<td>Contribution dashboard snapshot, audit/run events, locks</td>
+<td><code>ContributionDashboardSnapshot</code>, <code>AuditEvent</code>, <code>RunEvent</code>, <code>ControlLock</code></td>
+<td>Mostly endpoint-specific dicts/response schemas</td>
+<td>JSON payloads are intentionally flexible; no one-to-one Pydantic model exists for stored arbitrary payloads.</td>
+</tr>
+<tr>
+<td>Email verification</td>
+<td><code>EmailVerificationChallenge</code> ORM model and Alembic-managed table</td>
+<td>Reviewer OTP endpoints and typed request/response contracts</td>
+<td>Implemented on latest <code>main</code>; see A6 for baseline-to-main change.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="recommended-order">Recommended order</h2>
+<ol>
+<li>Resolve the shared taxonomy decision tracked by Issues #44 and #46; then fix canonical proposal domain/field identifiers and generated PR paths together.</li>
+<li>Introduce shared enums for finite operational state columns, starting with outbound delivery type/state and then plan/run/job/user role after transition audit.</li>
+<li>Name the public task lifecycle as a derived projection, separate from persisted <code>ProposalStatus</code>, and document the <code>proposed</code>/<code>under_review</code> website labels.</li>
+<li>Keep email-verification ORM fields aligned with migration <code>0020</code>; verify OTP behavior in the normal test/CI workflow.</li>
+<li>After migration <code>0021</code> is deployed, rerun the production value and schema checks; continue monitoring the denormalized latest-review snapshot against <code>ProposalHumanReview</code> history.</li>
+</ol>
+<h2 id="compatibility-implementation-ordered-domains">Compatibility implementation: ordered domains</h2>
+<p>The compatibility policy now preserves the existing comma-separated <code>domain</code> string and its original order. The first entry is the primary domain; <code>field</code> is its research-field slug. No historical records are rewritten and no new persisted fields are added. The model domain length is expanded from 80 to 160, matching request validation, by migration <code>20261013_0022</code> (prepared locally, not applied to production).</p>
+<p>Website submission and editing explicitly select a primary domain and serialize it first, while preserving remaining domain selections. Editing defaults to the existing first domain. The task detail view identifies the primary domain and retains all domain labels. Model comments and schema descriptions document the same order semantics. The PR guide slugifies only the first domain and rejects missing/unknown domain or field values.</p>
+<p>This fixes the combined-domain path and length mismatch locally. It does not define a mapping to the benchmark rubric's five science families: a primary label such as Physics generates <code>physics</code>, and existing <code>mathematical-sciences</code> remains that slug. The upstream taxonomy-policy question and invalid legacy records remain open. Production rollout still requires applying the migration and deploying the updated backend and website.</p>
+              
+            </div>
+          </div><footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/AI4S-Bench/ai4s-benchmark" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

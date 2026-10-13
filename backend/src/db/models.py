@@ -152,8 +152,12 @@ class Proposal(Base):
     )
     title: Mapped[str] = mapped_column(String(160), comment="Proposal title.")
     abstract: Mapped[str] = mapped_column(Text, comment="Short summary of the proposed task.")
-    domain: Mapped[str] = mapped_column(String(80), comment="Scientific domain of the proposal.")
-    field: Mapped[str] = mapped_column(String(80), comment="Research field within the domain.")
+    domain: Mapped[str] = mapped_column(
+        String(160), comment="Ordered comma-separated scientific domains; the first is primary."
+    )
+    field: Mapped[str] = mapped_column(
+        String(80), comment="Research field slug within the first (primary) domain."
+    )
     task_slug: Mapped[str] = mapped_column(
         String(100), comment="URL-friendly identifier for the proposed task."
     )
@@ -273,6 +277,11 @@ class Proposal(Base):
         onupdate=utcnow,
         comment="Time when the proposal record was last updated.",
     )
+
+    @property
+    def primary_domain(self) -> str:
+        """First comma-separated domain, used as the primary scientific classification."""
+        return self.domain.split(",", 1)[0].strip()
 
 
 class ProposalHumanReview(Base):
