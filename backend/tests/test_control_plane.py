@@ -230,7 +230,7 @@ class ControlPanelIntegrationTests(unittest.TestCase):
                 database_url="sqlite:///:memory:",
                 auto_create_schema=True,
                 execution_mode="fake",
-                cors_origins=("https://ai4sbench.org",),
+                cors_origins=("https://ai4sbench.org", "http://localhost:8000", "http://127.0.0.1:8000"),
             )
         )
         with TestClient(cors_app) as client:
@@ -246,6 +246,20 @@ class ControlPanelIntegrationTests(unittest.TestCase):
         self.assertEqual(response.headers["access-control-allow-origin"], "https://ai4sbench.org")
         self.assertIn("PUT", response.headers["access-control-allow-methods"])
         self.assertEqual(response.headers["access-control-allow-credentials"], "true")
+
+        with TestClient(cors_app) as client:
+            for origin in ("http://localhost:8000", "http://127.0.0.1:8000"):
+                response = client.options(
+                    "/api/v1/reviewers/email-otp",
+                    headers={
+                        "Origin": origin,
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": "content-type",
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.headers["access-control-allow-origin"], origin)
+                self.assertEqual(response.headers["access-control-allow-credentials"], "true")
 
     def test_website_dist_is_served_beneath_dashboard(self) -> None:
         redirect = self.client.get("/website", follow_redirects=False)

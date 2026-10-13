@@ -895,7 +895,7 @@ def test_public_auth_configuration_does_not_expose_oauth_secrets() -> None:
         with TestClient(app) as client:
             response = client.get("/api/v1/auth/config")
             assert response.status_code == 200
-            assert response.json() == {"github_login_enabled": True}
+            assert response.json() == {"github_login_enabled": True, "form_mail_require_otp": False}
 
 
 def test_logout_clears_only_the_control_panel_cookie() -> None:

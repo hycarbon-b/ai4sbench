@@ -148,6 +148,26 @@ Administrators manage records through:
 - `GET /api/v1/reviewer-applications`
 - `PATCH /api/v1/reviewer-applications/{application_id}`
 
+The reviewer form requires GitHub sign-in. Its GitHub username is taken from
+the authenticated session, not trusted from form input. Set
+`TBCP_FORM_MAIL_REQUIRE_OTP=true` to additionally require proof of its email
+address before submission. The Website reads this flag from `GET /api/v1/auth/config`, sends a
+six-digit code via `POST /api/v1/reviewers/email-otp`, verifies it with
+`POST /api/v1/reviewers/email-otp/verify`, then includes the returned one-use
+`email_verification_token` in `POST /api/v1/reviewers`. Codes expire after 10
+minutes; verified proofs expire after 15 minutes and are bound to the email
+address. A new code invalidates earlier proofs. This requires working SMTP;
+when SMTP is unavailable, submissions cannot bypass the check. Run the latest
+Alembic migration before enabling the flag. The code and proof are stored only
+as hashes, and OTP emails are sent directly rather than saved in the outbound
+queue. The shared service in `src/mailing/verification.py` scopes every proof to
+an email, purpose, and required account ID. Its defined purposes are
+`reviewer_form`, `bind_email`, and `change_email`; only the reviewer-form HTTP
+flow is wired today. Future account endpoints must authenticate the user, pass
+that user's ID as `subject_id`, and consume the matching proof in the same
+transaction as the email update. The service does not itself authorize account
+changes or expose a public endpoint for binding or changing email.
+
 An approved application grants review access only when it has a GitHub
 username. `TBCP_DISCORD_WEBHOOK_URL` enables queued Proposal and review
 notifications. The generic outbound queue also supports SMTP through

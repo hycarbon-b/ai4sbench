@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from src.core.config import Settings
-from src.core.identity import User, current_active_user, current_optional_user
+from src.core.identity import User, current_active_user
 from src.main import create_app
 
 
@@ -56,9 +56,8 @@ def test_reviewer_application_submission_admin_decision_and_access() -> None:
         )
         admin = make_user("admin", "test-admin")
         applicant = make_user("member", "approved-reviewer")
-        active = {"user": admin}
+        active = {"user": applicant}
         app.dependency_overrides[current_active_user] = lambda: active["user"]
-        app.dependency_overrides[current_optional_user] = lambda: applicant
 
         with TestClient(app) as client:
             created = client.post("/api/v1/reviewers", json=reviewer_payload())
@@ -66,11 +65,13 @@ def test_reviewer_application_submission_admin_decision_and_access() -> None:
             assert created.json()["status"] == "pending"
             application_id = created.json()["id"]
 
+            active["user"] = admin
             listed = client.get("/api/v1/reviewer-applications")
             assert listed.status_code == 200, listed.text
             application = listed.json()["items"][0]
             assert application["id"] == application_id
             assert application["email"] == "ada.reviewer@example.test"
+            assert application["github"] == "approved-reviewer"
             assert application["submitted_by_login"] == "approved-reviewer"
             assert application["domains_display"] == ["Materials Science", "AI / ML"]
 
@@ -108,13 +109,16 @@ def test_reviewer_application_validation_and_admin_errors() -> None:
             )
         )
         app.dependency_overrides[current_active_user] = lambda: make_user("admin", "test-admin")
-        app.dependency_overrides[current_optional_user] = lambda: None
 
         with TestClient(app) as client:
             invalid = reviewer_payload()
             invalid["domains"] = ["chemistry"]
             rejected = client.post("/api/v1/reviewers", json=invalid)
             assert rejected.status_code == 422
+
+            impersonated = reviewer_payload()
+            impersonated["github"] = "someone-else"
+            assert client.post("/api/v1/reviewers", json=impersonated).status_code == 422
 
             empty_patch = client.patch(
                 f"/api/v1/reviewer-applications/{uuid4()}",
@@ -127,6 +131,7 @@ def test_reviewer_application_validation_and_admin_errors() -> None:
 
             schema = client.get("/openapi.json").json()
             create_operation = schema["paths"]["/api/v1/reviewers"]["post"]
+            assert create_operation["security"] == [{"APIKeyCookie": []}]
             assert create_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
                 "#/components/schemas/ReviewerApplicationSubmission"
             )
@@ -134,3 +139,16 @@ def test_reviewer_application_validation_and_admin_errors() -> None:
             assert admin_list["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
                 "#/components/schemas/ReviewerApplicationListResponse"
             )
+
+
+def test_reviewer_application_requires_github_sign_in(tmp_path) -> None:
+    app = create_app(
+        Settings(
+            environment="test",
+            database_url=f"sqlite:///{(tmp_path / 'reviewers.sqlite3').as_posix()}",
+            auto_create_schema=True,
+            execution_mode="fake",
+        )
+    )
+    with TestClient(app) as client:
+        assert client.post("/api/v1/reviewers", json=reviewer_payload()).status_code == 401

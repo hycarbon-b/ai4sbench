@@ -14,6 +14,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import enqueue_proposal_notification, enqueue_review_notification
+from src.community.reviewer_otp import (
+    ReviewerEmailOtpIssuedResponse,
+    ReviewerEmailOtpRequest,
+    ReviewerEmailOtpVerifiedResponse,
+    ReviewerEmailOtpVerifyRequest,
+    consume_reviewer_otp,
+    issue_otp,
+    verify_otp,
+)
 from src.community.schemas import (
     PROPOSAL_DOMAIN_OPTIONS,
     REVIEW_COMMENT_MARKER,
@@ -97,6 +106,13 @@ async def require_reviewer(request: Request, user: UserDep, session: SessionDep)
 ReviewerDep = Annotated[User, Depends(require_reviewer)]
 
 
+def require_github_login(user: User) -> str:
+    login = (user.github_login or "").strip().lower()
+    if not login:
+        raise HTTPException(status_code=403, detail="A signed-in GitHub account is required")
+    return login
+
+
 @community_router.get(
     "/auth/me",
     summary="Get the signed-in Website user",
@@ -110,13 +126,16 @@ async def me(request: Request, user: UserDep, session: SessionDep) -> Authentica
 
 @community_router.get(
     "/auth/config",
-    summary="Read public GitHub-login availability",
-    description="Returns only whether GitHub OAuth is configured; no credential values are exposed.",
+    summary="Read public Website authentication settings",
+    description=(
+        "Returns GitHub OAuth availability and reviewer form email-verification policy without secrets."
+    ),
 )
 async def auth_config(request: Request) -> AuthConfigResponse:
     settings = request.app.state.settings
     return {
-        "github_login_enabled": bool(settings.github_oauth_client_id and settings.github_oauth_client_secret)
+        "github_login_enabled": bool(settings.github_oauth_client_id and settings.github_oauth_client_secret),
+        "form_mail_require_otp": settings.form_mail_require_otp,
     }
 
 
@@ -131,26 +150,62 @@ async def proposal_domains() -> ProposalDomainListResponse:
 
 
 @community_router.post(
+    "/reviewers/email-otp",
+    tags=["reviewers"],
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ReviewerEmailOtpIssuedResponse,
+    summary="Email a reviewer form verification code",
+)
+async def request_reviewer_email_otp(
+    request: Request, body: ReviewerEmailOtpRequest, session: SessionDep, user: UserDep
+) -> ReviewerEmailOtpIssuedResponse:
+    require_github_login(user)
+    return await issue_otp(request, session, body, str(user.id))
+
+
+@community_router.post(
+    "/reviewers/email-otp/verify",
+    tags=["reviewers"],
+    response_model=ReviewerEmailOtpVerifiedResponse,
+    summary="Verify a reviewer form email code",
+)
+async def verify_reviewer_email_otp(
+    request: Request, body: ReviewerEmailOtpVerifyRequest, session: SessionDep, user: UserDep
+) -> ReviewerEmailOtpVerifiedResponse:
+    require_github_login(user)
+    return await verify_otp(request, session, body, str(user.id))
+
+
+@community_router.post(
     "/reviewers",
     tags=["reviewers"],
     status_code=status.HTTP_201_CREATED,
     response_model=ReviewerApplicationCreatedResponse,
     summary="Submit a reviewer application",
     description=(
-        "Accepts the exact schema emitted by the public Website reviewer form. "
-        "Authentication is optional; a signed-in GitHub login is recorded for administrator context."
+        "Requires a signed-in GitHub account; the account login is recorded on the application. "
+        "When TBCP_FORM_MAIL_REQUIRE_OTP is enabled, a one-use email verification token is required."
     ),
     responses={422: {"description": "The application does not match the Website reviewer schema."}},
 )
 async def create_reviewer_application(
+    request: Request,
     body: ReviewerApplicationSubmission,
     session: SessionDep,
-    user: OptionalUserDep,
+    user: UserDep,
 ) -> ReviewerApplicationCreatedResponse:
+    github_login = require_github_login(user)
+    if body.github and body.github != github_login:
+        raise HTTPException(status_code=422, detail="GitHub username must match the signed-in account")
+    if request.app.state.settings.form_mail_require_otp:
+        if not body.email_verification_token:
+            raise HTTPException(status_code=403, detail="Email verification is required")
+        await consume_reviewer_otp(session, body.email, body.email_verification_token, str(user.id))
     item = ReviewerApplication(
-        **body.model_dump(),
+        **body.model_dump(exclude={"email_verification_token", "github"}),
+        github=github_login,
         status="pending",
-        submitted_by_login=user.github_login if user else None,
+        submitted_by_login=github_login,
     )
     session.add(item)
     await session.commit()

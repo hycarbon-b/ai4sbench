@@ -22,7 +22,7 @@
   <link rel="stylesheet" href="../css/tokens.css?v=20261012-2">
   <link rel="stylesheet" href="../css/base.css?v=20261012-2">
   <link rel="stylesheet" href="../css/components.css?v=20261012-2">
-  <link rel="stylesheet" href="../css/pages.css?v=20261012-2">
+  <link rel="stylesheet" href="../css/pages.css?v=20261013-auth">
   <link rel="stylesheet" href="../css/workflow.css?v=20261012-2">
 </head>
 <body data-root="../" data-page="reviewers">
@@ -74,6 +74,10 @@
           every review. Tell us about your field. The form takes a couple of minutes.</p>
 
         <form id="reviewer-form" novalidate>
+          <div class="reviewer-actions reviewer-auth" id="reviewer-auth">
+            <p class="reviewer-auth__status" id="reviewer-auth-status" role="status">Checking your GitHub sign-in…</p>
+            <button type="button" class="btn btn--secondary" id="reviewer-sign-in" hidden>Sign in with GitHub</button>
+          </div>
           <fieldset class="form-block">
             <legend>About you</legend>
 
@@ -95,10 +99,21 @@
                 <p class="hint">Used only to contact you about reviews.</p>
               </div>
               <div class="form-field" data-field="github">
-                <label for="r-github">GitHub username <span class="optional">optional</span></label>
-                <input type="text" id="r-github" name="github" maxlength="100" autocomplete="off" placeholder="without the @">
-                <p class="hint">Reviews are published from a GitHub account. No account yet? Leave this blank and we will contact you by email.</p>
+                <label for="r-github">GitHub username</label>
+                <input type="text" id="r-github" name="github" maxlength="100" autocomplete="off" placeholder="Sign in with GitHub" readonly>
+                <p class="hint">Taken from the GitHub account you signed in with.</p>
               </div>
+            </div>
+
+            <div class="form-field reviewer-email-otp" data-field="email_verification" id="reviewer-email-otp" hidden>
+              <label for="r-email-code">Verify your email</label>
+              <p class="hint">We will send a six-digit code to the email above. The code is valid for 10 minutes.</p>
+              <div class="reviewer-email-otp__controls">
+                <input type="text" id="r-email-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="Six-digit code">
+                <button type="button" class="btn btn--secondary" id="reviewer-send-code" disabled>Send code</button>
+                <button type="button" class="btn btn--secondary" id="reviewer-verify-code" disabled>Verify</button>
+              </div>
+              <p class="hint" id="reviewer-email-otp-status" role="status"></p>
             </div>
 
             <div class="form-field" data-field="position">
@@ -201,6 +216,6 @@
   </footer>
 
   <script type="module" src="../js/app.js?v=20261012-2"></script>
-  <script type="module" src="../js/pages/reviewer.js?v=20261012-2"></script>
+  <script type="module" src="../js/pages/reviewer.js?v=20261013-auth"></script>
 </body>
 </html>

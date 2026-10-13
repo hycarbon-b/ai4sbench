@@ -1505,6 +1505,17 @@
   gap: var(--space-3);
   margin-top: var(--space-5);
 }
+.reviewer-auth { margin: 0 0 var(--space-5); }
+.reviewer-auth__status { margin: 0; color: var(--ink-secondary); font-size: var(--text-sm); }
+.reviewer-email-otp__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.form-field .reviewer-email-otp__controls input[type="text"] { width: 11rem; max-width: 100%; }
+.reviewer-email-otp__controls .btn { flex: none; }
 .reviewer-note { margin-top: var(--space-4); max-width: 44rem; }
 
 /* ================= Reading measure =================

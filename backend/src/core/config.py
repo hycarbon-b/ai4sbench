@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     smtp_ssl_tls: bool = False
     smtp_validate_certs: bool = True
     smtp_timeout_seconds: int = Field(default=15, ge=1, le=120)
+    form_mail_require_otp: bool = False
     website_public_base_url: str = "https://ai4sbench.org"
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
