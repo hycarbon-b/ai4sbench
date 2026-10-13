@@ -120,7 +120,7 @@ credentials.
 | Environment | `production` |
 | Host / port | `0.0.0.0:8080` |
 | Allowed hosts | `dashboard.ai4sbench.org`, `ai4sbench.org`, `www.ai4sbench.org`, `3.237.65.103`, `ec2-3-237-65-103.compute-1.amazonaws.com`, `localhost`, `127.0.0.1` |
-| CORS origins | `https://ai4s-bench.github.io`, `https://ai4sbench.org`, `http://198.18.0.1:3000` |
+| CORS origins | `https://ai4s-bench.github.io`, `https://ai4sbench.org`, `http://198.18.0.1:3000`, `http://localhost:8000`, `http://127.0.0.1:8000` |
 | Database URL | `sqlite:////var/lib/ai4sbench/control-panel.sqlite3` |
 | Auto-create schema | `false` |
 | Proposal GitHub repository | `AI4S-Bench/ai4s-benchmark` |
@@ -135,6 +135,9 @@ public reads but rejects `createDiscussion` mutations made with user tokens.
 
 Browser callers must use one of the exact origins above. To test a new or
 existing origin without sending application data:
+
+The two port-8000 loopback origins support the local static Website against
+the deployed control plane. They do not cover other ports or hostnames.
 
 ```powershell
 Invoke-WebRequest -UseBasicParsing -Method Options `
