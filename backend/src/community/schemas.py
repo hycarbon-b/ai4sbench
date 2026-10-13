@@ -101,7 +101,10 @@ class ProposalSubmission(BaseModel):
         domains = [item.strip() for item in value.split(",") if item.strip()]
         if not domains:
             raise ValueError("domain must contain at least one domain")
-        return ", ".join(dict.fromkeys(domains))
+        normalized = ", ".join(dict.fromkeys(domains))
+        if len(normalized) > 160:
+            raise ValueError("normalized domain list must contain at most 160 characters")
+        return normalized
 
     @model_validator(mode="after")
     def valid_derived_identifiers(self) -> ProposalSubmission:

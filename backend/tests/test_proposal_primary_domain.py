@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from src.community import routes
 from src.community.schemas import ProposalSubmission
 from src.db.models import Proposal
@@ -33,3 +35,11 @@ def test_primary_domain_path_uses_first_domain(monkeypatch):
     )
     assert result["task_path"] == "tasks/ai-ml/scientific-computing/example-task"
     assert result["branch"] == "task/ai-ml-scientific-computing-example-task"
+
+
+def test_normalized_domain_length_fits_storage():
+    # Comma-space normalization can make an otherwise short raw value exceed the column capacity.
+    raw = ",".join(f"d{i}" for i in range(40))
+    assert len(raw) <= 160
+    with pytest.raises(ValueError, match="at most 160"):
+        ProposalSubmission.normalize_domain_list(raw)
