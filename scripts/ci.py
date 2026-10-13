@@ -88,6 +88,8 @@ def build_backend_docs() -> None:
         "--config-file", "mkdocs.yml",
         "--site-dir", "dist/docs",
         cwd=BACKEND,
+        # MkDocs embeds the build date; fix it so rebuilding does not dirty committed assets.
+        env={**os.environ, "SOURCE_DATE_EPOCH": "0"},
     )
 
 

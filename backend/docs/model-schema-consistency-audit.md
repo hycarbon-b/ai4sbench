@@ -1,7 +1,7 @@
 # Model / Schema Consistency Audit
 
-**Audit date:** 2026-10-13 (baseline branch audit; latest-main follow-up noted below)  
-**Scope:** SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.  
+**Audit date:** 2026-10-13 (baseline branch audit; latest-main follow-up noted below)
+**Scope:** SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.
 **Method:** static comparison of model fields, schemas and route payload construction; review of migration chain; read-only production queries (`quick_check`, enum/value checks, relationship/document checks). No production data was changed.
 
 ## Executive summary

@@ -82,8 +82,8 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="model-schema-consistency-audit">Model / Schema Consistency Audit</h1>
-<p><strong>Audit date:</strong> 2026-10-13 (baseline branch audit; latest-main follow-up noted below)<br />
-<strong>Scope:</strong> SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.<br />
+<p><strong>Audit date:</strong> 2026-10-13 (baseline branch audit; latest-main follow-up noted below)
+<strong>Scope:</strong> SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.
 <strong>Method:</strong> static comparison of model fields, schemas and route payload construction; review of migration chain; read-only production queries (<code>quick_check</code>, enum/value checks, relationship/document checks). No production data was changed.</p>
 <h2 id="executive-summary">Executive summary</h2>
 <p>The highest-risk inconsistency is in proposal taxonomy: the proposal accepts multiple human-readable domains, but the PR guide interpolates that combined value directly into a repository path. This can yield an invalid <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;slug&gt;</code> path. The proposal form's domain list also does not match the AI review rubric's scientific scope (tracked upstream as Issues <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">#44</a> and <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/46">#46</a>).</p>
