@@ -160,8 +160,6 @@ async def issue_api_token(user_id: uuid.UUID, session: SessionDep) -> ApiTokenRe
     user = await session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    if not user.is_verified:
-        raise HTTPException(status_code=409, detail="The user must redeem their invitation first")
     token, expires_at = await issue_credential(session, user, "api")
     await session.commit()
     return ApiTokenResponse(token=token, expires_at=expires_at)
