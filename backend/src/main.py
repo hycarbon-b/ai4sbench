@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from httpx_oauth.clients.github import GitHubOAuth2
+from pydantic import BaseModel, ConfigDict
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -21,6 +23,7 @@ from src.control_panel.api.v2.routes import router as harbor_v2_router
 from src.control_panel.providers import EC2Provider, provider_from_settings
 from src.core.config import Settings, get_settings
 from src.core.identity import build_auth
+from src.core.temporary_auth import admin_temporary_router, auth_temporary_router
 from src.db.database import Base, create_database_engine, create_session_factory
 from src.mailing.admin_routes import admin_mailing_router
 from src.mailing.routes import mailing_router
@@ -139,14 +142,16 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.state.provider = provider or provider_from_settings(resolved)
+    auth_backend, fastapi_users = build_auth(resolved)
+    app.state.auth_backend = auth_backend
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(resolved.allowed_hosts))
     if resolved.cors_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(resolved.cors_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
-            allow_headers=["Content-Type"],
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization"],
         )
 
     @app.middleware("http")
@@ -170,6 +175,8 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     v2_routes = list(harbor_v2_router.routes)
     app.include_router(community_router)
     app.include_router(community_admin_router)
+    app.include_router(admin_temporary_router)
+    app.include_router(auth_temporary_router)
     app.include_router(ai_review_router)
     app.include_router(mailing_router)
     app.include_router(admin_mailing_router)
@@ -177,9 +184,10 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     community_routes = [
         *community_router.routes,
         *community_admin_router.routes,
+        *admin_temporary_router.routes,
+        *auth_temporary_router.routes,
         *ai_review_router.routes,
     ]
-    auth_backend, fastapi_users = build_auth(resolved)
     if resolved.github_oauth_client_id and resolved.github_oauth_client_secret:
         github_oauth = GitHubOAuth2(
             resolved.github_oauth_client_id,
@@ -196,6 +204,47 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
         )
         app.include_router(oauth_router, prefix="/auth/github", tags=["authentication"])
 
+        class AssociatedUser(BaseModel):
+            model_config = ConfigDict(from_attributes=True)
+            id: uuid.UUID
+            email: str
+            github_login: str | None
+
+        associate_router = fastapi_users.get_oauth_associate_router(
+            github_oauth,
+            AssociatedUser,
+            resolved.auth_jwt_secret,
+            csrf_token_cookie_secure=resolved.environment == "production",
+        )
+        # A subpath of the existing callback keeps older OAuth App wildcard rules usable.
+        app.include_router(
+            associate_router, prefix="/auth/github/callback/associate", tags=["authentication"]
+        )
+
+        @app.get("/auth/github/connect", include_in_schema=False)
+        async def github_connect_page() -> HTMLResponse:
+            return HTMLResponse(
+                """<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Connect GitHub · AI4S-Bench</title><meta name="referrer" content="no-referrer">
+<body style="margin:12vh auto;max-width:520px;padding:24px;color:#0d1730;font:16px Arial,sans-serif">
+<h1>Connect GitHub</h1><p>Your AI4S-Bench account stays available without GitHub. Connect it only
+when you want to publish a scientific review under your own GitHub identity.</p>
+<p>If this GitHub identity belongs to another account, the connection is refused.</p>
+<a href="/auth/github/associate/start">Continue with GitHub</a></body></html>"""
+            )
+
+        @app.get("/auth/github/associate/start", include_in_schema=False)
+        async def github_associate_start() -> HTMLResponse:
+            return HTMLResponse(
+                """<!doctype html><title>Connecting GitHub</title>
+<p>Connecting GitHub…</p><script>
+fetch('/auth/github/callback/associate/authorize', {credentials: 'same-origin'})
+  .then((response) => response.ok ? response.json() : Promise.reject(response))
+  .then(({authorization_url}) => location.replace(authorization_url))
+  .catch(() => { document.body.textContent = 'Could not connect GitHub. Close this window and try again.'; });
+</script>"""
+            )
+
         @app.get("/auth/github/start", include_in_schema=False)
         async def github_start() -> HTMLResponse:
             """Start OAuth in the Dashboard origin so its CSRF cookie is first-party."""
@@ -211,6 +260,28 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
   });
 </script>"""
             )
+
+    @app.get("/auth/invite", include_in_schema=False, name="invite_page")
+    async def invite_page() -> HTMLResponse:
+        profile_url = "/website/profile/"
+        return HTMLResponse(
+            """<!doctype html><html lang="en"><meta charset="utf-8"><title>AI4S-Bench sign in</title>
+<meta name="referrer" content="no-referrer">
+<body style="margin:0;background:#f7f9fc;color:#0d1730;font:16px Arial,sans-serif">
+<main style="max-width:520px;margin:12vh auto;padding:32px;background:white;border:1px solid #dde5f0">
+<strong style="display:block;margin-bottom:22px;color:#2474ff">AI4S-Bench</strong>
+<h1 style="font-size:24px">Signing you in</h1><p id="state">Checking your personal link…</p></main>
+<script>
+const token = location.hash.slice(1);
+history.replaceState(null, '', location.pathname);
+if (!token) document.getElementById('state').textContent = 'This sign-in link is missing its token.';
+else fetch('/api/v1/auth/invites/redeem', {method:'POST', credentials:'same-origin',
+  headers:{'Content-Type':'application/json'}, body:JSON.stringify({token})})
+  .then(r => {if (!r.ok) throw Error('This link is invalid, expired, or already used. Request a new link.');
+    location.replace(PROFILE_URL);})
+  .catch(e => {document.getElementById('state').textContent=e.message;});
+</script></body></html>""".replace("PROFILE_URL", json.dumps(profile_url))
+        )
 
     install_scoped_docs(
         app,

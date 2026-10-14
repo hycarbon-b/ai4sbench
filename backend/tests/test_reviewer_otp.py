@@ -44,6 +44,7 @@ def otp_app(database: Path, *, enabled: bool = True, smtp: bool = True, auth: bo
     )
     if auth:
         user = make_user("member", "otp-applicant")
+        app.state.test_user = user
         app.dependency_overrides[current_active_user] = lambda: user
     return app
 
@@ -61,6 +62,13 @@ def test_reviewer_otp_one_use_and_email_binding(tmp_path, monkeypatch) -> None:
     active = {"user": original_user}
     app.dependency_overrides[current_active_user] = lambda: active["user"]
     with TestClient(app) as client:
+        async def persist_applicant() -> None:
+            async with app.state.session_factory() as session:
+                original_user.oauth_accounts = []
+                session.add(original_user)
+                await session.commit()
+
+        asyncio.run(persist_applicant())
         assert client.get("/api/v1/auth/config").json()["form_mail_require_otp"] is True
         assert client.post("/api/v1/reviewers", json=reviewer_payload()).status_code == 403
         issued = client.post("/api/v1/reviewers/email-otp", json={"email": "Ada.Reviewer@example.test"})
@@ -118,7 +126,9 @@ def test_reviewer_otp_disabled_or_smtp_unavailable(tmp_path) -> None:
     with TestClient(otp_app(tmp_path / "anonymous.sqlite3", auth=False)) as client:
         schema = client.get("/openapi.json").json()
         for path in ("/api/v1/reviewers/email-otp", "/api/v1/reviewers/email-otp/verify"):
-            assert schema["paths"][path]["post"]["security"] == [{"APIKeyCookie": []}]
+            assert schema["paths"][path]["post"]["security"] == [
+                {"APIKeyCookie": []}, {"OAuth2PasswordBearer": []}
+            ]
         assert client.post("/api/v1/reviewers", json=reviewer_payload()).status_code == 401
         assert client.post(
             "/api/v1/reviewers/email-otp", json={"email": "a@example.test"}
@@ -131,7 +141,15 @@ def test_reviewer_otp_disabled_or_smtp_unavailable(tmp_path) -> None:
                 "code": "123456",
             },
         ).status_code == 401
-    with TestClient(otp_app(tmp_path / "disabled.sqlite3", enabled=False, smtp=False)) as client:
+    disabled_app = otp_app(tmp_path / "disabled.sqlite3", enabled=False, smtp=False)
+    with TestClient(disabled_app) as client:
+        async def persist_disabled_applicant() -> None:
+            async with disabled_app.state.session_factory() as session:
+                disabled_app.state.test_user.oauth_accounts = []
+                session.add(disabled_app.state.test_user)
+                await session.commit()
+
+        asyncio.run(persist_disabled_applicant())
         assert client.get("/api/v1/auth/config").json()["form_mail_require_otp"] is False
         assert client.post("/api/v1/reviewers/email-otp", json={"email": "a@example.test"}).status_code == 404
         assert client.post("/api/v1/reviewers", json=reviewer_payload()).status_code == 201

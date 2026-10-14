@@ -99,9 +99,11 @@ review</strong>. The <a href="../submit-proposal/">proposal guide</a> explains h
 Discussion. Include that Discussion URL in your PR description. AI review
 alone is not approval.</p>
 <h2 id="build-the-task">Build the task</h2>
-<p>Place a task under <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-name&gt;/</code>. Follow
-<a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
-and include at least:</p>
+<p>Place a task under <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code>. The first domain in
+the proposal is primary and determines <code>&lt;domain&gt;</code>; the proposal's research
+field within it determines <code>&lt;field&gt;</code>. See the <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md#required-task-layout">seven supported domain slugs
+and metadata rules</a>.
+Follow that guide and include at least:</p>
 <table>
 <thead>
 <tr>
@@ -112,7 +114,7 @@ and include at least:</p>
 <tbody>
 <tr>
 <td><code>task.toml</code></td>
-<td>Harbor task metadata, including <code>[task].name</code></td>
+<td>Harbor task metadata, including <code>[metadata].domain</code>, <code>[metadata].field</code>, and <code>[task].name</code></td>
 </tr>
 <tr>
 <td><code>instruction.md</code></td>
@@ -136,12 +138,19 @@ and include at least:</p>
 scripts executable and use LF line endings. The verifier should emit a
 numeric reward; demonstrate that the Oracle succeeds and a no-op agent does
 not. See the <a href="../example/">complete example</a>.</p>
+<p>For example, a new task in <code>tasks/physics/inverse-problems/my-task/</code> includes:</p>
+<pre><code class="language-toml">[metadata]
+domain = &quot;physics&quot;
+field = &quot;inverse-problems&quot;
+</code></pre>
+<p>The PR check requires these two keys to match the folders for new tasks.
+Existing task repairs keep their current paths.</p>
 <h2 id="validate-and-open-the-pr">Validate and open the PR</h2>
 <p>Install the pinned runtime described in
 <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/bench/README.md">bench/README.md</a>,
 then run Harbor from the repository root:</p>
-<pre><code class="language-bash">harbor run -p tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-name&gt; -a oracle -e docker
-harbor run -p tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-name&gt; -a nop -e docker
+<pre><code class="language-bash">harbor run -p tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt; -a oracle -e docker
+harbor run -p tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt; -a nop -e docker
 </code></pre>
 <p>Open a PR against <code>AI4S-Bench/ai4s-benchmark</code> with a summary of the task,
 the <strong>human-approved proposal Discussion URL</strong>, the validation commands,

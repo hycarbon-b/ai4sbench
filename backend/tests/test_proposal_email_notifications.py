@@ -143,6 +143,12 @@ def test_publish_events_queue_author_email_and_runner_retries(tmp_path) -> None:
         role="member",
         github_login="scientific-reviewer",
     )
+    reviewer.oauth_accounts = [
+        OAuthAccount(
+            user_id=reviewer.id, oauth_name="github", access_token="test-token",
+            account_id="reviewer-test", account_email=reviewer.email,
+        )
+    ]
     app = create_app(settings)
     active = {"user": author}
     app.dependency_overrides[current_active_user] = lambda: active["user"]

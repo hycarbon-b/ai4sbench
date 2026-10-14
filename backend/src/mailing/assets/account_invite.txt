@@ -1,0 +1,12 @@
+Hi {{ name }},
+
+{{ message }}
+
+Use your personal sign-in link within seven days. It can be used once:
+{{ login_url }}
+
+{% if kind == "approved" %}Connect GitHub after signing in, before publishing a review:
+{{ connect_url }}
+{% endif %}
+
+If you have questions, contact contact@ai4sbench.org.

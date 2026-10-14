@@ -4,7 +4,7 @@
    Missing fields render gracefully — early proposals are sparse.
    ============================================================ */
 
-import { currentUser } from "../app.js?v=20261012-2";
+import { currentUser } from "../app.js?v=20261015-1";
 import { statusBadge, esc, emptyState, ICONS, formatDate } from "../components.js?v=20261012-2";
 import { getSite, getTask, invalidateTasks, ROOT } from "../data.js?v=20261012-2";
 import {
@@ -14,7 +14,7 @@ import {
   ownLatest,
   openReviewDrawer,
   closeReviewDrawer,
-} from "./task-reviews.js?v=20261012-2";
+} from "./task-reviews.js?v=20261015-1";
 import { latestPerReviewer } from "../reviews.js?v=20261012-2";
 import { richBlock, mountMath } from "../richtext.js?v=20261012-2";
 import { splitContributors } from "../people.js?v=20261012-2";

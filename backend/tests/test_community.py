@@ -17,13 +17,13 @@ from src.community.routes import (
 )
 from src.community.schemas import ProposalReview, ProposalSubmission
 from src.core.config import Settings
-from src.core.identity import User, current_active_user, current_optional_user
+from src.core.identity import OAuthAccount, User, current_active_user, current_optional_user
 from src.db.models import Proposal, TaskRevision
 from src.main import create_app
 
 
 def user(role: str) -> User:
-    return User(
+    account_user = User(
         id=uuid4(),
         email=f"{role}@example.test",
         hashed_password="not-used-in-this-test",
@@ -33,6 +33,13 @@ def user(role: str) -> User:
         role=role,
         github_login=f"{role}-github",
     )
+    account_user.oauth_accounts = [
+        OAuthAccount(
+            user_id=account_user.id, oauth_name="github", access_token="test-token",
+            account_id=f"github-{account_user.id}", account_email=account_user.email,
+        )
+    ]
+    return account_user
 
 
 async def seed_deletable_proposal(factory, admin: User) -> tuple[str, str]:
