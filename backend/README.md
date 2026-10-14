@@ -253,8 +253,8 @@ cookie, and is removed from the address bar before the exchange. Issuing a new
 invite revokes the previous unused link. The database stores only its SHA-256
 hash. Successful redemption marks the account email `authorized`.
 
-The same page can issue or revoke a separate 24-hour API Bearer token after
-the user has verified their email. Supply it as
+The same page can issue or revoke a separate 24-hour API Bearer token for any
+account. Supply it as
 `Authorization: Bearer <token>` to endpoints that accept a user session. Each
 request checks expiry, revocation, the account's current status and current
 permissions. A newly issued API token revokes the previous one. Plaintext

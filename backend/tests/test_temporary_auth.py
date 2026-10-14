@@ -122,7 +122,13 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
         assert body["login_url"].startswith("http://testserver/auth/invite#tbinvite_")
         assert "href=" in body["html"]
 
+        early_token = client.post(f"/api/v1/users/{applicant.id}/api-tokens").json()["token"]
+
         app.dependency_overrides.clear()
+        early_me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {early_token}"})
+        assert early_me.status_code == 200
+        assert early_me.json()["email_status"] == "unauthorized"
+        assert early_me.json()["can_review"] is False
         token = body["login_url"].split("#", 1)[1]
         assert client.post("/api/v1/auth/invites/redeem", json={"token": previous}).status_code == 401
         assert client.post("/api/v1/auth/invites/redeem", json={"token": token}).status_code == 204
@@ -138,6 +144,9 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
         app.dependency_overrides.clear()
         client.cookies.clear()
         bearer = {"Authorization": f"Bearer {api_token}"}
+        assert client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {early_token}"}
+        ).status_code == 401
         assert client.get("/api/v1/auth/me", headers=bearer).json()["id"] == str(applicant.id)
         assert client.get("/api/v1/auth/me").status_code == 401
 
