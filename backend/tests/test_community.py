@@ -941,6 +941,7 @@ def test_configured_application_exposes_github_authorize_endpoint() -> None:
             authorization_url = response.json()["authorization_url"]
             assert authorization_url.startswith("https://github.com/login/oauth/authorize")
             assert "scope=read%3Auser+user%3Aemail+public_repo" in authorization_url
+            assert "prompt=select_account" in authorization_url
 
 
 def test_configured_application_exposes_same_origin_github_start_page() -> None:

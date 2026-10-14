@@ -29,6 +29,27 @@ from src.db.database import Base, create_database_engine, create_session_factory
 from src.mailing.admin_routes import admin_mailing_router
 from src.mailing.routes import mailing_router
 
+
+class GitHubOAuth2WithAccountPicker(GitHubOAuth2):
+    async def get_authorization_url(
+        self,
+        redirect_uri: str,
+        state: str | None = None,
+        scope: list[str] | None = None,
+        code_challenge: str | None = None,
+        code_challenge_method: str | None = None,
+        extras_params: dict[str, str] | None = None,
+    ) -> str:
+        return await super().get_authorization_url(
+            redirect_uri,
+            state,
+            scope,
+            code_challenge,
+            code_challenge_method,
+            extras_params={**(extras_params or {}), "prompt": "select_account"},
+        )
+
+
 STATIC_DIR = Path(__file__).with_name("static")
 WEBSITE_DIST_DIR = Path(__file__).with_name("website_dist")
 DOCUMENT_DIR = Path(__file__).with_name("document")
@@ -192,7 +213,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
         *ai_review_router.routes,
     ]
     if resolved.github_oauth_client_id and resolved.github_oauth_client_secret:
-        github_oauth = GitHubOAuth2(
+        github_oauth = GitHubOAuth2WithAccountPicker(
             resolved.github_oauth_client_id,
             resolved.github_oauth_client_secret.get_secret_value(),
             scopes=["read:user", "user:email", "public_repo"],
