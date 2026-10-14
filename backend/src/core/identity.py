@@ -17,7 +17,7 @@ from fastapi_users.db import (
     SQLAlchemyUserDatabase,
 )
 from fastapi_users.exceptions import UserNotExists
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, func, select
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +35,18 @@ class EmailStatus(StrEnum):
     AUTHORIZED = "authorized"
 
 
+def role_for_identity(settings: Settings, *, login: str | None, email: str) -> str:
+    admin_logins = {item.lower() for item in settings.admin_github_logins}
+    admin_emails = {item.lower() for item in settings.admin_github_emails}
+    contributor_logins = {item.lower() for item in settings.contributor_github_logins}
+    contributor_emails = {item.lower() for item in settings.contributor_github_emails}
+    if (login and login.lower() in admin_logins) or email.lower() in admin_emails:
+        return "admin"
+    if (login and login.lower() in contributor_logins) or email.lower() in contributor_emails:
+        return "contributor"
+    return "member"
+
+
 class User(SQLAlchemyBaseUserTableUUID, Base):
     __table_args__ = (
         CheckConstraint(
@@ -48,6 +60,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     email_status: Mapped[str] = mapped_column(
         String(32), default=EmailStatus.UNAUTHORIZED.value, nullable=False
     )
+    github_email_review_pending: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_preference_set: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship("OAuthAccount", lazy="joined")
 
 
@@ -118,19 +132,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
         self.verification_token_secret = settings.auth_jwt_secret.get_secret_value()
 
     def role_for(self, *, login: str | None, email: str) -> str:
-        admin_logins = {item.lower() for item in self.settings.admin_github_logins}
-        admin_emails = {item.lower() for item in self.settings.admin_github_emails}
-        contributor_logins = {item.lower() for item in self.settings.contributor_github_logins}
-        contributor_emails = {item.lower() for item in self.settings.contributor_github_emails}
-        is_admin = (login and login.lower() in admin_logins) or email.lower() in admin_emails
-        is_contributor = (login and login.lower() in contributor_logins) or (
-            email.lower() in contributor_emails
-        )
-        if is_admin:
-            return "admin"
-        if is_contributor:
-            return "contributor"
-        return "member"
+        return role_for_identity(self.settings, login=login, email=email)
 
     async def on_after_register(self, user: User, request: Request | None = None) -> None:
         role = self.role_for(login=None, email=user.email)
@@ -138,6 +140,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
             await self.user_db.update(user, {"role": role})
 
     async def oauth_callback(self, *args: object, **kwargs: object) -> User:
+        oauth_name = str(args[0]) if args else str(kwargs["oauth_name"])
+        account_id = str(args[2]) if len(args) > 2 else str(kwargs["account_id"])
+        try:
+            await self.get_by_oauth_account(oauth_name, account_id)
+            first_link = False
+        except UserNotExists:
+            first_link = True
         user = await super().oauth_callback(*args, **kwargs)
         token = str(args[1]) if len(args) > 1 else str(kwargs["access_token"])
         async with httpx.AsyncClient(timeout=15) as client:
@@ -161,6 +170,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
                 "role": self.role_for(login=github_login, email=user.email),
                 "email_status": email_status,
                 "is_verified": user.is_verified or oauth_email_matches,
+                "github_email_review_pending": user.github_email_review_pending or first_link,
             },
         )
 
@@ -208,6 +218,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, UUID]):
                     else user.email_status
                 ),
                 "is_verified": user.is_verified or account_email.lower() == user.email.lower(),
+                "github_email_review_pending": True,
             },
         )
 

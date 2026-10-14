@@ -114,6 +114,9 @@ async def author_email(session: AsyncSession, author_id: str, fallback: str | No
         user_id = UUID(author_id)
     except ValueError:
         return fallback.strip() if fallback and fallback.strip() else None
+    user = await session.get(User, user_id)
+    if user is not None and user.email_preference_set and user.email.strip():
+        return user.email.strip()
     oauth_email = await session.scalar(
         select(OAuthAccount.account_email).where(
             OAuthAccount.user_id == user_id,
@@ -124,7 +127,7 @@ async def author_email(session: AsyncSession, author_id: str, fallback: str | No
         return oauth_email.strip()
     if fallback and fallback.strip():
         return fallback.strip()
-    stored_email = await session.scalar(select(User.email).where(User.id == user_id))
+    stored_email = user.email if user is not None else None
     return stored_email.strip() if stored_email and stored_email.strip() else None
 
 

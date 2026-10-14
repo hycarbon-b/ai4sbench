@@ -8,7 +8,7 @@
      own saved draft / own previous review) — never someone else's.
    ============================================================ */
 
-import { controlPlaneFetch } from "../app.js?v=20261015-1";
+import { controlPlaneFetch } from "../app.js?v=20261015-2";
 import { esc, formatDate, ICONS } from "../components.js?v=20261012-2";
 import { richBlock, mountMath } from "../richtext.js?v=20261012-2";
 import {

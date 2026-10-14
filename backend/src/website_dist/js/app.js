@@ -4,6 +4,7 @@
    ============================================================ */
 
 import { getSite, ROOT } from "./data.js?v=20261012-2";
+import { accountCheckStep, reviewAccount } from "./account-verification.js?v=20261015-2";
 import "./motion.js?v=20261012-2";
 
 const controlPlaneConfig = getSite().then((site) => String(site.control_plane_url || "").replace(/\/$/, ""));
@@ -49,6 +50,20 @@ export async function controlPlaneFetch(path, options = {}) {
 
 export async function currentUser() {
   return controlPlaneFetch("/api/v1/auth/me");
+}
+
+const accountCheckActions = {
+  fetchAccount: controlPlaneFetch,
+  connectGitHub: linkGitHub,
+  reloadUser: async () => {
+    const user = await currentUser();
+    document.dispatchEvent(new CustomEvent("ai4sbench:authchange", { detail: user }));
+    return user;
+  },
+};
+
+export function openAccountCheck(user, force = true) {
+  return reviewAccount(user, accountCheckActions, force);
 }
 
 export async function signOut() {
@@ -236,6 +251,17 @@ function renderAccount(user, { unavailable = false } = {}) {
     link.textContent = label;
     accountMenu.append(link);
   }
+  if (accountCheckStep(user)) {
+    const check = document.createElement("button");
+    check.type = "button";
+    check.className = "site-nav__signout";
+    check.textContent = user.github_linked ? "Confirm email" : "Connect GitHub";
+    check.addEventListener("click", () => {
+      closeAccountMenu();
+      void openAccountCheck(user);
+    });
+    accountMenu.append(check);
+  }
   const logout = document.createElement("button");
   logout.type = "button";
   logout.className = "site-nav__signout";
@@ -252,7 +278,10 @@ async function refreshAccount() {
   const revision = ++accountRevision;
   try {
     const user = await currentUser();
-    if (revision === accountRevision) renderAccount(user);
+    if (revision === accountRevision) {
+      renderAccount(user);
+      void openAccountCheck(user, false);
+    }
   }
   catch (error) {
     if (revision === accountRevision) {
@@ -276,6 +305,7 @@ accountButton?.addEventListener("click", async () => {
 document.addEventListener("ai4sbench:authchange", (event) => {
   accountRevision += 1;
   renderAccount(event.detail);
+  void openAccountCheck(event.detail, false);
 });
 document.addEventListener("click", (event) => {
   if (account && !account.contains(event.target)) closeAccountMenu();

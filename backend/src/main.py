@@ -15,6 +15,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from src.api_docs import install_scoped_docs
+from src.community.account_email import router as account_email_router
 from src.community.admin_routes import admin_router as community_admin_router
 from src.community.ai_reviews import ai_review_router
 from src.community.routes import community_router
@@ -179,6 +180,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
     app.include_router(auth_temporary_router)
     app.include_router(ai_review_router)
     app.include_router(mailing_router)
+    app.include_router(account_email_router)
     app.include_router(admin_mailing_router)
     mailing_routes = list(mailing_router.routes)
     community_routes = [
@@ -186,6 +188,7 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
         *community_admin_router.routes,
         *admin_temporary_router.routes,
         *auth_temporary_router.routes,
+        *account_email_router.routes,
         *ai_review_router.routes,
     ]
     if resolved.github_oauth_client_id and resolved.github_oauth_client_secret:

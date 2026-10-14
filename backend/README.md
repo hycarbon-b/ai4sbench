@@ -267,6 +267,19 @@ requires the reviewer to connect GitHub on their profile so the Discussion
 reply is authored by their own account. A GitHub identity already linked to
 another user is rejected.
 
+The Website shows a small account-check dialog after sign-in. An invited account
+without GitHub can connect it there or continue without it. On the first GitHub
+login or first connection to an invited account, the user confirms whether to
+keep the current email or use another address; the GitHub OAuth email is
+pre-filled. That OAuth email needs no further code. Any other new address must
+pass the existing purpose-scoped email-code flow before it becomes the account
+email. The choice also becomes the address for future proposal notifications;
+older accounts retain the existing OAuth-email preference until they choose.
+The choice is stored once; older connected accounts are not prompted
+retroactively. `GET /api/v1/auth/me` exposes the GitHub email and pending state;
+`POST /api/v1/auth/email/choice`, `/code`, and `/code/verify` implement the
+choice and optional proof without exposing OAuth tokens.
+
 For a reviewed invitation batch, use `scripts/provision_reviewer_invites.py`
 with a private JSON input array of `{email, status, existing_github_login?}`.
 The dry run validates all applications and account matches without writes;
