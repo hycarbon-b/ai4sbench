@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 from pathlib import Path
 from uuid import uuid4
@@ -60,6 +61,13 @@ def test_reviewer_application_submission_admin_decision_and_access() -> None:
         app.dependency_overrides[current_active_user] = lambda: active["user"]
 
         with TestClient(app) as client:
+            async def persist_applicant() -> None:
+                async with app.state.session_factory() as session:
+                    applicant.oauth_accounts = []
+                    session.add(applicant)
+                    await session.commit()
+
+            asyncio.run(persist_applicant())
             created = client.post("/api/v1/reviewers", json=reviewer_payload())
             assert created.status_code == 201, created.text
             assert created.json()["status"] == "pending"
@@ -131,7 +139,10 @@ def test_reviewer_application_validation_and_admin_errors() -> None:
 
             schema = client.get("/openapi.json").json()
             create_operation = schema["paths"]["/api/v1/reviewers"]["post"]
-            assert create_operation["security"] == [{"APIKeyCookie": []}]
+            assert create_operation["security"] == [
+                {"APIKeyCookie": []},
+                {"OAuth2PasswordBearer": []},
+            ]
             assert create_operation["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
                 "#/components/schemas/ReviewerApplicationSubmission"
             )

@@ -1,5 +1,5 @@
 /* The profile uses the same cookie session and public proposal board as the rest of the site. */
-import { currentUser, signInWithGitHub } from "../app.js?v=20261012-2";
+import { currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261015-1";
 import { getTasks } from "../data.js?v=20261012-2";
 import { displayStatus } from "../lifecycle.js?v=20261012-2";
 
@@ -60,6 +60,25 @@ async function showUser(user) {
   const email = document.createElement("p");
   email.textContent = user.email;
   identity.append(email);
+  if (!user.github_linked) {
+    const connect = document.createElement("button");
+    connect.type = "button";
+    connect.className = "btn btn--secondary btn--sm";
+    connect.textContent = "Connect GitHub";
+    connect.addEventListener("click", async () => {
+      connect.disabled = true;
+      try { await linkGitHub(); }
+      catch (error) { state.hidden = false; state.textContent = error.message; }
+      finally { connect.disabled = false; }
+    });
+    identity.append(connect);
+    if (user.can_review) {
+      const note = document.createElement("p");
+      note.className = "text-muted";
+      note.textContent = "You can save review drafts now. Connect GitHub to publish a review.";
+      identity.append(note);
+    }
+  }
   proposals.hidden = false;
   toReview.hidden = !user.can_review;
 

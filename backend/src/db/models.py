@@ -369,6 +369,7 @@ class ReviewerApplication(Base):
     )
     admin_notes: Mapped[str | None] = mapped_column(Text)
     submitted_by_login: Mapped[str | None] = mapped_column(String(100))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("user.id", ondelete="SET NULL"), index=True)
     reviewed_by: Mapped[str | None] = mapped_column(String(100))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

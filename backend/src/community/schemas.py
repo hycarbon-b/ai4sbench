@@ -4,6 +4,7 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -289,6 +290,7 @@ class ReviewerApplicationCreatedResponse(BaseModel):
     research_background: str
     status: ReviewerApplicationStatus
     submitted_by_login: str | None
+    user_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -303,6 +305,21 @@ class ReviewerApplicationResponse(ReviewerApplicationCreatedResponse):
 
 class ReviewerApplicationListResponse(BaseModel):
     items: list[ReviewerApplicationResponse]
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    email: str
+    github_login: str | None
+    role: str
+    email_status: Literal["unauthorized", "from_github_oauth", "authorized"]
+    reviewer_application_status: ReviewerApplicationStatus | None
+    can_review: bool
+    github_linked: bool
+
+
+class AdminUserListResponse(BaseModel):
+    items: list[AdminUserResponse]
 
 
 class ReviewerApplicationUpdate(BaseModel):
@@ -464,6 +481,9 @@ class AuthenticatedUserResponse(BaseModel):
     github_login: str
     role: str
     can_review: bool
+    reviewer_application_status: ReviewerApplicationStatus | None
+    github_linked: bool
+    email_status: Literal["unauthorized", "from_github_oauth", "authorized"]
 
 
 class AuthConfigResponse(BaseModel):

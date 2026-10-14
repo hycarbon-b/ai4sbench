@@ -22,7 +22,7 @@ from src.community.deliveries import (
     enqueue_delivery,
 )
 from src.core.config import Settings
-from src.core.identity import User, current_active_user
+from src.core.identity import OAuthAccount, User, current_active_user
 from src.db.database import Base
 from src.db.models import OutboundDelivery, Proposal
 from src.jobs.runner import JobRunner
@@ -30,7 +30,7 @@ from src.main import create_app
 
 
 def github_user(role: str, login: str) -> User:
-    return User(
+    account_user = User(
         id=uuid4(),
         email=f"{login}@example.test",
         hashed_password="not-used-in-this-test",
@@ -40,6 +40,13 @@ def github_user(role: str, login: str) -> User:
         role=role,
         github_login=login,
     )
+    account_user.oauth_accounts = [
+        OAuthAccount(
+            user_id=account_user.id, oauth_name="github", access_token="test-token",
+            account_id=f"github-{account_user.id}", account_email=account_user.email,
+        )
+    ]
+    return account_user
 
 
 async def build_discord_message_url(transport: httpx.MockTransport) -> str | None:

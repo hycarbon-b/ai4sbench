@@ -97,6 +97,41 @@ export async function signInWithGitHub() {
   });
 }
 
+export async function linkGitHub() {
+  const popup = window.open("", "ai4sbench-github-link", "popup,width=700,height=780");
+  if (!popup) throw new Error("Allow popups to connect GitHub.");
+  popup.document.title = "Connecting GitHub…";
+  const baseUrl = await controlPlaneConfig;
+  if (!baseUrl) {
+    popup.close();
+    throw new Error("GitHub connection is not configured yet.");
+  }
+  popup.location.assign(`${baseUrl}/auth/github/associate/start`);
+  return new Promise((resolve, reject) => {
+    const poll = window.setInterval(async () => {
+      try {
+        const user = await currentUser();
+        if (!user.github_linked) {
+          if (popup.closed) {
+            window.clearInterval(poll);
+            reject(new Error("GitHub connection was cancelled."));
+          }
+          return;
+        }
+        window.clearInterval(poll);
+        popup.close();
+        document.dispatchEvent(new CustomEvent("ai4sbench:authchange", { detail: user }));
+        resolve(user);
+      } catch (error) {
+        if (popup.closed) {
+          window.clearInterval(poll);
+          reject(error);
+        }
+      }
+    }, 800);
+  });
+}
+
 /* ---- Mobile navigation ---- */
 const toggle = document.querySelector(".nav-toggle");
 const nav = document.querySelector(".site-nav");

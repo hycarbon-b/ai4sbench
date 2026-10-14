@@ -22,6 +22,7 @@ import {
   Trash2,
   UploadCloud,
   UserCheck,
+  Users,
   Webhook,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
@@ -43,6 +44,9 @@ import {
   type DatabaseSnapshot,
   type Dashboard,
   type Job,
+  type ManagedUser,
+  type InviteMessage,
+  type ApiTokenIssued,
   type Plan,
   type Proposal,
   type ProposalInput,
@@ -93,6 +97,7 @@ type View =
   | "cloud"
   | "snapshots"
   | "reviewers"
+  | "users"
   | "proposals";
 const views: View[] = [
   "overview",
@@ -105,6 +110,7 @@ const views: View[] = [
   "cloud",
   "snapshots",
   "reviewers",
+  "users",
   "proposals",
 ];
 type Config = {
@@ -120,6 +126,7 @@ type Ops = {
   dashboard: Dashboard | null;
   proposals: Proposal[];
   reviewers: ReviewerApplication[];
+  users: ManagedUser[];
   tasks: TaskRevision[];
   plans: Plan[];
   runs: Run[];
@@ -133,6 +140,7 @@ const emptyOps: Ops = {
   dashboard: null,
   proposals: [],
   reviewers: [],
+  users: [],
   tasks: [],
   plans: [],
   runs: [],
@@ -276,6 +284,7 @@ export default function App() {
         dashboard,
         proposals,
         reviewers,
+        users,
         tasks,
         plans,
         runs,
@@ -287,6 +296,7 @@ export default function App() {
           api<Dashboard>("/api/v1/dashboard"),
           api<{ items: Proposal[] }>("/api/v1/proposals"),
           api<{ items: ReviewerApplication[] }>("/api/v1/reviewer-applications"),
+          api<{ items: ManagedUser[] }>("/api/v1/users"),
           api<{ items: TaskRevision[] }>("/api/v1/task-revisions"),
           api<{ items: Plan[] }>("/api/v1/plans"),
           api<{ items: Run[] }>("/api/v1/runs"),
@@ -299,6 +309,7 @@ export default function App() {
         dashboard,
         proposals,
         reviewers,
+        users,
         tasks,
         plans,
         runs,
@@ -314,6 +325,7 @@ export default function App() {
           proposals.status === "fulfilled" ? proposals.value.items : current.proposals,
         reviewers:
           reviewers.status === "fulfilled" ? reviewers.value.items : current.reviewers,
+        users: users.status === "fulfilled" ? users.value.items : current.users,
         tasks: tasks.status === "fulfilled" ? tasks.value.items : current.tasks,
         plans: plans.status === "fulfilled" ? plans.value.items : current.plans,
         runs: runs.status === "fulfilled" ? runs.value.items : current.runs,
@@ -955,6 +967,7 @@ function AdminPanel({
         onUpdate={onManageReviewer}
       />
     );
+  if (view === "users") return <UsersPanel users={ops.users} />;
   if (view === "cloud")
     return (
       <CloudPanel
@@ -2141,6 +2154,179 @@ function ProposalPanel({
   );
 }
 
+function UsersPanel({ users }: { users: ManagedUser[] }) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [invites, setInvites] = useState<InviteMessage[]>([]);
+  const [issuedToken, setIssuedToken] = useState<ApiTokenIssued | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return users;
+    return users.filter((user) =>
+      [user.github_login, user.email, user.role, user.email_status]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(normalized)),
+    );
+  }, [query, users]);
+
+  const statusLabel: Record<ManagedUser["email_status"], string> = {
+    unauthorized: "Unauthorized",
+    from_github_oauth: "From GitHub OAuth",
+    authorized: "Authorized",
+  };
+
+  const issueInvites = async (ids: string[]) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await api<{ items: InviteMessage[] }>("/api/v1/users/invites/batch", {
+        method: "POST",
+        body: JSON.stringify({ user_ids: ids }),
+      });
+      setInvites(result.items);
+      setSelected([]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not issue invitations.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const issueToken = async (id: string) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      setIssuedToken(await api<ApiTokenIssued>(`/api/v1/users/${id}/api-tokens`, { method: "POST" }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not issue API token.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeToken = async (id: string) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await api<void>(`/api/v1/users/${id}/api-tokens`, { method: "DELETE" });
+      setMessage("API token revoked.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not revoke API token.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Users</CardTitle>
+        <CardDescription>
+          Issue one-use account links and 24-hour API tokens. Secret values appear only when issued.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Input
+          aria-label="Search users"
+          placeholder="Search username, email, role, or email status"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {message && <p role="status">{message}</p>}
+        {selected.length > 0 && (
+          <Button disabled={busy} onClick={() => void issueInvites(selected)}>
+            Create {selected.length} invitation{selected.length === 1 ? "" : "s"}
+          </Button>
+        )}
+        {filtered.length ? (
+          <UiTable>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Select</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Email status</TableHead>
+                <TableHead>Reviewer</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <input type="checkbox" aria-label={`Select ${user.email}`}
+                      checked={selected.includes(user.id)}
+                      onChange={(event) => setSelected((current) => event.target.checked
+                        ? [...current, user.id]
+                        : current.filter((id) => id !== user.id))} />
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {user.github_login ? `@${user.github_login}` : "No GitHub"}
+                  </TableCell>
+                  <TableCell>{user.reviewer_application_status || "—"}</TableCell>
+                  <TableCell className="space-x-2">
+                    <Button disabled={busy} variant="outline" size="sm"
+                      onClick={() => void issueInvites([user.id])}>Invite</Button>
+                    <Button disabled={busy} variant="outline" size="sm"
+                      onClick={() => void issueToken(user.id)}>API token</Button>
+                    <Button disabled={busy} variant="outline" size="sm"
+                      onClick={() => void revokeToken(user.id)}>Revoke API</Button>
+                  </TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell className="capitalize">{user.role}</TableCell>
+                  <TableCell>
+                    <Badge
+                      className={
+                        user.email_status === "unauthorized"
+                          ? "border-slate-600 bg-slate-800 text-slate-300"
+                          : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                      }
+                    >
+                      {statusLabel[user.email_status]}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </UiTable>
+        ) : (
+          <Empty text={query ? "No users match this search." : "No registered users yet."} />
+        )}
+      </CardContent>
+      <Dialog open={invites.length > 0} onOpenChange={(open) => { if (!open) setInvites([]); }}>
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Invitation messages</DialogTitle>
+            <DialogDescription>Copy each HTML message now. Closing this window discards the links.</DialogDescription>
+          </DialogHeader>
+          {invites.map((invite) => (
+            <div key={invite.user_id} className="space-y-2 border-t pt-3">
+              <p><strong>{invite.recipient}</strong> — {invite.subject}</p>
+              <Textarea readOnly value={invite.html} rows={5} aria-label={`HTML for ${invite.recipient}`} />
+              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(invite.html)}>
+                Copy HTML
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(invite.login_url)}>
+                Copy link
+              </Button>
+            </div>
+          ))}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={issuedToken !== null} onOpenChange={(open) => { if (!open) setIssuedToken(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>API token</DialogTitle>
+          <DialogDescription>Copy this 24-hour Bearer token now; it cannot be viewed again.</DialogDescription>
+        </DialogHeader>
+          {issuedToken && <><Textarea readOnly value={issuedToken.token} rows={3} />
+            <Button onClick={() => void navigator.clipboard.writeText(issuedToken.token)}>Copy token</Button></>}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 function ReviewerApplicationsPanel({
   applications,
   loading,
@@ -2410,6 +2596,7 @@ function Sidebar({
         ["overview", "Operations", Activity],
         ["proposals", "Task proposals", Send],
         ["reviewers", "Reviewer applications", UserCheck],
+        ["users", "Users", Users],
         ["tasks", "Task library", Database],
         ["plans", "Execution plans", SquareStack],
         ["runs", "Run queue", Rocket],
@@ -2425,9 +2612,9 @@ function Sidebar({
     items: Array<[View, string, typeof Activity]>;
   }> = admin
     ? [
-        { label: "Manage", items: items.slice(0, 3) },
-        { label: "Benchmark", items: items.slice(3, 6) },
-        { label: "System", items: items.slice(6) },
+        { label: "Manage", items: items.slice(0, 4) },
+        { label: "Benchmark", items: items.slice(4, 7) },
+        { label: "System", items: items.slice(7) },
       ]
     : [{ label: "Contribute", items }];
   return (

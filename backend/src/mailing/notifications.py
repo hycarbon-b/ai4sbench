@@ -75,6 +75,40 @@ def render_email_verification(code: str, subject: str, action: str) -> RenderedN
     )
 
 
+def render_reviewer_invite(name: str, login_url: str, kind: str) -> RenderedNotification:
+    if kind == "approved":
+        subject = "Your AI4S-Bench reviewer access"
+        message = (
+            "Your AI4S-Bench reviewer access is ready. Use your personal link to sign in. "
+            "A GitHub account is optional for signing in; connect one when you want to publish "
+            "a scientific review to a proposal Discussion."
+        )
+    elif kind == "pending":
+        subject = "Access your AI4S-Bench account"
+        message = (
+            "Thank you for applying to review for AI4S-Bench. Your application is still under review, "
+            "and your account is ready. Reviewer access will become available if your application "
+            "is approved."
+        )
+    else:
+        subject = "Access your AI4S-Bench account"
+        message = "Your AI4S-Bench account is ready. Use your personal link to sign in."
+    context = {
+        "subject": subject,
+        "heading": subject,
+        "name": name,
+        "login_url": login_url,
+        "message": message,
+        "kind": kind,
+        "connect_url": login_url.split("/auth/invite#", 1)[0] + "/auth/github/connect",
+    }
+    return RenderedNotification(
+        subject=subject,
+        text=_TEMPLATES.get_template("account_invite.txt").render(context).strip(),
+        html=_TEMPLATES.get_template("account_invite.html").render(context).strip(),
+    )
+
+
 async def author_email(session: AsyncSession, author_id: str, fallback: str | None = None) -> str | None:
     try:
         user_id = UUID(author_id)

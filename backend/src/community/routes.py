@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import enqueue_proposal_notification, enqueue_review_notification
@@ -62,26 +62,31 @@ async def user_can_review(request: Request, user: User, session: AsyncSession) -
     login = (user.github_login or "").lower()
     if user.role == "admin" or login in allowed:
         return True
-    if not login:
-        return False
-    approved_application = await session.scalar(
-        select(ReviewerApplication.id)
-        .where(
-            ReviewerApplication.status == "approved",
-            func.lower(ReviewerApplication.github) == login,
-        )
+    application_status = await session.scalar(
+        select(ReviewerApplication.status)
+        .where(ReviewerApplication.user_id == user.id)
+        .order_by(ReviewerApplication.created_at.desc())
         .limit(1)
     )
-    return approved_application is not None
+    return application_status == "approved"
 
 
 async def user_dict(request: Request, user: User, session: AsyncSession) -> dict[str, object]:
+    application_status = await session.scalar(
+        select(ReviewerApplication.status)
+        .where(ReviewerApplication.user_id == user.id)
+        .order_by(ReviewerApplication.created_at.desc())
+        .limit(1)
+    )
     return {
         "id": str(user.id),
         "email": user.email,
         "github_login": user.github_login or "",
         "role": user.role,
         "can_review": await user_can_review(request, user, session),
+        "reviewer_application_status": application_status,
+        "github_linked": any(account.oauth_name == "github" for account in user.oauth_accounts),
+        "email_status": user.email_status or "unauthorized",
     }
 
 
@@ -206,6 +211,7 @@ async def create_reviewer_application(
         github=github_login,
         status="pending",
         submitted_by_login=github_login,
+        user_id=user.id,
     )
     session.add(item)
     await session.commit()
@@ -1084,6 +1090,7 @@ async def publish_proposal_review(
     session: SessionDep,
     user: ReviewerDep,
 ) -> ProposalReviewPublishedResponse:
+    github_oauth_account(user)
     proposal = await active_proposal(session, proposal_id)
     if not proposal.discussion_node_id or not proposal.discussion_url:
         raise HTTPException(status_code=409, detail="Proposal has no GitHub Discussion identity")

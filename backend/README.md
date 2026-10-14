@@ -243,6 +243,39 @@ uv run alembic upgrade head
 uv run alembic current
 ```
 
+### Temporary account invitations
+
+An administrator can select users in the Dashboard **Users** page and create a
+seven-day, one-use sign-in link for each. The link is delivered only through the
+on-screen, copyable HTML; issuing it does not send email. The token lives in the
+URL fragment, is exchanged on the control-plane origin for the normal session
+cookie, and is removed from the address bar before the exchange. Issuing a new
+invite revokes the previous unused link. The database stores only its SHA-256
+hash. Successful redemption marks the account email `authorized`.
+
+The same page can issue or revoke a separate 24-hour API Bearer token after
+the user has verified their email. Supply it as
+`Authorization: Bearer <token>` to endpoints that accept a user session. Each
+request checks expiry, revocation, the account's current status and current
+permissions. A newly issued API token revokes the previous one. Plaintext
+tokens are displayed once; store them securely and never paste them into logs.
+
+An approved reviewer application linked by `reviewer_applications.user_id`
+grants review access immediately, even without GitHub. A pending application
+does not. The Website can save a draft without GitHub, but publishing a review
+requires the reviewer to connect GitHub on their profile so the Discussion
+reply is authored by their own account. A GitHub identity already linked to
+another user is rejected.
+
+For a reviewed invitation batch, use `scripts/provision_reviewer_invites.py`
+with a private JSON input array of `{email, status, existing_github_login?}`.
+The dry run validates all applications and account matches without writes;
+`--issue` atomically creates/links accounts and issues links. Redirect its JSON
+output to a private file, copy the HTML to the intended recipients manually,
+then remove the plaintext output after use. Do not commit the recipient list or
+the output. The operator should take a consistent database snapshot before
+running the script on a live deployment.
+
 Before applying the proposal/reviewer enum constraints, audit the configured
 database read-only from this directory:
 

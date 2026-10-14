@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import resend_delivery
 from src.community.schemas import (
+    AdminUserListResponse,
+    AdminUserResponse,
     OutboundDeliveryListResponse,
     OutboundDeliveryResponse,
     ReviewerApplicationListResponse,
@@ -16,12 +18,50 @@ from src.community.schemas import (
     ReviewerApplicationUpdate,
 )
 from src.core.auth import Principal, get_principal
+from src.core.identity import User
 from src.db.database import get_session
 from src.db.models import OutboundDelivery, ReviewerApplication
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 AdminDep = Annotated[Principal, Depends(get_principal)]
 admin_router = APIRouter(prefix="/api/v1", dependencies=[Depends(get_principal)])
+
+
+@admin_router.get(
+    "/users",
+    tags=["users"],
+    response_model=AdminUserListResponse,
+    summary="List registered users and email authorization status",
+)
+async def list_users(session: SessionDep) -> AdminUserListResponse:
+    users = (await session.execute(select(User).order_by(User.github_login, User.email))).unique().scalars()
+    applications = await session.scalars(
+        select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc())
+    )
+    application_by_user = {}
+    for application in applications:
+        if application.user_id is not None:
+            application_by_user.setdefault(application.user_id, application)
+    return {
+        "items": [
+            AdminUserResponse(
+                id=str(user.id),
+                email=user.email,
+                github_login=user.github_login,
+                role=user.role,
+                email_status=user.email_status,
+                reviewer_application_status=(
+                    application_by_user[user.id].status if user.id in application_by_user else None
+                ),
+                can_review=(
+                    user.role == "admin"
+                    or (user.id in application_by_user and application_by_user[user.id].status == "approved")
+                ),
+                github_linked=any(account.oauth_name == "github" for account in user.oauth_accounts),
+            )
+            for user in users
+        ]
+    }
 
 
 @admin_router.get(

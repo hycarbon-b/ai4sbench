@@ -6,6 +6,28 @@ export type User = {
   can_review: boolean;
 };
 
+export type ManagedUser = {
+  id: string;
+  email: string;
+  github_login: string | null;
+  role: string;
+  email_status: "unauthorized" | "from_github_oauth" | "authorized";
+  reviewer_application_status: "pending" | "approved" | "rejected" | null;
+  can_review: boolean;
+  github_linked: boolean;
+};
+
+export type InviteMessage = {
+  user_id: string;
+  recipient: string;
+  subject: string;
+  html: string;
+  login_url: string;
+  expires_at: number;
+};
+
+export type ApiTokenIssued = { token: string; expires_at: number };
+
 export type ProposalInput = {
   title: string;
   domain: string;

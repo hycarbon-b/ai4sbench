@@ -8,7 +8,7 @@
      own saved draft / own previous review) — never someone else's.
    ============================================================ */
 
-import { controlPlaneFetch } from "../app.js?v=20261012-2";
+import { controlPlaneFetch } from "../app.js?v=20261015-1";
 import { esc, formatDate, ICONS } from "../components.js?v=20261012-2";
 import { richBlock, mountMath } from "../richtext.js?v=20261012-2";
 import {
@@ -270,10 +270,13 @@ export function ownLatest(state, user) {
 
 /* ---- Drafts (per reviewer, per proposal, this browser only) ---- */
 
-const draftKey = (task, user) => `ai4sbench:review-draft:${String(user.github_login).toLowerCase()}:${task.id}`;
+const draftKey = (task, user) => `ai4sbench:review-draft:${user.id}:${task.id}`;
+const oldDraftKey = (task, user) => user.github_login
+  ? `ai4sbench:review-draft:${String(user.github_login).toLowerCase()}:${task.id}` : null;
 function readDraft(task, user) {
   try {
-    const raw = JSON.parse(localStorage.getItem(draftKey(task, user)) || "null");
+    const raw = JSON.parse(localStorage.getItem(draftKey(task, user))
+      || (oldDraftKey(task, user) && localStorage.getItem(oldDraftKey(task, user))) || "null");
     return raw ? { review: normalizeReview(raw.review), at: raw.at } : null;
   } catch {
     return null;
@@ -290,6 +293,7 @@ function writeDraft(task, user, review) {
 function clearDraft(task, user) {
   try {
     localStorage.removeItem(draftKey(task, user));
+    if (oldDraftKey(task, user)) localStorage.removeItem(oldDraftKey(task, user));
   } catch {
     /* ignore */
   }
@@ -459,7 +463,7 @@ export function openReviewDrawer({ task, user, state, onPublished }) {
   drawerEl.innerHTML = `
     <header class="rd__head">
       <div>
-        <span class="rd__eyebrow">${esc(identifier)} · reviewing as @${esc(user.github_login)}</span>
+        <span class="rd__eyebrow">${esc(identifier)} · reviewing as ${esc(user.github_login ? `@${user.github_login}` : user.email)}</span>
         <h2 id="rd-title">${previous ? "Update your review" : "Your review"}</h2>
       </div>
       <button type="button" class="rd__close" aria-label="Close the review panel (your draft is kept)">${CLOSE}</button>
@@ -533,6 +537,10 @@ export function openReviewDrawer({ task, user, state, onPublished }) {
     });
     form.dispatchEvent(new Event("input"));
     setStatus(draft && !isBlank(draft.review) ? "Draft restored." : "");
+    if (!user.github_linked) {
+      publishBtn.disabled = true;
+      setStatus("Drafts can be saved here. Connect GitHub from your profile before publishing.");
+    }
 
     body.querySelector("[data-rd-load-previous]")?.addEventListener("click", () => {
       mount(normalizeReview(previous.review), { previous: null, draftAt: null });
