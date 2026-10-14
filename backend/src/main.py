@@ -217,7 +217,9 @@ def create_app(settings: Settings | None = None, provider: EC2Provider | None = 
             csrf_token_cookie_secure=resolved.environment == "production",
         )
         # A subpath of the existing callback keeps older OAuth App wildcard rules usable.
-        app.include_router(associate_router, prefix="/auth/github/callback/associate", tags=["authentication"])
+        app.include_router(
+            associate_router, prefix="/auth/github/callback/associate", tags=["authentication"]
+        )
 
         @app.get("/auth/github/connect", include_in_schema=False)
         async def github_connect_page() -> HTMLResponse:

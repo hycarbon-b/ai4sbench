@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -9,12 +10,23 @@ from alembic import command
 from alembic.config import Config
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import create_engine, inspect, select, update
 
 from src.core.config import Settings
-from src.core.identity import OAuthAccount, User, UserManager, current_active_user
+from src.core.identity import OAuthAccount, TemporaryCredential, User, UserManager, current_active_user
 from src.db.models import ReviewerApplication
+from src.mailing.notifications import render_reviewer_invite
 from src.main import create_app
+
+
+def test_invitation_template_escapes_applicant_name() -> None:
+    rendered = render_reviewer_invite(
+        "Test <script>", "https://dashboard.example.test/auth/invite#tbinvite_example", "approved"
+    )
+    assert "Test &lt;script&gt;" in rendered.html
+    assert "Test <script>" not in rendered.html
+    assert "tbinvite_example" in rendered.text
+    assert "Connect GitHub" in rendered.text
 
 
 def test_github_binding_rejects_an_identity_owned_by_another_user() -> None:
@@ -101,6 +113,7 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
                 await session.commit()
 
         asyncio.run(seed())
+        previous = client.post(f"/api/v1/users/{applicant.id}/invite").json()["login_url"].split("#", 1)[1]
         invitation = client.post(f"/api/v1/users/{applicant.id}/invite")
         assert invitation.status_code == 200, invitation.text
         body = invitation.json()
@@ -111,6 +124,7 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
 
         app.dependency_overrides.clear()
         token = body["login_url"].split("#", 1)[1]
+        assert client.post("/api/v1/auth/invites/redeem", json={"token": previous}).status_code == 401
         assert client.post("/api/v1/auth/invites/redeem", json={"token": token}).status_code == 204
         assert client.post("/api/v1/auth/invites/redeem", json={"token": token}).status_code == 401
         me = client.get("/api/v1/auth/me")
@@ -139,3 +153,19 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
         assert client.delete(f"/api/v1/users/{applicant.id}/api-tokens").status_code == 204
         app.dependency_overrides.clear()
         assert client.get("/api/v1/auth/me", headers=bearer).status_code == 401
+
+        app.dependency_overrides[current_active_user] = lambda: admin
+        expired = client.post(f"/api/v1/users/{applicant.id}/invite").json()["login_url"].split("#", 1)[1]
+        app.dependency_overrides.clear()
+
+        async def expire() -> None:
+            async with app.state.session_factory() as session:
+                await session.execute(
+                    update(TemporaryCredential)
+                    .where(TemporaryCredential.user_id == applicant.id, TemporaryCredential.kind == "invite")
+                    .values(expires_at=int(time.time()) - 1)
+                )
+                await session.commit()
+
+        asyncio.run(expire())
+        assert client.post("/api/v1/auth/invites/redeem", json={"token": expired}).status_code == 401
