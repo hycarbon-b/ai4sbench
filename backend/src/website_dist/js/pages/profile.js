@@ -1,5 +1,5 @@
 /* The profile uses the same cookie session and public proposal board as the rest of the site. */
-import { currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261015-1";
+import { currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261015-2";
 import { getTasks } from "../data.js?v=20261012-2";
 import { displayStatus } from "../lifecycle.js?v=20261012-2";
 

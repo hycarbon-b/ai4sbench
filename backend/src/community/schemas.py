@@ -484,6 +484,8 @@ class AuthenticatedUserResponse(BaseModel):
     reviewer_application_status: ReviewerApplicationStatus | None
     github_linked: bool
     email_status: Literal["unauthorized", "from_github_oauth", "authorized"]
+    github_email: str | None
+    github_email_review_pending: bool
 
 
 class AuthConfigResponse(BaseModel):

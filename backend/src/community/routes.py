@@ -87,6 +87,10 @@ async def user_dict(request: Request, user: User, session: AsyncSession) -> dict
         "reviewer_application_status": application_status,
         "github_linked": any(account.oauth_name == "github" for account in user.oauth_accounts),
         "email_status": user.email_status or "unauthorized",
+        "github_email": next(
+            (account.account_email for account in user.oauth_accounts if account.oauth_name == "github"), None
+        ),
+        "github_email_review_pending": bool(user.github_email_review_pending),
     }
 
 

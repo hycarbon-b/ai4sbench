@@ -24,7 +24,7 @@ import { mountPrimaryDomain } from "../domains.js";
    authors keep the "Edit on GitHub" link instead.
    ============================================================ */
 
-import { controlPlaneFetch } from "../app.js?v=20261015-1";
+import { controlPlaneFetch } from "../app.js?v=20261015-2";
 import { esc } from "../components.js?v=20261012-2";
 import {
   LIMITS,

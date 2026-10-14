@@ -7,7 +7,7 @@ import { mountPrimaryDomain } from "../domains.js";
    ============================================================ */
 
 import { esc, ICONS } from "../components.js?v=20261012-2";
-import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20261012-2";
+import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20261015-2";
 import {
   LIMITS,
   STEP_FIELDS,
