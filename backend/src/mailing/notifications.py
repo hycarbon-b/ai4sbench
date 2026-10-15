@@ -104,8 +104,8 @@ def render_reviewer_invite(name: str, login_url: str, kind: str) -> RenderedNoti
     }
     return RenderedNotification(
         subject=subject,
-        text=_TEMPLATES.get_template("account_invite.txt").render(context).strip(),
-        html=_TEMPLATES.get_template("account_invite.html").render(context).strip(),
+        text=_TEMPLATES.get_template("admin_invite_email.txt").render(context).strip(),
+        html=_TEMPLATES.get_template("admin_invite_email.html").render(context).strip(),
     )
 
 

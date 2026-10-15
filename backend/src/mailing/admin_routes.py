@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import enqueue_delivery
 from src.core.auth import get_principal
-from src.core.identity import OAuthAccount, User
+from src.core.identity import User
 from src.db.database import begin_immediate, get_session
 from src.db.models import OutboundDelivery, Proposal, ReviewerApplication
 from src.mailing.notifications import CONTACT_EMAIL, render_bulk_message
@@ -61,6 +61,22 @@ class BulkMailCreate(BaseModel):
         return result
 
 
+class MailPreview(BaseModel):
+    subject: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=20_000)
+    signature: str = Field(min_length=1, max_length=120)
+
+    @field_validator("subject", "body", "signature")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        return BulkMailCreate.nonblank(value)
+
+
+class MailPreviewResponse(BaseModel):
+    subject: str
+    html: str
+
+
 class BulkMailResponse(BaseModel):
     queued_count: int
     delivery_ids: list[str]
@@ -77,19 +93,13 @@ async def eligible_recipients(session: AsyncSession) -> list[MailRecipient]:
         if login:
             reviewer_statuses[login.casefold()].add(status)
 
-    accounts = (await session.execute(
-        select(User, OAuthAccount.account_email)
-        .join(OAuthAccount, OAuthAccount.user_id == User.id)
-        .where(OAuthAccount.oauth_name == "github", OAuthAccount.account_email.is_not(None))
-    )).unique().all()
+    users = (await session.scalars(select(User).where(User.is_active.is_(True)))).unique().all()
     recipients: dict[UUID, MailRecipient] = {}
-    for user, raw_email in accounts:
+    for user in users:
         count = proposal_counts[str(user.id)]
         statuses = sorted(reviewer_statuses.get((user.github_login or "").casefold(), set()))
-        if not count and not statuses or not raw_email:
-            continue
         try:
-            email = EMAIL_ADAPTER.validate_python(raw_email.strip())
+            email = EMAIL_ADAPTER.validate_python(user.email.strip())
         except ValueError:
             continue
         recipients[user.id] = MailRecipient(
@@ -107,6 +117,12 @@ async def eligible_recipients(session: AsyncSession) -> list[MailRecipient]:
 @admin_mailing_router.get("/recipients", response_model=MailRecipientsResponse)
 async def list_mail_recipients(session: SessionDep) -> MailRecipientsResponse:
     return MailRecipientsResponse(items=await eligible_recipients(session))
+
+
+@admin_mailing_router.post("/preview", response_model=MailPreviewResponse)
+async def preview_bulk_mail(body: MailPreview) -> MailPreviewResponse:
+    rendered = render_bulk_message(body.subject.strip(), body.body.strip(), body.signature.strip())
+    return MailPreviewResponse(subject=rendered.subject, html=rendered.html)
 
 
 @admin_mailing_router.post("/deliveries", status_code=202, response_model=BulkMailResponse)
