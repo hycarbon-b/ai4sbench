@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>PR #34 #38 #56 / Issue #44 #46 - AI4S-Bench Backend Developer Wiki</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+        <link href="../../css/toc-right.css" rel="stylesheet" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "PR #34 #38 #56 / Issue #44 #46";
+        var mkdocs_page_input_path = "notes and log/pr-34-38-56-issues-44-46.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> AI4S-Bench Backend Developer Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../..">Overview</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../architecture/">Architecture</a>
+                </li>
+              </ul>
+              <ul>
+                <li class="toctree-l1"><a class="reference internal" href="../../runtime-configuration/">Runtime and Configuration</a>
+                </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Automatic Workflow</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../ai-proposal-reviews/">AI Proposal Reviews</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Notes and Log</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">PR #34 #38 #56 / Issue #44 #46</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#2026-10-15">2026-10-15 进展</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#2026-10-14">2026-10-14 审计结论</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#_1">首次核对时已实施的规则</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#pr">各 PR 的处理</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#category-domain-field">category 与 domain / field 的实际用途</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#44-46">首次核对时 #44 / #46 的剩余工作</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#_2">首次核对时建议的收尾顺序</a>
+    </li>
+    </ul>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">AI4S-Bench Backend Developer Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Notes and Log</li>
+      <li class="breadcrumb-item active">PR #34 #38 #56 / Issue #44 #46</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/AI4S-Bench/ai4s-benchmark/edit/main/backend/docs/notes and log/pr-34-38-56-issues-44-46.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="pr-343856-issue-4446">PR #34、#38、#56 与 Issue #44、#46：处理记录</h1>
+<p><strong>首次核对日期：</strong>2026-10-14。下文保留当时的审计基线；最新进展记录在本节。GitHub 上的 PR/Issue 状态以各链接实时页面为准。</p>
+<h2 id="2026-10-15">2026-10-15 进展</h2>
+<ul>
+<li>Benchmark <a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/63">PR #63</a> 已合并：rubric 改用表单七类；贡献文档明确首项主领域与目录映射；新任务 CI 要求 <code>[metadata].domain</code> / <code>[metadata].field</code> 与目录一致，旧任务维修保持兼容。历史示例保留旧目录，metadata 已改为两个独立键。</li>
+<li>主仓库已在提交 <a href="https://github.com/hycarbon-b/ai4sbench/commit/d8985e6"><code>d8985e6</code></a> 把 benchmark 子模块指针更新到该 PR 的合并提交 <code>909274d</code>。指针已直接进入主仓库 <code>main</code>，不属于本记录的文档 PR 差异。</li>
+<li>截至本次核对，Website <a href="https://github.com/AI4S-Bench/ai4s-bench-website/pull/34">PR #34</a> 和 Benchmark <a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/56">PR #56</a> 仍为 Open；Benchmark <a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/38">PR #38</a> 已关闭但未合并。下文对三条 PR 的处理建议是首次核对时的记录，不能当作现时状态。</li>
+<li><a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/46">Issue #46</a> 所指的 rubric 与表单范围冲突已由 #63 修正。<a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">Issue #44</a> 的 benchmark 目录与 metadata 规则也已落地；Website 预检尚未同步新 CI，后台 API 也尚未强制领域必须属于七类。两条 Issue 目前仍为 Open，不应把这些跨仓库余项写成已完成。</li>
+</ul>
+<h2 id="2026-10-14">2026-10-14 审计结论</h2>
+<p>这五个条目涉及两层不同的问题。PR <a href="https://github.com/AI4S-Bench/ai4s-bench-website/pull/34">#34</a>、<a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/38">#38</a>、<a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/56">#56</a> 修正既有校验规则或文档，<strong>不应仅因领域设计调整而统一拒绝合并</strong>。Issue <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">#44</a>、<a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/46">#46</a> 则要求确定提案领域、科学范围、任务目录和 metadata 的共同口径。</p>
+<p>截至核对时，三个 PR 与两个 Issue 在 GitHub 上均为 <strong>Open</strong>，没有后续讨论评论。#38 和 #56 的 MkDocs 检查成功，#34 没有报告自动检查结果；三条 PR 当时均显示可合并。后台已经实现兼容的多领域主次顺序与任务路径；rubric、任务文档和 metadata 尚未完成对齐，因此不能将 #44/#46 记为端到端完成。</p>
+<h2 id="_1">首次核对时已实施的规则</h2>
+<ol>
+<li><code>ProposalSubmission.domain</code> 和 <code>Proposal.domain</code> 继续使用逗号分隔的有序字符串。Website 显式选择主领域并序列化在第一位；历史数据不改写。<code>field_name</code> 属于第一个领域，<code>Proposal.field</code> 存其 slug。</li>
+<li>后台的 PR 指南取第一个领域并转成 slug，生成 <code>tasks/&lt;primary-domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code>。例如主领域为 <code>Physics</code> 时，目录使用 <code>physics</code>；其余领域保留在提案中，但不进入目录。此规则解决了把完整逗号列表直接放进路径的问题。</li>
+<li>表单选项仍为 <code>Materials Science</code>、<code>Physics</code>、<code>Chemistry</code>、<code>Biology</code>、<code>AI / ML</code>、<code>Applied Mathematics</code>、<code>Interdisciplinary</code>。<code>field_name</code> 是自由文本，后台按现有规则生成 slug；目前没有发布有限的 <code>&lt;domain&gt;/&lt;field&gt;</code> 配对清单，也没有在 API 入口校验领域必须来自这七项。</li>
+<li>Benchmark 的 <code>scripts/validate_task.py</code> 要求五个任务文件、可解析的 <code>[metadata]</code> 表；存在 <code>[task]</code> 时要求其 <code>name</code> 是 <code>org/name</code>。新任务 PR 须链接本仓库的提案 Discussion。该校验器<strong>不</strong>检查领域是否属于表单选项，也不强制 <code>[metadata].domain</code> 或 <code>[metadata].field</code>。</li>
+</ol>
+<p><strong>已确定的范围口径：</strong>当前七个表单标签就是新提案的准入领域；让 AI review rubric 跟随表单，而不是用 rubric 原有的五类科学范围替换表单。<code>AI / ML</code> 和 <code>Interdisciplinary</code> 也属于这七项，但仍须满足 rubric 对真实研究工作、领域知识、可验证性的其他要求。地球或工程科学如果不能真实归入这七项之一，目前不作为新的独立准入领域。rubric 文字、例子和实际审查行为尚需在后续分支落实；在落实前，不应声称 #46 已由代码解决。</p>
+<p>由当前七项按后台现有 slug 规则生成的<strong>新任务主领域目录</strong>为 <code>materials-science</code>、<code>physics</code>、<code>chemistry</code>、<code>biology</code>、<code>ai-ml</code>、<code>applied-mathematics</code>、<code>interdisciplinary</code>。这不是对历史目录的迁移要求，例如已有 <code>mathematical-sciences/applied-mathematics</code> 示例仍保留。新提案的研究 field 继续由自由文本生成 slug，不能把它误写为现已存在的有限 field 清单。</p>
+<p><strong>已确定的 metadata 口径：</strong>新任务只使用 <code>[metadata].domain</code> 与 <code>[metadata].field</code> 表达目录分类，分别与任务路径的两个目录段一致；不再为新任务生成或校验 <code>[metadata].category</code>。例如 <code>tasks/physics/inverse-problems/&lt;task-slug&gt;/task.toml</code> 应包含：</p>
+<pre><code class="language-toml">[metadata]
+domain = &quot;physics&quot;
+field = &quot;inverse-problems&quot;
+</code></pre>
+<p>现有示例的 <code>category</code> 是旧写法，后续分支会把示例改成这两个键。旧任务无需因该文档决定而批量改写；校验器新增强制规则时只对<strong>新任务</strong>要求两个键，避免维修历史任务时意外阻断。</p>
+<h2 id="pr">各 PR 的处理</h2>
+<table>
+<thead>
+<tr>
+<th>条目</th>
+<th>核对结果</th>
+<th>处理方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/AI4S-Bench/ai4s-bench-website/pull/34">Website PR #34</a></td>
+<td>把预检中的 <code>[metadata]</code> 解析、<code>[task].name</code>、新任务 Discussion 链接及目录识别向 benchmark CI 对齐；还修正测试样例，把旧 <code>category</code> 放回 <code>[metadata]</code> 并补上 <code>[task].name</code>。这是<strong>结构校验</strong>，不决定领域准入表。指南的一处措辞把 <code>[task].name</code> 写成无条件必需，而当前 CI 是“存在 <code>[task]</code> 时必需”。</td>
+<td>独立审阅；可建议贡献者将指南措辞改为与 CI 一致。核心结构校验可保留；后续分支应将旧样例的分类键改为 <code>domain</code> / <code>field</code>、检查 Website 当前主分支差异和资源版本号，再让预检与更新后的 CI 对齐。不要用 #44/#46 的理由直接拒绝。</td>
+</tr>
+<tr>
+<td><a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/38">Benchmark PR #38</a></td>
+<td>说明 CI 已要求 <code>[metadata]</code> 表，和当前 <code>validate_task.py</code> 相符；没有规定领域键的最终格式。</td>
+<td>可作为独立文档修正审阅。后续确定 metadata 的具体字段后，再补充规范；当前 PR 无须等待 #44/#46 才能判断。</td>
+</tr>
+<tr>
+<td><a href="https://github.com/AI4S-Bench/ai4s-benchmark/pull/56">Benchmark PR #56</a></td>
+<td>将贡献文档中的 <code>&lt;task-name&gt;</code> 改为 <code>&lt;task-slug&gt;</code>，与 <code>CONTRIBUTING.md</code> 的目录占位符一致；不改变允许的领域。</td>
+<td>可作为独立文档修正审阅。后续另行补充主领域到目录的映射说明。</td>
+</tr>
+</tbody>
+</table>
+<p>这三条 PR 的作者均为 <code>chenyangsu</code>；感谢其指出真实的校验和文档偏差。是否合并应依据各自的实际 diff，而不是套用同一条“因新领域设计无法合并”的回复。</p>
+<h2 id="category-domain-field"><code>category</code> 与 <code>domain</code> / <code>field</code> 的实际用途</h2>
+<p><code>[metadata].category</code> 用一个字符串表达两层目录，例如 <code>mathematical-sciences/applied-mathematics</code>。在本项目当前代码中，它只出现在 benchmark 示例任务的 <code>task.toml</code> 和 Website 的测试样例；任务运行、后台及 benchmark CI 没有依据它进行分类或校验。新的规范不使用这个键。</p>
+<p>Website 指南的模板已经使用两个独立键：<code>[metadata].domain</code> 对应 <code>&lt;domain&gt;</code> 目录，<code>[metadata].field</code> 对应 <code>&lt;field&gt;</code> 目录。Website 预检在这两个键存在时逐项比对目录，不一致时给<strong>警告</strong>；benchmark CI 尚未要求这两个键，也不检查 <code>category</code>。后续分支将把新任务的两个字段及其目录一致性纳入 CI，并使预检保持一致。</p>
+<p>GitHub Discussion 的 <code>category = Task Proposals</code> 是 Discussion 所在的 GitHub 分类，与 <code>task.toml</code> 的 <code>[metadata].category</code> 无关。</p>
+<h2 id="44-46">首次核对时 #44 / #46 的剩余工作</h2>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>当前状态</th>
+<th>后续分支需要落实</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>多领域提案放哪个任务目录</td>
+<td>首项为主领域并用于路径，已在后台和 Website 实现</td>
+<td>在 benchmark 贡献文档与 Website 指南写明同一规则；给出示例及对历史路径的兼容说明。</td>
+</tr>
+<tr>
+<td>哪些目录 slug 可用</td>
+<td>七个表单标签可以机械生成主领域 slug；field 仍为自由文本</td>
+<td>公布七个主领域标签及其 slug，以及 field slug 的生成规则和审核责任；若希望有限 field 清单，须另作设计决定。</td>
+</tr>
+<tr>
+<td>科学准入范围</td>
+<td>已决定保留表单当前七类作为准入领域，但当前 rubric 仍列 life / physical / earth / mathematical / engineering</td>
+<td>修改 <code>rubrics/task-proposal.md</code> 的 Scope、例子和审查提示；明确 <code>AI / ML</code> 与 <code>Interdisciplinary</code> 也可作为领域，但仍需真实研究内容。删除把地球/工程列为独立准入领域的旧表述。</td>
+</tr>
+<tr>
+<td><code>task.toml</code> 的领域 metadata</td>
+<td>已决定新任务只用 <code>[metadata].domain</code> / <code>[metadata].field</code>；现有示例仍用 <code>category</code>，CI 只检查表存在</td>
+<td>把示例改为两个新键；仅对新任务要求它们与目录一致，Website 预检和 CI 同步执行。历史任务无需批量改写。</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_2">首次核对时建议的收尾顺序</h2>
+<ol>
+<li>在 rubric 的 Scope 中写清七类准入、主领域及 <code>AI / ML</code>、<code>Interdisciplinary</code> 的研究要求。</li>
+<li>在后续分支一次性对齐 rubric、benchmark 贡献文档、任务示例、Website 指南与预检，并让新提案的领域校验符合七类选择。保持提案表中的逗号分隔字段；新增任务使用 <code>domain</code> / <code>field</code>，旧任务保留原样。</li>
+<li>分别审阅 #34、#38、#56，并在对应 PR 下回复具体处理意见；不要把三条独立修正当成 #44/#46 的实现 PR。</li>
+<li>发布规则后，在 #44/#46 下链接实现分支与文档，核对新提案到任务路径及 <code>task.toml</code> 的完整示例，再决定关闭 Issue。</li>
+</ol>
+<p><strong>本记录的边界：</strong>这是处理方案与状态核对，不代表 rubric、benchmark 仓库或 Website 上游已合并相应改动，也不代替逐条 PR 的代码审查。</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../../ai-proposal-reviews/" class="btn btn-neutral float-left" title="AI Proposal Reviews"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/AI4S-Bench/ai4s-benchmark" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../../ai-proposal-reviews/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

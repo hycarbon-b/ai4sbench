@@ -13,3 +13,5 @@ nav:
   - Runtime and Configuration: runtime-configuration.md
   - Automatic Workflow:
       - AI Proposal Reviews: ai-proposal-reviews.md
+  - Notes and Log:
+      - "PR #34 #38 #56 / Issue #44 #46": "notes and log/pr-34-38-56-issues-44-46.md"
