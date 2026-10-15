@@ -8,20 +8,25 @@ import time
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.community.deliveries import enqueue_delivery
 from src.core.auth import get_principal
 from src.core.identity import EmailStatus, TemporaryCredential, User
 from src.db.database import begin_immediate, get_session
-from src.db.models import ReviewerApplication
-from src.mailing.notifications import render_reviewer_invite
+from src.db.models import OutboundDelivery, ReviewerApplication
+from src.mailing.notifications import CONTACT_EMAIL, render_reviewer_invite
 
 INVITE_LIFETIME = 7 * 24 * 60 * 60
 API_TOKEN_LIFETIME = 24 * 60 * 60
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+IdempotencyKey = Annotated[
+    str,
+    Header(alias="Idempotency-Key", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"),
+]
 admin_temporary_router = APIRouter(
     prefix="/api/v1/users", dependencies=[Depends(get_principal)], tags=["users"]
 )
@@ -41,12 +46,28 @@ class InviteMessage(BaseModel):
     recipient: str
     subject: str
     html: str
+    text: str
     login_url: str
     expires_at: int
 
 
 class InviteBatchResponse(BaseModel):
     items: list[InviteMessage]
+
+
+class InvitePreview(BaseModel):
+    user_id: str
+    recipient: str
+    subject: str
+    html: str
+
+
+class InvitePreviewResponse(BaseModel):
+    items: list[InvitePreview]
+
+
+class InviteSendResponse(BaseModel):
+    queued_count: int
 
 
 class ApiTokenResponse(BaseModel):
@@ -96,7 +117,9 @@ async def issue_credential(
     return token, expires_at
 
 
-async def invite_message(session: AsyncSession, request: Request, user: User) -> InviteMessage:
+async def invite_message(
+    session: AsyncSession, request: Request, user: User, *, issue: bool = True
+) -> InviteMessage:
     application = await session.scalar(
         select(ReviewerApplication)
         .where(ReviewerApplication.user_id == user.id)
@@ -108,24 +131,75 @@ async def invite_message(session: AsyncSession, request: Request, user: User) ->
         raise HTTPException(
             status_code=409, detail="A rejected reviewer application cannot receive this invite"
         )
-    token, expires_at = await issue_credential(session, user, "invite")
-    recipient = next(
-        (account.account_email for account in user.oauth_accounts if account.oauth_name == "github"),
-        user.email,
-    )
-    base_url = request.app.state.settings.worker_api_base_url.rstrip("/")
-    if request.app.state.settings.environment != "production":
-        base_url = str(request.base_url).rstrip("/")
-    login_url = f"{base_url}/auth/invite#{token}"
+    token, expires_at = await issue_credential(session, user, "invite") if issue else ("PREVIEW", 0)
+    recipient = user.email
+    login_url = f"{request.app.state.settings.invite_base_url.rstrip('/')}/auth/invite#{token}"
     rendered = render_reviewer_invite(application.name if application else user.email, login_url, kind)
     return InviteMessage(
         user_id=str(user.id),
         recipient=recipient,
         subject=rendered.subject,
         html=rendered.html,
+        text=rendered.text,
         login_url=login_url,
         expires_at=expires_at,
     )
+
+
+async def selected_users(session: AsyncSession, ids: list[uuid.UUID]) -> list[User]:
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Duplicate user IDs")
+    users = [await session.get(User, user_id) for user_id in ids]
+    if any(user is None or not user.is_active for user in users):
+        raise HTTPException(status_code=404, detail="One or more active users do not exist")
+    return [user for user in users if user is not None]
+
+
+@admin_temporary_router.post("/invites/preview", response_model=InvitePreviewResponse)
+async def preview_invites(
+    body: InviteBatchRequest, request: Request, session: SessionDep
+) -> InvitePreviewResponse:
+    users = await selected_users(session, body.user_ids)
+    messages = [await invite_message(session, request, user, issue=False) for user in users]
+    return InvitePreviewResponse(items=[InvitePreview(
+        user_id=item.user_id, recipient=item.recipient, subject=item.subject, html=item.html,
+    ) for item in messages])
+
+
+@admin_temporary_router.post("/invites/send", response_model=InviteSendResponse, status_code=202)
+async def send_invites(
+    body: InviteBatchRequest, request: Request, session: SessionDep, idempotency_key: IdempotencyKey
+) -> InviteSendResponse:
+    settings = request.app.state.settings
+    if not settings.smtp_enabled or not settings.smtp_server or not settings.smtp_from:
+        raise HTTPException(status_code=503, detail="SMTP delivery is disabled or incomplete")
+    await begin_immediate(session)
+    users = await selected_users(session, body.user_ids)
+    prefix = f"smtp:account-invite:{hashlib.sha256(idempotency_key.encode()).hexdigest()}:"
+    existing = list((await session.scalars(select(OutboundDelivery).where(
+        OutboundDelivery.event_type == "account_invite",
+        OutboundDelivery.dedupe_key.like(f"{prefix}%"),
+    ))).all())
+    if existing:
+        if {item.payload.get("user_id") for item in existing} != {str(user.id) for user in users}:
+            raise HTTPException(status_code=409, detail="Idempotency key was used for different users")
+        return InviteSendResponse(queued_count=len(existing))
+    messages = [await invite_message(session, request, user) for user in users]
+    for item in messages:
+        await enqueue_delivery(
+            session,
+            delivery_type="smtp",
+            destination=f"smtp://{settings.smtp_server}:{settings.smtp_port}",
+            event_type="account_invite",
+            dedupe_key=f"{prefix}{item.user_id}",
+            payload={
+                "recipients": [item.recipient], "subject": item.subject,
+                "text": item.text, "html": item.html, "reply_to": [CONTACT_EMAIL],
+                "user_id": item.user_id,
+            },
+        )
+    await session.commit()
+    return InviteSendResponse(queued_count=len(messages))
 
 
 @admin_temporary_router.post("/invites/batch", response_model=InviteBatchResponse)

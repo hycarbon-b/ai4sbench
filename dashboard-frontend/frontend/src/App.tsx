@@ -11,7 +11,6 @@ import {
   History,
   LoaderCircle,
   LogOut,
-  Mail,
   Play,
   RefreshCw,
   Rocket,
@@ -25,7 +24,7 @@ import {
   Users,
   Webhook,
 } from "lucide-react";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   api,
@@ -45,7 +44,6 @@ import {
   type Dashboard,
   type Job,
   type ManagedUser,
-  type InviteMessage,
   type ApiTokenIssued,
   type Plan,
   type Proposal,
@@ -93,7 +91,6 @@ type View =
   | "runs"
   | "jobs"
   | "deliveries"
-  | "mail"
   | "cloud"
   | "snapshots"
   | "reviewers"
@@ -106,7 +103,6 @@ const views: View[] = [
   "runs",
   "jobs",
   "deliveries",
-  "mail",
   "cloud",
   "snapshots",
   "reviewers",
@@ -786,7 +782,6 @@ export default function App() {
               onDeleteProposal={removeProposal}
               onResendDelivery={resendDelivery}
               onMailQueued={() => void loadOps()}
-              onOpenDeliveries={() => setView("deliveries")}
               onManageReviewer={manageReviewer}
               loading={loading}
             />
@@ -871,7 +866,6 @@ function AdminPanel({
   onDeleteProposal,
   onResendDelivery,
   onMailQueued,
-  onOpenDeliveries,
   onManageReviewer,
   onSaveDatabaseSnapshot,
   loading,
@@ -913,7 +907,6 @@ function AdminPanel({
   onDeleteProposal: (proposal: Proposal) => void;
   onResendDelivery: (delivery: OutboundDelivery) => void;
   onMailQueued: () => void;
-  onOpenDeliveries: () => void;
   onManageReviewer: (
     application: ReviewerApplication,
     update: ReviewerApplicationUpdate,
@@ -958,7 +951,6 @@ function AdminPanel({
         onResend={onResendDelivery}
       />
     );
-  if (view === "mail") return <MailComposer onQueued={onMailQueued} onOpenDeliveries={onOpenDeliveries} />;
   if (view === "reviewers")
     return (
       <ReviewerApplicationsPanel
@@ -967,7 +959,7 @@ function AdminPanel({
         onUpdate={onManageReviewer}
       />
     );
-  if (view === "users") return <UsersPanel users={ops.users} />;
+  if (view === "users") return <UsersPanel users={ops.users} onMailQueued={onMailQueued} />;
   if (view === "cloud")
     return (
       <CloudPanel
@@ -2154,22 +2146,34 @@ function ProposalPanel({
   );
 }
 
-function UsersPanel({ users }: { users: ManagedUser[] }) {
+function UsersPanel({ users, onMailQueued }: { users: ManagedUser[]; onMailQueued: () => void }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  const [invites, setInvites] = useState<InviteMessage[]>([]);
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [emailStatuses, setEmailStatuses] = useState<string[]>([]);
+  const [reviewerStatuses, setReviewerStatuses] = useState<string[]>([]);
+  const [mailIds, setMailIds] = useState<string[]>([]);
+  const [inviteIds, setInviteIds] = useState<string[]>([]);
+  const [inviteKey, setInviteKey] = useState("");
+  const [invitePreview, setInvitePreview] = useState<Array<{ user_id: string; recipient: string; subject: string; html: string }>>([]);
   const [issuedToken, setIssuedToken] = useState<ApiTokenIssued | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return users;
     return users.filter((user) =>
-      [user.github_login, user.email, user.role, user.email_status]
+      (!roles.length || roles.includes(user.role)) &&
+      (!emailStatuses.length || emailStatuses.includes(user.email_status)) &&
+      (!reviewerStatuses.length || reviewerStatuses.includes(user.reviewer_application_status || "none")) &&
+      (!normalized || [user.github_login, user.email, user.role, user.email_status]
         .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(normalized)),
+        .some((value) => value!.toLowerCase().includes(normalized))),
     );
-  }, [query, users]);
+  }, [query, users, roles, emailStatuses, reviewerStatuses]);
+  const allShownSelected = filtered.length > 0 && filtered.every((user) => selected.includes(user.id));
+  const toggleFilter = (value: string, values: string[], setValues: (values: string[]) => void) =>
+    setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
 
   const statusLabel: Record<ManagedUser["email_status"], string> = {
     unauthorized: "Unauthorized",
@@ -2177,21 +2181,40 @@ function UsersPanel({ users }: { users: ManagedUser[] }) {
     authorized: "Authorized",
   };
 
-  const issueInvites = async (ids: string[]) => {
+  const previewInvites = async (ids: string[]) => {
     setBusy(true);
     setMessage("");
     try {
-      const result = await api<{ items: InviteMessage[] }>("/api/v1/users/invites/batch", {
+      const result = await api<{ items: typeof invitePreview }>("/api/v1/users/invites/preview", {
         method: "POST",
         body: JSON.stringify({ user_ids: ids }),
       });
-      setInvites(result.items);
-      setSelected([]);
+      setInvitePreview(result.items);
+      setInviteIds(ids);
+      setInviteKey(crypto.randomUUID());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not issue invitations.");
+      setMessage(error instanceof Error ? error.message : "Could not preview invitations.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const sendInvites = async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await api<{ queued_count: number }>("/api/v1/users/invites/send", {
+        method: "POST", headers: { "Idempotency-Key": inviteKey }, body: JSON.stringify({ user_ids: inviteIds }),
+      });
+      setMessage(`${result.queued_count} invitation email${result.queued_count === 1 ? "" : "s"} queued.`);
+      setInvitePreview([]);
+      setInviteIds([]);
+      setInviteKey("");
+      setSelected([]);
+      onMailQueued();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not queue invitations.");
+    } finally { setBusy(false); }
   };
 
   const issueToken = async (id: string) => {
@@ -2224,7 +2247,7 @@ function UsersPanel({ users }: { users: ManagedUser[] }) {
       <CardHeader>
         <CardTitle>Users</CardTitle>
         <CardDescription>
-          Issue one-use account links and 24-hour API tokens. Secret values appear only when issued.
+          Manage accounts, send email, and issue one-use invitations or 24-hour API tokens.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -2234,19 +2257,39 @@ function UsersPanel({ users }: { users: ManagedUser[] }) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
+        <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+          {([
+            ["Role", ["admin", "contributor", "member"], roles, setRoles],
+            ["Email status", ["unauthorized", "from_github_oauth", "authorized"], emailStatuses, setEmailStatuses],
+            ["Reviewer", ["none", "pending", "approved", "rejected"], reviewerStatuses, setReviewerStatuses],
+          ] as Array<[string, string[], string[], (values: string[]) => void]>).map(([label, options, values, setValues]) =>
+            <details key={label} className="relative border border-slate-700 px-3 py-1.5">
+              <summary className="cursor-pointer">{label}{values.length ? ` (${values.length})` : ""}</summary>
+              <div className="absolute left-0 top-full z-10 min-w-44 space-y-2 border border-slate-700 bg-slate-950 p-3 shadow-lg">
+                {options.map((option) => <label key={option} className="flex items-center gap-2 whitespace-nowrap capitalize">
+                  <input type="checkbox" checked={values.includes(option)} onChange={() => toggleFilter(option, values, setValues)} />{option.replaceAll("_", " ")}
+                </label>)}
+              </div>
+            </details>)}
+          {(roles.length > 0 || emailStatuses.length > 0 || reviewerStatuses.length > 0) &&
+            <Button size="sm" variant="ghost" onClick={() => { setRoles([]); setEmailStatuses([]); setReviewerStatuses([]); }}>Clear filters</Button>}
+        </div>
         {message && <p role="status">{message}</p>}
         {selected.length > 0 && (
-          <Button disabled={busy} onClick={() => void issueInvites(selected)}>
-            Create {selected.length} invitation{selected.length === 1 ? "" : "s"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-400">{selected.length} selected</span>
+            <Button disabled={busy || selected.length > 100} onClick={() => setMailIds(selected)}>Send email</Button>
+            <Button disabled={busy || selected.length > 100} variant="outline" onClick={() => void previewInvites(selected)}>Invite</Button>
+          </div>
         )}
         {filtered.length ? (
           <UiTable>
             <TableHeader>
               <TableRow>
-                <TableHead>Select</TableHead>
+                <TableHead><input type="checkbox" aria-label="Select all shown users" checked={allShownSelected} onChange={() => setSelected((current) => allShownSelected
+                  ? current.filter((id) => !filtered.some((user) => user.id === id))
+                  : [...new Set([...current, ...filtered.map((user) => user.id)])])} /></TableHead>
                 <TableHead>User</TableHead>
-                <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Email status</TableHead>
                 <TableHead>Reviewer</TableHead>
@@ -2255,7 +2298,7 @@ function UsersPanel({ users }: { users: ManagedUser[] }) {
             </TableHeader>
             <TableBody>
               {filtered.map((user) => (
-                <TableRow key={user.id}>
+                <Fragment key={user.id}><TableRow>
                   <TableCell>
                     <input type="checkbox" aria-label={`Select ${user.email}`}
                       checked={selected.includes(user.id)}
@@ -2266,29 +2309,35 @@ function UsersPanel({ users }: { users: ManagedUser[] }) {
                   <TableCell className="font-medium">
                     {user.github_login ? `@${user.github_login}` : "No GitHub"}
                   </TableCell>
+                  <TableCell className="capitalize">{user.role}</TableCell>
+                  <TableCell>
+                    <Badge className={user.email_status === "unauthorized" ? "border-slate-600 bg-slate-800 text-slate-300" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"}>
+                      {statusLabel[user.email_status]}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{user.reviewer_application_status || "—"}</TableCell>
                   <TableCell className="space-x-2">
                     <Button disabled={busy} variant="outline" size="sm"
-                      onClick={() => void issueInvites([user.id])}>Invite</Button>
+                      onClick={() => setMailIds([user.id])}>Email</Button>
+                    <Button disabled={busy} variant="outline" size="sm"
+                      onClick={() => void previewInvites([user.id])}>Invite</Button>
                     <Button disabled={busy} variant="outline" size="sm"
                       onClick={() => void issueToken(user.id)}>API token</Button>
                     <Button disabled={busy} variant="outline" size="sm"
                       onClick={() => void revokeToken(user.id)}>Revoke API</Button>
-                  </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell className="capitalize">{user.role}</TableCell>
-                  <TableCell>
-                    <Badge
-                      className={
-                        user.email_status === "unauthorized"
-                          ? "border-slate-600 bg-slate-800 text-slate-300"
-                          : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
-                      }
-                    >
-                      {statusLabel[user.email_status]}
-                    </Badge>
+                    <Button variant="ghost" size="sm" aria-expanded={expanded.includes(user.id)} onClick={() => setExpanded((current) => current.includes(user.id) ? current.filter((id) => id !== user.id) : [...current, user.id])}>
+                      {expanded.includes(user.id) ? "Hide details" : "Details"}
+                    </Button>
                   </TableCell>
                 </TableRow>
+                {expanded.includes(user.id) && <TableRow><TableCell colSpan={6} className="bg-slate-900/50 text-xs text-slate-300">
+                  <div className="flex flex-wrap gap-x-8 gap-y-2">
+                    <span>Email: <a className="text-sky-300" href={`mailto:${user.email}`}>{user.email}</a></span>
+                    <span>GitHub linked: {user.github_linked ? "Yes" : "No"}</span>
+                    <span>Can review: {user.can_review ? "Yes" : "No"}</span>
+                    <span className="font-mono">ID: {user.id}</span>
+                  </div>
+                </TableCell></TableRow>}</Fragment>
               ))}
             </TableBody>
           </UiTable>
@@ -2296,23 +2345,22 @@ function UsersPanel({ users }: { users: ManagedUser[] }) {
           <Empty text={query ? "No users match this search." : "No registered users yet."} />
         )}
       </CardContent>
-      <Dialog open={invites.length > 0} onOpenChange={(open) => { if (!open) setInvites([]); }}>
+      {mailIds.length > 0 && <MailComposer recipientIds={mailIds} onClose={() => setMailIds([])} onQueued={(count) => { setMessage(`${count} email${count === 1 ? "" : "s"} queued.`); setSelected([]); onMailQueued(); }} />}
+      <Dialog open={invitePreview.length > 0} onOpenChange={(open) => { if (!open && !busy) { setInvitePreview([]); setInviteIds([]); setInviteKey(""); } }}>
         <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
-          <DialogHeader><DialogTitle>Invitation messages</DialogTitle>
-            <DialogDescription>Copy each HTML message now. Closing this window discards the links.</DialogDescription>
+          <DialogHeader><DialogTitle>Invitation email preview</DialogTitle>
+            <DialogDescription>Template: Account invitation · {inviteIds.length} user{inviteIds.length === 1 ? "" : "s"}. The preview link is a placeholder. Confirming creates one-use links and queues the emails.</DialogDescription>
           </DialogHeader>
-          {invites.map((invite) => (
-            <div key={invite.user_id} className="space-y-2 border-t pt-3">
-              <p><strong>{invite.recipient}</strong> — {invite.subject}</p>
-              <Textarea readOnly value={invite.html} rows={5} aria-label={`HTML for ${invite.recipient}`} />
-              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(invite.html)}>
-                Copy HTML
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(invite.login_url)}>
-                Copy link
-              </Button>
+          {invitePreview.map((invite) => (
+            <div key={invite.user_id} className="space-y-2 border-t border-slate-800 pt-3">
+              <p className="text-sm text-slate-300"><strong>{invite.recipient}</strong> — {invite.subject}</p>
+              <iframe title={`Invitation preview for ${invite.recipient}`} sandbox="" srcDoc={invite.html} className="h-72 w-full rounded-sm border border-slate-700 bg-white" />
             </div>
           ))}
+          <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+            <Button variant="outline" disabled={busy} onClick={() => { setInvitePreview([]); setInviteIds([]); setInviteKey(""); }}>Cancel</Button>
+            <Button disabled={busy} onClick={() => void sendInvites()}>{busy ? "Queueing…" : `Confirm and send ${inviteIds.length}`}</Button>
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={issuedToken !== null} onOpenChange={(open) => { if (!open) setIssuedToken(null); }}>
@@ -2602,7 +2650,6 @@ function Sidebar({
         ["runs", "Run queue", Rocket],
         ["jobs", "Worker jobs", ServerCog],
         ["deliveries", "Outbound deliveries", Webhook],
-        ["mail", "Send email", Mail],
         ["cloud", "Cloud profiles", CloudCog],
         ["snapshots", "Database snapshots", History],
       ]

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
 import sys
@@ -28,7 +29,10 @@ def main() -> None:
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--input", required=True, help="JSON file path or - for stdin")
     parser.add_argument("--issue", action="store_true")
-    parser.add_argument("--base-url", default="https://dashboard.ai4sbench.org")
+    parser.add_argument(
+        "--base-url",
+        default=os.environ.get("TBCP_INVITE_BASE_URL") or "https://ai4sbench.org",
+    )
     args = parser.parse_args()
     raw_input = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8")
     recipients = json.loads(raw_input)

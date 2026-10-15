@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     smtp_timeout_seconds: int = Field(default=15, ge=1, le=120)
     form_mail_require_otp: bool = False
     website_public_base_url: str = "https://ai4sbench.org"
+    invite_base_url: str = "https://ai4sbench.org"
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
     max_active_runs: int = Field(default=1, ge=1, le=32)

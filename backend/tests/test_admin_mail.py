@@ -18,7 +18,7 @@ URL = "/api/v1/admin-mail"
 def user(login: str, role: str = "member") -> User:
     return User(
         id=uuid4(),
-        email=f"old-{login}@example.test",
+        email=f"old-{login}@example.com",
         hashed_password="not-used",
         is_active=True,
         is_superuser=False,
@@ -90,15 +90,7 @@ async def mail_rows(factory) -> list[OutboundDelivery]:
         )).all())
 
 
-async def use_same_oauth_email(factory, reviewer_id) -> None:
-    async with factory() as session:
-        account = await session.scalar(select(OAuthAccount).where(OAuthAccount.user_id == reviewer_id))
-        assert account is not None
-        account.account_email = "oauth-author@example.com"
-        await session.commit()
-
-
-def test_admin_mail_selects_oauth_addresses_and_queues_private_deliveries(tmp_path) -> None:
+def test_admin_mail_selects_users_and_queues_private_deliveries(tmp_path) -> None:
     settings = Settings(
         _env_file=None,
         environment="test",
@@ -128,13 +120,20 @@ def test_admin_mail_selects_oauth_addresses_and_queues_private_deliveries(tmp_pa
         listed = client.get(f"{URL}/recipients")
         assert listed.status_code == 200, listed.text
         items = {item["github_login"]: item for item in listed.json()["items"]}
-        assert set(items) == {"author", "reviewer"}
+        assert set(items) == {"author", "reviewer", "unlinked"}
         assert items["author"]["proposal_count"] == 1
         assert items["author"]["reviewer_statuses"] == ["pending"]
         assert items["reviewer"]["reviewer_statuses"] == ["approved"]
-        assert items["reviewer"]["email"] == "oauth-reviewer@example.com"
+        assert items["reviewer"]["email"] == "old-reviewer@example.com"
         assert "form-address@example.test" not in listed.text
-        assert "old-reviewer@example.test" not in listed.text
+
+        preview = client.post(f"{URL}/preview", json={
+            "subject": "News <today>", "body": "Hello <script>alert(1)</script>",
+            "signature": "Research & Operations",
+        })
+        assert preview.status_code == 200
+        assert "<!doctype html>" in preview.json()["html"]
+        assert "&lt;script&gt;" in preview.json()["html"]
 
         body = {
             "recipient_ids": [str(author.id), str(reviewer.id)],
@@ -145,7 +144,7 @@ def test_admin_mail_selects_oauth_addresses_and_queues_private_deliveries(tmp_pa
         headers = {"Idempotency-Key": "dashboard-send-1"}
         assert client.post(f"{URL}/deliveries", json=body).status_code == 422
         unknown = client.post(
-            f"{URL}/deliveries", headers=headers, json={**body, "recipient_ids": [str(unlinked.id)]}
+            f"{URL}/deliveries", headers=headers, json={**body, "recipient_ids": [str(uuid4())]}
         )
         assert unknown.status_code == 422
         duplicate = client.post(
@@ -164,7 +163,7 @@ def test_admin_mail_selects_oauth_addresses_and_queues_private_deliveries(tmp_pa
         rows = client.portal.call(mail_rows, app.state.session_factory)
         assert len(rows) == 2
         assert {tuple(item.payload["recipients"]) for item in rows} == {
-            ("oauth-author@example.com",), ("oauth-reviewer@example.com",)
+            ("old-author@example.com",), ("old-reviewer@example.com",)
         }
         for row in rows:
             assert row.state == "pending"
@@ -186,13 +185,12 @@ def test_admin_mail_selects_oauth_addresses_and_queues_private_deliveries(tmp_pa
         finally:
             client.portal.call(runner.engine.dispose)
 
-        client.portal.call(use_same_oauth_email, app.state.session_factory, reviewer.id)
-        deduped = client.post(
+        second_send = client.post(
             f"{URL}/deliveries", headers={"Idempotency-Key": "dashboard-send-2"}, json=body
         )
-        assert deduped.status_code == 202, deduped.text
-        assert deduped.json()["queued_count"] == 1
-        assert len(client.portal.call(mail_rows, app.state.session_factory)) == 3
+        assert second_send.status_code == 202, second_send.text
+        assert second_send.json()["queued_count"] == 2
+        assert len(client.portal.call(mail_rows, app.state.session_factory)) == 4
 
 
 def test_admin_mail_requires_smtp(tmp_path) -> None:
