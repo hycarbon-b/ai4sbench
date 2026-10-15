@@ -27,6 +27,8 @@ def test_invitation_template_escapes_applicant_name() -> None:
     assert "Test <script>" not in rendered.html
     assert "tbinvite_example" in rendered.text
     assert "Connect GitHub" in rendered.text
+    assert "/auth/github/connect" not in rendered.html
+    assert "/auth/github/connect" not in rendered.text
 
 
 @pytest.mark.parametrize("base_url", ["https://dashboard.ai4sbench.org", "https://ai4sbench.org"])
@@ -42,7 +44,7 @@ def test_invitation_email_uses_env_base_url(tmp_path, monkeypatch, base_url: str
         smtp_server="smtp.example.test",
         smtp_from="no-reply@example.com",
     )
-    assert settings.invite_base_url == base_url
+    assert settings.invite_base_url == f"{base_url}/"
     app = create_app(settings)
     admin = User(
         id=uuid4(), email="admin@example.com", hashed_password="unused", is_active=True,
@@ -198,7 +200,7 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
         body = invitation.json()
         assert body["recipient"] == applicant.email
         assert "still under review" in body["html"]
-        assert body["login_url"].startswith("http://testserver/auth/invite#tbinvite_")
+        assert body["login_url"].startswith("https://ai4sbench.org/auth/invite#tbinvite_")
         assert "href=" in body["html"]
 
         early_token = client.post(f"/api/v1/users/{applicant.id}/api-tokens").json()["token"]

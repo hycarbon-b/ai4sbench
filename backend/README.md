@@ -219,10 +219,9 @@ not a synchronous SMTP send, and requires `TBCP_SMTP_ENABLED=true`.
 The **Invite** action previews the account invitation email before generating
 any token. Confirmation queues one-use invitation emails through
 `POST /api/v1/users/invites/send` with an `Idempotency-Key`. Set
-`TBCP_INVITE_BASE_URL` to the public origin that serves `/auth/invite` and
-`/api/v1/auth/invites/redeem`. It can be the Dashboard domain, or the main
-domain if both paths are routed to this API. When unset, production uses
-`TBCP_WORKER_API_BASE_URL` and local development uses the request origin.
+`TBCP_INVITE_BASE_URL` to the public origin that serves `/auth/invite`.
+The default is the main site, `https://ai4sbench.org`. Its invitation entry
+forwards the personal link to the control plane, where sign-in completes.
 
 After a Proposal-created Discord delivery succeeds, the backend records its
 Discord permalink in `proposals.discord_message_url`. The field is returned by

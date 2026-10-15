@@ -100,7 +100,6 @@ def render_reviewer_invite(name: str, login_url: str, kind: str) -> RenderedNoti
         "login_url": login_url,
         "message": message,
         "kind": kind,
-        "connect_url": login_url.split("/auth/invite#", 1)[0] + "/auth/github/connect",
     }
     return RenderedNotification(
         subject=subject,

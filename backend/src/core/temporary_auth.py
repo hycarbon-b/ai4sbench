@@ -133,15 +133,7 @@ async def invite_message(
         )
     token, expires_at = await issue_credential(session, user, "invite") if issue else ("PREVIEW", 0)
     recipient = user.email
-    settings = request.app.state.settings
-    base_url = settings.invite_base_url
-    if not base_url:
-        base_url = (
-            settings.worker_api_base_url.rstrip("/")
-            if settings.environment == "production"
-            else str(request.base_url).rstrip("/")
-        )
-    login_url = f"{base_url}/auth/invite#{token}"
+    login_url = f"{request.app.state.settings.invite_base_url.rstrip('/')}/auth/invite#{token}"
     rendered = render_reviewer_invite(application.name if application else user.email, login_url, kind)
     return InviteMessage(
         user_id=str(user.id),

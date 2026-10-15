@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <title>AI4S-Bench invitation</title>
+  <style>
+    body { margin: 0; background: #f7f9fc; color: #0d1730; font: 16px Arial, sans-serif; }
+    main { max-width: 520px; margin: 12vh auto; padding: 32px; background: #fff; border: 1px solid #dde5f0; }
+    strong { display: block; margin-bottom: 22px; color: #2474ff; }
+    h1 { font-size: 24px; }
+  </style>
+</head>
+<body>
+  <main>
+    <strong>AI4S-Bench</strong>
+    <h1>Opening your invitation</h1>
+    <p id="state">Connecting to your account…</p>
+  </main>
+  <script>
+    const token = location.hash.slice(1);
+    history.replaceState(null, "", location.pathname);
+    const state = document.getElementById("state");
+    if (!/^tbinvite_[A-Za-z0-9_-]+$/.test(token)) {
+      state.textContent = "This invitation link is missing or invalid.";
+    } else {
+      fetch("../../data/site.json")
+        .then((response) => {
+          if (!response.ok) throw new Error("The sign-in service is unavailable.");
+          return response.json();
+        })
+        .then((site) => {
+          const controlPlane = new URL(site.control_plane_url);
+          if (controlPlane.protocol !== "https:") throw new Error("The sign-in service is unavailable.");
+          location.replace(`${controlPlane.origin}/auth/invite#${token}`);
+        })
+        .catch(() => { state.textContent = "The sign-in service is unavailable. Try again later."; });
+    }
+  </script>
+</body>
+</html>

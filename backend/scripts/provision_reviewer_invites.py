@@ -31,7 +31,7 @@ def main() -> None:
     parser.add_argument("--issue", action="store_true")
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("TBCP_INVITE_BASE_URL") or "https://dashboard.ai4sbench.org",
+        default=os.environ.get("TBCP_INVITE_BASE_URL") or "https://ai4sbench.org",
     )
     args = parser.parse_args()
     raw_input = sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8")
