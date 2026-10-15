@@ -4,6 +4,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
     smtp_timeout_seconds: int = Field(default=15, ge=1, le=120)
     form_mail_require_otp: bool = False
     website_public_base_url: str = "https://ai4sbench.org"
+    invite_base_url: str = ""
     job_token_secret: SecretStr = SecretStr("development-job-secret-change-me")
     execution_mode: Literal["fake", "ec2"] = "fake"
     max_active_runs: int = Field(default=1, ge=1, le=32)
@@ -151,6 +153,30 @@ class Settings(BaseSettings):
     @classmethod
     def parse_ai_reviewer_pool(cls, value: object) -> object:
         return json.loads(value) if isinstance(value, str) else value
+
+    @field_validator("invite_base_url")
+    @classmethod
+    def validate_invite_base_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if not value:
+            return ""
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("TBCP_INVITE_BASE_URL must be an HTTP(S) origin without a path")
+        try:
+            if parsed.port == 0:
+                raise ValueError("Port zero is not a public origin")
+        except ValueError as exc:
+            raise ValueError("TBCP_INVITE_BASE_URL has an invalid port") from exc
+        return value
 
     @model_validator(mode="after")
     def validate_production(self) -> Settings:

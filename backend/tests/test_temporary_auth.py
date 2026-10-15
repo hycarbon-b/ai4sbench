@@ -29,6 +29,58 @@ def test_invitation_template_escapes_applicant_name() -> None:
     assert "Connect GitHub" in rendered.text
 
 
+@pytest.mark.parametrize("base_url", ["https://dashboard.ai4sbench.org", "https://ai4sbench.org"])
+def test_invitation_email_uses_env_base_url(tmp_path, monkeypatch, base_url: str) -> None:
+    monkeypatch.setenv("TBCP_INVITE_BASE_URL", f"{base_url}/")
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url=f"sqlite:///{(tmp_path / 'invite-base.sqlite3').as_posix()}",
+        auto_create_schema=True,
+        execution_mode="fake",
+        smtp_enabled=True,
+        smtp_server="smtp.example.test",
+        smtp_from="no-reply@example.com",
+    )
+    assert settings.invite_base_url == base_url
+    app = create_app(settings)
+    admin = User(
+        id=uuid4(), email="admin@example.com", hashed_password="unused", is_active=True,
+        is_verified=True, role="admin", email_status="authorized",
+    )
+    recipient = User(
+        id=uuid4(), email="recipient@example.com", hashed_password="unused", is_active=True,
+        is_verified=False, role="member", email_status="unauthorized",
+    )
+    app.dependency_overrides[current_active_user] = lambda: admin
+
+    async def seed() -> None:
+        async with app.state.session_factory() as session:
+            session.add(recipient)
+            await session.commit()
+
+    async def invitation_delivery() -> OutboundDelivery | None:
+        async with app.state.session_factory() as session:
+            return await session.scalar(
+                select(OutboundDelivery).where(OutboundDelivery.event_type == "account_invite")
+            )
+
+    with TestClient(app) as client:
+        asyncio.run(seed())
+        request = {"user_ids": [str(recipient.id)]}
+        preview = client.post("/api/v1/users/invites/preview", json=request)
+        assert preview.status_code == 200, preview.text
+        assert f"{base_url}/auth/invite#PREVIEW" in preview.json()["items"][0]["html"]
+        sent = client.post(
+            "/api/v1/users/invites/send", json=request,
+            headers={"Idempotency-Key": "base-url-test"},
+        )
+        assert sent.status_code == 202, sent.text
+        delivery = asyncio.run(invitation_delivery())
+        assert delivery is not None
+        assert f"{base_url}/auth/invite#tbinvite_" in delivery.payload["html"]
+
+
 def test_github_binding_rejects_an_identity_owned_by_another_user() -> None:
     current = User(id=uuid4(), email="current@example.test", role="member")
     current.oauth_accounts = []
