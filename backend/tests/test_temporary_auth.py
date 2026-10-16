@@ -154,13 +154,17 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
         id=uuid4(), email="reviewer@example.test", hashed_password="unused", is_active=True,
         is_verified=False, role="member", email_status="unauthorized",
     )
+    regular_user = User(
+        id=uuid4(), email="member@example.test", hashed_password="unused", is_active=True,
+        is_verified=True, role="member", email_status="authorized",
+    )
     app.dependency_overrides[current_active_user] = lambda: admin
 
     with TestClient(app) as client:
         async def seed() -> None:
             async with app.state.session_factory() as session:
                 applicant.oauth_accounts = []
-                session.add(applicant)
+                session.add_all([applicant, regular_user])
                 session.add(ReviewerApplication(
                     schema_version="tb-reviewer-application/v1", name="Test Reviewer",
                     affiliation="Example", email=applicant.email, github=None,
@@ -174,6 +178,9 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
         assert users.status_code == 200, users.text
         listed = next(item for item in users.json()["items"] if item["id"] == str(applicant.id))
         assert listed["name"] == "Test Reviewer"
+        regular = next(item for item in users.json()["items"] if item["id"] == str(regular_user.id))
+        assert "name" in regular
+        assert regular["name"] is None
         preview = client.post("/api/v1/users/invites/preview", json={"user_ids": [str(applicant.id)]})
         assert preview.status_code == 200, preview.text
         assert "<!doctype html>" in preview.json()["items"][0]["html"]
