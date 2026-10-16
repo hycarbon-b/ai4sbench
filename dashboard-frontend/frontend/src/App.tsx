@@ -2332,6 +2332,7 @@ function UsersPanel({ users, onMailQueued }: { users: ManagedUser[]; onMailQueue
                 </TableRow>
                 {expanded.includes(user.id) && <TableRow><TableCell colSpan={6} className="bg-slate-900/50 text-xs text-slate-300">
                   <div className="flex flex-wrap gap-x-8 gap-y-2">
+                    {user.name && <span>Name: {user.name}</span>}
                     <span>Email: <a className="text-sky-300" href={`mailto:${user.email}`}>{user.email}</a></span>
                     <span>GitHub linked: {user.github_linked ? "Yes" : "No"}</span>
                     <span>Can review: {user.can_review ? "Yes" : "No"}</span>

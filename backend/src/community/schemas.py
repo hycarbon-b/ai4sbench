@@ -310,6 +310,7 @@ class ReviewerApplicationListResponse(BaseModel):
 class AdminUserResponse(BaseModel):
     id: str
     email: str
+    name: str | None = None
     github_login: str | None
     role: str
     email_status: Literal["unauthorized", "from_github_oauth", "authorized"]

@@ -170,6 +170,10 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
                 await session.commit()
 
         asyncio.run(seed())
+        users = client.get("/api/v1/users")
+        assert users.status_code == 200, users.text
+        listed = next(item for item in users.json()["items"] if item["id"] == str(applicant.id))
+        assert listed["name"] == "Test Reviewer"
         preview = client.post("/api/v1/users/invites/preview", json={"user_ids": [str(applicant.id)]})
         assert preview.status_code == 200, preview.text
         assert "<!doctype html>" in preview.json()["items"][0]["html"]
