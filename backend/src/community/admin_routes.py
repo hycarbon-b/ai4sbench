@@ -47,6 +47,7 @@ async def list_users(session: SessionDep) -> AdminUserListResponse:
             AdminUserResponse(
                 id=str(user.id),
                 email=user.email,
+                name=(application_by_user[user.id].name if user.id in application_by_user else None),
                 github_login=user.github_login,
                 role=user.role,
                 email_status=user.email_status,

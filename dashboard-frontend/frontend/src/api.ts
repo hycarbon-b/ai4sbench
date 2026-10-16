@@ -9,6 +9,7 @@ export type User = {
 export type ManagedUser = {
   id: string;
   email: string;
+  name: string | null;
   github_login: string | null;
   role: string;
   email_status: "unauthorized" | "from_github_oauth" | "authorized";
