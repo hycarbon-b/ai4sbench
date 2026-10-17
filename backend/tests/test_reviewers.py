@@ -27,16 +27,14 @@ def make_user(role: str, github_login: str) -> User:
 
 def reviewer_payload() -> dict[str, object]:
     return {
-        "schema_version": "tb-reviewer-application/v1",
+        "schema_version": "tb-reviewer-application/v2",
         "name": "Ada Reviewer",
         "affiliation": "Example Materials Institute",
         "email": "Ada.Reviewer@example.test",
         "github": None,
         "role": "Principal research scientist",
-        "domains": ["materials-science", "ai-ml"],
-        "domains_display": ["Materials Science", "AI / ML"],
-        "field": "machine-learning-potentials",
-        "subfield": "Machine-learning potentials",
+        "domain": "Materials Science, AI / ML",
+        "field_name": "Machine-learning potentials",
         "research_background": (
             "I develop and validate machine-learning interatomic potentials, with experience "
             "reviewing reproducibility, evaluation protocols, and scientific software artifacts."
@@ -81,7 +79,9 @@ def test_reviewer_application_submission_admin_decision_and_access() -> None:
             assert application["email"] == "ada.reviewer@example.test"
             assert application["github"] == "approved-reviewer"
             assert application["submitted_by_login"] == "approved-reviewer"
-            assert application["domains_display"] == ["Materials Science", "AI / ML"]
+            assert application["domain"] == "Materials Science, AI / ML"
+            assert application["field_name"] == "Machine-learning potentials"
+            assert "domains_display" not in application
 
             approved = client.patch(
                 f"/api/v1/reviewer-applications/{application_id}",
@@ -120,9 +120,13 @@ def test_reviewer_application_validation_and_admin_errors() -> None:
 
         with TestClient(app) as client:
             invalid = reviewer_payload()
-            invalid["domains"] = ["chemistry"]
+            invalid["domain"] = "Unknown domain"
             rejected = client.post("/api/v1/reviewers", json=invalid)
             assert rejected.status_code == 422
+
+            legacy = reviewer_payload()
+            legacy["schema_version"] = "tb-reviewer-application/v1"
+            assert client.post("/api/v1/reviewers", json=legacy).status_code == 422
 
             impersonated = reviewer_payload()
             impersonated["github"] = "someone-else"

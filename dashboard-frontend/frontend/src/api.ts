@@ -74,10 +74,8 @@ export type ReviewerApplication = {
   email: string;
   github: string | null;
   role: string | null;
-  domains: string[];
-  domains_display: string[];
-  field: string | null;
-  subfield: string | null;
+  domain: string;
+  field_name: string | null;
   research_background: string;
   status: ReviewerApplicationStatus;
   admin_notes: string | null;

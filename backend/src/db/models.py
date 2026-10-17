@@ -350,10 +350,8 @@ class ReviewerApplication(Base):
     email: Mapped[str] = mapped_column(String(200), index=True)
     github: Mapped[str | None] = mapped_column(String(100), index=True)
     role: Mapped[str | None] = mapped_column(String(200))
-    domains: Mapped[list[str]] = mapped_column(JSON, default=list)
-    domains_display: Mapped[list[str]] = mapped_column(JSON, default=list)
-    field: Mapped[str | None] = mapped_column(String(80))
-    subfield: Mapped[str | None] = mapped_column(String(200))
+    domain: Mapped[str] = mapped_column(String(160))
+    field_name: Mapped[str | None] = mapped_column(String(160))
     research_background: Mapped[str] = mapped_column(Text)
     status: Mapped[ReviewerApplicationStatus] = mapped_column(
         SAEnum(
@@ -374,7 +372,6 @@ class ReviewerApplication(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-
 
 class EmailVerificationChallenge(Base):
     """Short-lived email proof scoped to one purpose and optional account."""

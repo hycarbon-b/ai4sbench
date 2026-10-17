@@ -2488,7 +2488,7 @@ function ReviewerApplicationsPanel({
                 </TableCell>
                 <TableCell>
                   <p className="text-slate-300">
-                    {application.subfield || application.domains_display.join(", ")}
+                    {application.field_name || application.domain}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {application.role || "Position not provided"}
@@ -2526,7 +2526,7 @@ function ReviewerApplicationsPanel({
                   <dt className="text-slate-500">Position</dt>
                   <dd className="text-slate-300">{selected.role || "Not provided"}</dd>
                   <dt className="text-slate-500">Specific field</dt>
-                  <dd className="text-slate-300">{selected.subfield || "Not provided"}</dd>
+                  <dd className="text-slate-300">{selected.field_name || "Not provided"}</dd>
                   <dt className="text-slate-500">Signed-in identity</dt>
                   <dd className="text-slate-300">
                     {selected.submitted_by_login ? `@${selected.submitted_by_login}` : "Anonymous submission"}
@@ -2540,7 +2540,7 @@ function ReviewerApplicationsPanel({
                 <div>
                   <p className="mb-2 font-mono text-[10px] uppercase tracking-wide text-slate-500">Review domains</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {selected.domains_display.map((domain) => (
+                    {selected.domain.split(", ").map((domain) => (
                       <Badge key={domain} className="border-slate-700 bg-slate-900 text-slate-300">{domain}</Badge>
                     ))}
                   </div>

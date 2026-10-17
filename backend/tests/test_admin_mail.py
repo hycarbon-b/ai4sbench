@@ -51,7 +51,8 @@ async def seed(factory, author: User, reviewer: User, unlinked: User) -> None:
             evidence="Local test evidence",
         ))
         session.add(ReviewerApplication(
-            schema_version="tb-reviewer-application/v1",
+            schema_version="tb-reviewer-application/v2",
+            domain="Physics",
             name="Reviewer",
             affiliation="Example Institute",
             email="form-address@example.test",
@@ -61,7 +62,8 @@ async def seed(factory, author: User, reviewer: User, unlinked: User) -> None:
             status="approved",
         ))
         session.add(ReviewerApplication(
-            schema_version="tb-reviewer-application/v1",
+            schema_version="tb-reviewer-application/v2",
+            domain="Physics",
             name="Author who also applied",
             affiliation="Example Institute",
             email="author-form@example.test",
@@ -71,7 +73,8 @@ async def seed(factory, author: User, reviewer: User, unlinked: User) -> None:
             status="pending",
         ))
         session.add(ReviewerApplication(
-            schema_version="tb-reviewer-application/v1",
+            schema_version="tb-reviewer-application/v2",
+            domain="Physics",
             name="Unlinked applicant",
             affiliation="Example Institute",
             email="unlinked-form@example.test",
