@@ -222,6 +222,21 @@ def test_rejects_other_category_and_invalid_result(setup):
     assert post(client, body).status_code == 422
 
 
+@pytest.mark.parametrize("status", ["completed", "unavailable"])
+def test_github_rubric_link_uses_review_repository_and_checkout_commit(status):
+    data = payload()
+    if status == "unavailable":
+        data.update(status=status, result=None)
+    body = AIReviewSubmission.model_validate(data)
+    rendered = render_github(body, AIReviewPublication())
+    assert (
+        f"[Rubric](https://github.com/{body.repository}/blob/"
+        f"{body.workflow_sha}/rubrics/task-proposal.md)"
+    ) in rendered
+    assert body.upstream_sha not in rendered
+    assert "harbor-framework/terminal-bench-science" not in rendered
+
+
 def test_rerun_updates_bot_comment_and_discord_message(setup):
     client, app, runner, github, fetch, discord = setup
     assert post(client).status_code == 202
@@ -231,12 +246,15 @@ def test_rerun_updates_bot_comment_and_discord_message(setup):
     assert discord.call_args.args[1] == "POST"
     assert discord.call_args.kwargs["payload"]["allowed_mentions"] == {"parse": []}
     second = payload(102)
+    second["workflow_sha"] = "c" * 40
     second["result"]["decision"] = "Uncertain"
     assert post(client, second).status_code == 202
     pump(client, runner)
     pump(client, runner)
     assert len(github.comments) == 1
     assert "Uncertain" in github.comments[0]["body"]
+    assert f"/blob/{second['workflow_sha']}/rubrics/task-proposal.md" in github.comments[0]["body"]
+    assert f"/blob/{payload()['workflow_sha']}/rubrics/task-proposal.md" not in github.comments[0]["body"]
     assert discord.call_args.args[1] == "PATCH"
     assert discord.call_args.kwargs["message_id"] == "123"
     assert discord.call_args.kwargs["thread_id"] == "456"
