@@ -99,11 +99,58 @@ review</strong>. The <a href="../submit-proposal/">proposal guide</a> explains h
 Discussion. Include that Discussion URL in your PR description. AI review
 alone is not approval.</p>
 <h2 id="build-the-task">Build the task</h2>
+<p>Fork the <a href="https://github.com/AI4S-Bench/ai4s-benchmark">benchmark repository</a>,
+then clone your fork and create a branch. Replace <code>YOUR_GITHUB_USERNAME</code> with
+your GitHub account:</p>
+<pre><code class="language-bash">git clone https://github.com/YOUR_GITHUB_USERNAME/ai4s-benchmark.git
+cd ai4s-benchmark
+git switch -c add-inverse-problems-task
+</code></pre>
 <p>Place a task under <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code>. The first domain in
 the proposal is primary and determines <code>&lt;domain&gt;</code>; the proposal's research
-field within it determines <code>&lt;field&gt;</code>. See the <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md#required-task-layout">seven supported domain slugs
-and metadata rules</a>.
-Follow that guide and include at least:</p>
+field within it determines <code>&lt;field&gt;</code>. Use one of these seven values for the
+folder and <code>[metadata].domain</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Proposal domain</th>
+<th><code>&lt;domain&gt;</code> value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Materials Science</td>
+<td><code>materials-science</code></td>
+</tr>
+<tr>
+<td>Physics</td>
+<td><code>physics</code></td>
+</tr>
+<tr>
+<td>Chemistry</td>
+<td><code>chemistry</code></td>
+</tr>
+<tr>
+<td>Biology</td>
+<td><code>biology</code></td>
+</tr>
+<tr>
+<td>AI / ML</td>
+<td><code>ai-ml</code></td>
+</tr>
+<tr>
+<td>Applied Mathematics</td>
+<td><code>applied-mathematics</code></td>
+</tr>
+<tr>
+<td>Interdisciplinary</td>
+<td><code>interdisciplinary</code></td>
+</tr>
+</tbody>
+</table>
+<p>Set <code>[metadata].field</code> to the <code>&lt;field&gt;</code> folder slug as well. See the
+<a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md#required-task-layout">benchmark contribution rules</a>
+for the metadata requirements. Include at least:</p>
 <table>
 <thead>
 <tr>
@@ -134,10 +181,14 @@ Follow that guide and include at least:</p>
 </tr>
 </tbody>
 </table>
-<p>Use an identifier such as <code>ai4sbench/my-task</code> for <code>[task].name</code>. Make shell
-scripts executable and use LF line endings. The verifier should emit a
-numeric reward; demonstrate that the Oracle succeeds and a no-op agent does
-not. See the <a href="../example/">complete example</a>.</p>
+<p>For instructions on writing these files, follow Harbor's
+<a href="https://docs.harborframework.com/tutorials/create-a-task">Create a task tutorial</a>
+or the <a href="https://github.com/harbor-framework/terminal-bench-science/blob/main/CONTRIBUTING.md">Terminal-Bench Science contribution guide</a>.
+Apply this benchmark's domain and metadata rules to their examples. Use an
+identifier such as <code>ai4sbench/my-task</code> for <code>[task].name</code> and make shell
+scripts executable. The verifier should emit a numeric reward; demonstrate
+that the Oracle succeeds and a no-op agent does not. See the
+<a href="../example/">complete example</a>.</p>
 <p>For example, a new task in <code>tasks/physics/inverse-problems/my-task/</code> includes:</p>
 <pre><code class="language-toml">[metadata]
 domain = &quot;physics&quot;
@@ -146,11 +197,30 @@ field = &quot;inverse-problems&quot;
 <p>The PR check requires these two keys to match the folders for new tasks.
 Existing task repairs keep their current paths.</p>
 <h2 id="validate-and-open-the-pr">Validate and open the PR</h2>
-<p>Install the pinned runtime described in
-<a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/bench/README.md">bench/README.md</a>,
-then run Harbor from the repository root:</p>
-<pre><code class="language-bash">harbor run -p tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt; -a oracle -e docker
-harbor run -p tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt; -a nop -e docker
+<p>Install the pinned Harbor release described in
+<a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/bench/README.md">bench/README.md</a>
+in Linux or WSL, and ensure Docker is running:</p>
+<pre><code class="language-bash">uv tool install --no-build --no-cache --python 3.12 &quot;harbor==0.20.0&quot;
+harbor --version
+docker ps
+</code></pre>
+<p>From the repository root, run the Oracle and no-op checks for your task. The
+Oracle should earn reward <code>1</code>; <code>nop</code> should earn <code>0</code>:</p>
+<pre><code class="language-bash">harbor run -p tasks/physics/inverse-problems/my-task -a oracle -e docker
+harbor run -p tasks/physics/inverse-problems/my-task -a nop -e docker
+</code></pre>
+<p>Then try a real agent and model to gauge difficulty. For example, with the
+model provider's credentials configured locally:</p>
+<pre><code class="language-bash">harbor run -p tasks/physics/inverse-problems/my-task -a claude-code -m anthropic/claude-haiku-4-5 -e docker
+</code></pre>
+<p>See Harbor's <a href="https://docs.harborframework.com/jobs/run-a-job">run command guide</a>
+for other agents and models.</p>
+<p>After adding your task files, push the branch and open the PR form with the
+GitHub CLI installed and signed in:</p>
+<pre><code class="language-bash">git add tasks/physics/inverse-problems/my-task/
+git commit -m &quot;Add inverse problems task&quot;
+git push -u origin add-inverse-problems-task
+gh pr create --repo AI4S-Bench/ai4s-benchmark --base main --head YOUR_GITHUB_USERNAME:add-inverse-problems-task --web
 </code></pre>
 <p>Open a PR against <code>AI4S-Bench/ai4s-benchmark</code> with a summary of the task,
 the <strong>human-approved proposal Discussion URL</strong>, the validation commands,
