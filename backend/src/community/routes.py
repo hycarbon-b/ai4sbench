@@ -44,6 +44,7 @@ from src.community.schemas import (
     PullRequestInstructionsResponse,
     ReviewerApplicationCreatedResponse,
     ReviewerApplicationSubmission,
+    reviewer_slug_alpha,
 )
 from src.core.identity import OAuthAccount, User, current_active_user, current_optional_user
 from src.db.database import get_session
@@ -211,8 +212,12 @@ async def create_reviewer_application(
             raise HTTPException(status_code=403, detail="Email verification is required")
         await consume_reviewer_otp(session, body.email, body.email_verification_token, str(user.id))
     item = ReviewerApplication(
-        **body.model_dump(exclude={"email_verification_token", "github"}),
+        **body.model_dump(exclude={"email_verification_token", "github", "domain", "field_name"}),
         github=github_login,
+        domains=[reviewer_slug_alpha(domain) for domain in body.domain_labels],
+        domains_display=body.domain_labels,
+        field=reviewer_slug_alpha(body.field_name) if body.field_name else None,
+        subfield=body.field_name,
         status="pending",
         submitted_by_login=github_login,
         user_id=user.id,

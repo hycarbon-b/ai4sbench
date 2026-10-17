@@ -27,7 +27,7 @@ PROPOSAL_DOMAIN_OPTIONS = (
 )
 
 
-REVIEWER_APPLICATION_SCHEMA_VERSION = "tb-reviewer-application/v1"
+REVIEWER_APPLICATION_SCHEMA_VERSION = "tb-reviewer-application/v2"
 
 
 def reviewer_slug_alpha(value: str) -> str:
@@ -190,22 +190,50 @@ class ProposalSubmission(BaseModel):
 
 
 class ReviewerApplicationSubmission(BaseModel):
-    """Public reviewer-intake contract emitted by the Website form."""
+    """Reviewer intake using the same domain/field shape as task proposals."""
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["tb-reviewer-application/v1"] = REVIEWER_APPLICATION_SCHEMA_VERSION
+    schema_version: Literal["tb-reviewer-application/v1", "tb-reviewer-application/v2"] = (
+        REVIEWER_APPLICATION_SCHEMA_VERSION
+    )
     name: str = Field(min_length=2, max_length=200)
     affiliation: str = Field(min_length=2, max_length=300)
     email: str = Field(min_length=5, max_length=200)
     github: str | None = Field(default=None, max_length=100)
     role: str | None = Field(default=None, max_length=200)
-    domains: list[str] = Field(min_length=1, max_length=20)
-    domains_display: list[str] = Field(min_length=1, max_length=20)
-    field: str | None = Field(default=None, max_length=79)
-    subfield: str | None = Field(default=None, max_length=200)
+    domain: str = Field(min_length=2, max_length=160)
+    field_name: str | None = Field(default=None, max_length=160)
     research_background: str = Field(min_length=60, max_length=4_000)
     email_verification_token: str | None = Field(default=None, min_length=32, max_length=128)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_v1_fields(cls, value: object) -> object:
+        """Translate the v1 Website payload without losing its original version."""
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        if "domain" not in data:
+            display_domains = data.pop("domains_display", None)
+            if display_domains is None:
+                display_domains = data.pop("domains", None)
+                if isinstance(display_domains, list):
+                    display_domains = [
+                        next(
+                            (label for label in PROPOSAL_DOMAIN_OPTIONS if reviewer_slug_alpha(label) == slug),
+                            slug,
+                        )
+                        for slug in display_domains
+                    ]
+            if isinstance(display_domains, list):
+                data["domain"] = ", ".join(str(item).strip() for item in display_domains if str(item).strip())
+        data.pop("domains", None)
+        data.pop("domains_display", None)
+        if "field_name" not in data:
+            data["field_name"] = data.pop("subfield", None)
+        data.pop("field", None)
+        return data
 
     @field_validator(
         "name",
@@ -213,8 +241,8 @@ class ReviewerApplicationSubmission(BaseModel):
         "email",
         "github",
         "role",
-        "field",
-        "subfield",
+        "domain",
+        "field_name",
         "research_background",
         mode="before",
     )
@@ -242,33 +270,22 @@ class ReviewerApplicationSubmission(BaseModel):
             raise ValueError("github must be a GitHub username without @")
         return value
 
-    @field_validator("domains", "domains_display")
+    @field_validator("domain")
     @classmethod
-    def unique_nonempty_list(cls, value: list[str]) -> list[str]:
-        cleaned = [item.strip() for item in value]
-        if any(not item or len(item) > 200 for item in cleaned):
-            raise ValueError("domain entries must contain 1 to 200 characters")
-        if len(set(cleaned)) != len(cleaned):
-            raise ValueError("domain entries must be unique")
-        return cleaned
+    def normalize_domain_list(cls, value: str) -> str:
+        domains = [item.strip() for item in value.split(",") if item.strip()]
+        if not domains:
+            raise ValueError("domain must contain at least one domain")
+        if any(item not in PROPOSAL_DOMAIN_OPTIONS for item in domains):
+            raise ValueError("domain entries must use the selectable proposal domain labels")
+        normalized = ", ".join(dict.fromkeys(domains))
+        if len(normalized) > 160:
+            raise ValueError("normalized domain list must contain at most 160 characters")
+        return normalized
 
-    @model_validator(mode="after")
-    def matching_display_identifiers(self) -> ReviewerApplicationSubmission:
-        if len(self.domains) != len(self.domains_display):
-            raise ValueError("domains and domains_display must contain the same number of entries")
-        expected_domains = [reviewer_slug_alpha(item) for item in self.domains_display]
-        if any(not re.fullmatch(r"[a-z][a-z-]{1,78}", item) for item in self.domains):
-            raise ValueError("domains must contain lowercase ASCII letter-and-hyphen identifiers")
-        if self.domains != expected_domains:
-            raise ValueError("domains must match the slugs derived from domains_display")
-        if (self.field is None) != (self.subfield is None):
-            raise ValueError("field and subfield must either both be provided or both be null")
-        if self.subfield is not None:
-            if not re.fullmatch(r"[a-z][a-z-]{1,78}", self.field or ""):
-                raise ValueError("field must be a lowercase ASCII letter-and-hyphen identifier")
-            if self.field != reviewer_slug_alpha(self.subfield):
-                raise ValueError("field must match the slug derived from subfield")
-        return self
+    @property
+    def domain_labels(self) -> list[str]:
+        return [item.strip() for item in self.domain.split(",") if item.strip()]
 
 
 class ReviewerApplicationCreatedResponse(BaseModel):
@@ -287,6 +304,8 @@ class ReviewerApplicationCreatedResponse(BaseModel):
     domains_display: list[str]
     field: str | None
     subfield: str | None
+    domain: str
+    field_name: str | None
     research_background: str
     status: ReviewerApplicationStatus
     submitted_by_login: str | None

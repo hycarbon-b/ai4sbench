@@ -375,6 +375,16 @@ class ReviewerApplication(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    @property
+    def domain(self) -> str:
+        """Proposal-shaped domain value for API clients; legacy storage stays intact."""
+        return ", ".join(self.domains_display or [])
+
+    @property
+    def field_name(self) -> str | None:
+        """Proposal-shaped name for the legacy reviewer subfield value."""
+        return self.subfield
+
 
 class EmailVerificationChallenge(Base):
     """Short-lived email proof scoped to one purpose and optional account."""
