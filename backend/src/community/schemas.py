@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -28,14 +27,6 @@ PROPOSAL_DOMAIN_OPTIONS = (
 
 
 REVIEWER_APPLICATION_SCHEMA_VERSION = "tb-reviewer-application/v2"
-
-
-def reviewer_slug_alpha(value: str) -> str:
-    """Mirror the Website's NFKD ASCII-letter slug generation."""
-
-    normalized = unicodedata.normalize("NFKD", value)
-    ascii_letters = "".join(character for character in normalized if not unicodedata.combining(character))
-    return re.sub(r"^-+|-+$", "", re.sub(r"-{2,}", "-", re.sub(r"[^a-z]+", "-", ascii_letters.lower())))[:79]
 
 
 class ProposalSubmission(BaseModel):
@@ -194,9 +185,7 @@ class ReviewerApplicationSubmission(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["tb-reviewer-application/v1", "tb-reviewer-application/v2"] = (
-        REVIEWER_APPLICATION_SCHEMA_VERSION
-    )
+    schema_version: Literal["tb-reviewer-application/v2"] = REVIEWER_APPLICATION_SCHEMA_VERSION
     name: str = Field(min_length=2, max_length=200)
     affiliation: str = Field(min_length=2, max_length=300)
     email: str = Field(min_length=5, max_length=200)
@@ -206,34 +195,6 @@ class ReviewerApplicationSubmission(BaseModel):
     field_name: str | None = Field(default=None, max_length=160)
     research_background: str = Field(min_length=60, max_length=4_000)
     email_verification_token: str | None = Field(default=None, min_length=32, max_length=128)
-
-    @model_validator(mode="before")
-    @classmethod
-    def accept_legacy_v1_fields(cls, value: object) -> object:
-        """Translate the v1 Website payload without losing its original version."""
-        if not isinstance(value, dict):
-            return value
-        data = dict(value)
-        if "domain" not in data:
-            display_domains = data.pop("domains_display", None)
-            if display_domains is None:
-                display_domains = data.pop("domains", None)
-                if isinstance(display_domains, list):
-                    display_domains = [
-                        next(
-                            (label for label in PROPOSAL_DOMAIN_OPTIONS if reviewer_slug_alpha(label) == slug),
-                            slug,
-                        )
-                        for slug in display_domains
-                    ]
-            if isinstance(display_domains, list):
-                data["domain"] = ", ".join(str(item).strip() for item in display_domains if str(item).strip())
-        data.pop("domains", None)
-        data.pop("domains_display", None)
-        if "field_name" not in data:
-            data["field_name"] = data.pop("subfield", None)
-        data.pop("field", None)
-        return data
 
     @field_validator(
         "name",
@@ -283,11 +244,6 @@ class ReviewerApplicationSubmission(BaseModel):
             raise ValueError("normalized domain list must contain at most 160 characters")
         return normalized
 
-    @property
-    def domain_labels(self) -> list[str]:
-        return [item.strip() for item in self.domain.split(",") if item.strip()]
-
-
 class ReviewerApplicationCreatedResponse(BaseModel):
     """The stored applicant-facing record returned after public submission."""
 
@@ -300,10 +256,6 @@ class ReviewerApplicationCreatedResponse(BaseModel):
     email: str
     github: str | None
     role: str | None
-    domains: list[str]
-    domains_display: list[str]
-    field: str | None
-    subfield: str | None
     domain: str
     field_name: str | None
     research_background: str

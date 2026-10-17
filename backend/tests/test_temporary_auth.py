@@ -166,9 +166,9 @@ def test_invite_cookie_bearer_and_reviewer_permission(tmp_path) -> None:
                 applicant.oauth_accounts = []
                 session.add_all([applicant, regular_user])
                 session.add(ReviewerApplication(
-                    schema_version="tb-reviewer-application/v1", name="Test Reviewer",
+                    schema_version="tb-reviewer-application/v2", name="Test Reviewer",
                     affiliation="Example", email=applicant.email, github=None,
-                    domains=[], domains_display=[], research_background="Test background",
+                    domain="Physics", research_background="Test background",
                     status="pending", user_id=applicant.id,
                 ))
                 await session.commit()
