@@ -2166,7 +2166,7 @@ function UsersPanel({ users, onMailQueued }: { users: ManagedUser[]; onMailQueue
       (!roles.length || roles.includes(user.role)) &&
       (!emailStatuses.length || emailStatuses.includes(user.email_status)) &&
       (!reviewerStatuses.length || reviewerStatuses.includes(user.reviewer_application_status || "none")) &&
-      (!normalized || [user.github_login, user.email, user.role, user.email_status]
+      (!normalized || [user.name, user.github_login, user.email, user.role, user.email_status]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(normalized))),
     );
@@ -2253,7 +2253,7 @@ function UsersPanel({ users, onMailQueued }: { users: ManagedUser[]; onMailQueue
       <CardContent className="space-y-4">
         <Input
           aria-label="Search users"
-          placeholder="Search username, email, role, or email status"
+          placeholder="Search name, GitHub account, email, role, or email status"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
@@ -2306,8 +2306,20 @@ function UsersPanel({ users, onMailQueued }: { users: ManagedUser[]; onMailQueue
                         ? [...current, user.id]
                         : current.filter((id) => id !== user.id))} />
                   </TableCell>
-                  <TableCell className="font-medium">
-                    {user.github_login ? `@${user.github_login}` : "No GitHub"}
+                  <TableCell>
+                    <span className="block font-medium text-slate-100">{user.name || "Name unavailable"}</span>
+                    {user.github_login ? (
+                      <a
+                        className="mt-0.5 inline-block text-xs text-sky-300 hover:text-sky-200"
+                        href={`https://github.com/${encodeURIComponent(user.github_login)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        @{user.github_login}
+                      </a>
+                    ) : (
+                      <span className="mt-0.5 block text-xs text-slate-500">No GitHub account</span>
+                    )}
                   </TableCell>
                   <TableCell className="capitalize">{user.role}</TableCell>
                   <TableCell>
