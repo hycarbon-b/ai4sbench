@@ -4,6 +4,11 @@
 **Scope:** SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.
 **Method:** static comparison of model fields, schemas and route payload construction; review of migration chain; read-only production queries (`quick_check`, enum/value checks, relationship/document checks). No production data was changed.
 
+**Current contract update (2026-10-18):** The proposal PR guide now derives
+`tasks/<primary-domain>/<task-slug>/` and `task/<primary-domain>-<task-slug>`.
+`field` remains proposal metadata and is no longer a task-path segment. The
+findings below describe the dated baseline audit and are retained as history.
+
 ## Executive summary
 
 The highest-risk inconsistency is in proposal taxonomy: the proposal accepts multiple human-readable domains, but the PR guide interpolates that combined value directly into a repository path. This can yield an invalid `tasks/<domain>/<field>/<slug>` path. The proposal form's domain list also does not match the AI review rubric's scientific scope (tracked upstream as Issues [#44](https://github.com/AI4S-Bench/ai4s-benchmark/issues/44) and [#46](https://github.com/AI4S-Bench/ai4s-benchmark/issues/46)).

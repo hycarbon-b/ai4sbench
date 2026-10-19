@@ -1457,8 +1457,8 @@ async def pull_request_instructions(
     if not primary_domain or primary_domain == "unknown" or proposal.field == "unknown":
         raise HTTPException(status_code=422, detail="A primary domain and research field are required")
     return {
-        "branch": f"task/{primary_domain}-{proposal.field}-{proposal.task_slug}",
-        "task_path": f"tasks/{primary_domain}/{proposal.field}/{proposal.task_slug}",
+        "branch": f"task/{primary_domain}-{proposal.task_slug}",
+        "task_path": f"tasks/{primary_domain}/{proposal.task_slug}",
         "proposal_url": proposal.discussion_url or "",
         "compare_url": f"https://github.com/{repository}/compare/main..." if repository else "",
     }

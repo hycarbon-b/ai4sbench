@@ -97,15 +97,14 @@
               
                 <h1 id="complete-example-amr-poisson-task-fixture">Complete example: AMR Poisson task fixture</h1>
 <p>The repository includes
-<a href="https://github.com/AI4S-Bench/ai4s-benchmark/tree/main/tasks/mathematical-sciences/applied-mathematics/amr-poisson-contribution-example"><code>amr-poisson-contribution-example</code></a>.
+<a href="https://github.com/AI4S-Bench/ai4s-benchmark/tree/main/tasks/applied-mathematics/amr-poisson-contribution-example"><code>amr-poisson-contribution-example</code></a>.
 It is a minimal <strong>Harbor contribution fixture</strong>: the instruction asks the
 agent to write a specific marker, and the verifier checks it. It demonstrates
 the packaging and validation workflow, not a scientific AMR Poisson problem.
-Its older <code>mathematical-sciences</code> directory is retained for compatibility;
-new tasks use one of the seven primary-domain folders in
+It uses the <code>applied-mathematics</code> domain folder; new tasks use one of the seven primary-domain folders in
 <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md#required-task-layout">CONTRIBUTING.md</a>.</p>
 <h2 id="files">Files</h2>
-<pre><code class="language-text">tasks/mathematical-sciences/applied-mathematics/amr-poisson-contribution-example/
+<pre><code class="language-text">tasks/applied-mathematics/amr-poisson-contribution-example/
 ├── task.toml
 ├── instruction.md
 ├── environment/Dockerfile
@@ -113,8 +112,8 @@ new tasks use one of the seven primary-domain folders in
 └── tests/test.sh
 </code></pre>
 <p><code>task.toml</code> declares <code>[task].name = "ai4sbench/amr-poisson-contribution-example"</code>
-and records its existing folder names in <code>[metadata].domain</code> and
-<code>[metadata].field</code>.
+and records its domain folder in <code>[metadata].domain</code>. Its <code>[metadata].field</code>
+describes the research area without adding a path segment.
 <code>instruction.md</code> specifies the output. The Dockerfile provides the runtime,
 <code>solution/solve.sh</code> is the Oracle, and <code>tests/test.sh</code> writes <code>1</code> or <code>0</code> to
 <code>/logs/verifier/reward.txt</code> after checking the output.</p>
@@ -122,8 +121,8 @@ and records its existing folder names in <code>[metadata].domain</code> and
 <p>Set up the pinned Harbor runtime as described in
 <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/bench/README.md"><code>bench/README.md</code></a>.
 From the benchmark repository root, run:</p>
-<pre><code class="language-bash">harbor run -p tasks/mathematical-sciences/applied-mathematics/amr-poisson-contribution-example -a oracle -e docker
-harbor run -p tasks/mathematical-sciences/applied-mathematics/amr-poisson-contribution-example -a nop -e docker
+<pre><code class="language-bash">harbor run -p tasks/applied-mathematics/amr-poisson-contribution-example -a oracle -e docker
+harbor run -p tasks/applied-mathematics/amr-poisson-contribution-example -a nop -e docker
 </code></pre>
 <p>The Oracle run should report reward <code>1.0</code>; the no-op run should report <code>0.0</code>.
 This positive and negative check confirms that the verifier discriminates

@@ -106,10 +106,10 @@ your GitHub account:</p>
 cd ai4s-benchmark
 git switch -c add-inverse-problems-task
 </code></pre>
-<p>Place a task under <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code>. The first domain in
-the proposal is primary and determines <code>&lt;domain&gt;</code>; the proposal's research
-field within it determines <code>&lt;field&gt;</code>. Use one of these seven values for the
-folder and <code>[metadata].domain</code>:</p>
+<p>Place a task under <code>tasks/&lt;domain&gt;/&lt;task-slug&gt;/</code>. The first domain in the
+proposal is primary and determines <code>&lt;domain&gt;</code>. The proposal's research field
+is descriptive metadata and does not add a path segment. Use one of these seven
+values for the folder and <code>[metadata].domain</code>:</p>
 <table>
 <thead>
 <tr>
@@ -148,7 +148,7 @@ folder and <code>[metadata].domain</code>:</p>
 </tr>
 </tbody>
 </table>
-<p>Set <code>[metadata].field</code> to the <code>&lt;field&gt;</code> folder slug as well. See the
+<p>You may retain the research field in <code>[metadata].field</code>. See the
 <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/CONTRIBUTING.md#required-task-layout">benchmark contribution rules</a>
 for the metadata requirements. Include at least:</p>
 <table>
@@ -161,7 +161,7 @@ for the metadata requirements. Include at least:</p>
 <tbody>
 <tr>
 <td><code>task.toml</code></td>
-<td>Harbor task metadata, including <code>[metadata].domain</code>, <code>[metadata].field</code>, and <code>[task].name</code></td>
+<td>Harbor task metadata, including <code>[metadata].domain</code> and <code>[task].name</code></td>
 </tr>
 <tr>
 <td><code>instruction.md</code></td>
@@ -189,13 +189,13 @@ identifier such as <code>ai4sbench/my-task</code> for <code>[task].name</code> a
 scripts executable. The verifier should emit a numeric reward; demonstrate
 that the Oracle succeeds and a no-op agent does not. See the
 <a href="../example/">complete example</a>.</p>
-<p>For example, a new task in <code>tasks/physics/inverse-problems/my-task/</code> includes:</p>
+<p>For example, a new task in <code>tasks/physics/my-task/</code> includes:</p>
 <pre><code class="language-toml">[metadata]
 domain = &quot;physics&quot;
-field = &quot;inverse-problems&quot;
+field = &quot;inverse-problems&quot; # optional research description, not a path segment
 </code></pre>
-<p>The PR check requires these two keys to match the folders for new tasks.
-Existing task repairs keep their current paths.</p>
+<p>The PR check requires <code>domain</code> to match the folder for new tasks. It also
+requires <code>[task].name = "ai4sbench/my-task"</code> and a non-empty description.</p>
 <h2 id="validate-and-open-the-pr">Validate and open the PR</h2>
 <p>Install the pinned Harbor release described in
 <a href="https://github.com/AI4S-Bench/ai4s-benchmark/blob/main/bench/README.md">bench/README.md</a>
@@ -206,18 +206,18 @@ docker ps
 </code></pre>
 <p>From the repository root, run the Oracle and no-op checks for your task. The
 Oracle should earn reward <code>1</code>; <code>nop</code> should earn <code>0</code>:</p>
-<pre><code class="language-bash">harbor run -p tasks/physics/inverse-problems/my-task -a oracle -e docker
-harbor run -p tasks/physics/inverse-problems/my-task -a nop -e docker
+<pre><code class="language-bash">harbor run -p tasks/physics/my-task -a oracle -e docker
+harbor run -p tasks/physics/my-task -a nop -e docker
 </code></pre>
 <p>Then try a real agent and model to gauge difficulty. For example, with the
 model provider's credentials configured locally:</p>
-<pre><code class="language-bash">harbor run -p tasks/physics/inverse-problems/my-task -a claude-code -m anthropic/claude-haiku-4-5 -e docker
+<pre><code class="language-bash">harbor run -p tasks/physics/my-task -a claude-code -m anthropic/claude-haiku-4-5 -e docker
 </code></pre>
 <p>See Harbor's <a href="https://docs.harborframework.com/jobs/run-a-job">run command guide</a>
 for other agents and models.</p>
 <p>After adding your task files, push the branch and open the PR form with the
 GitHub CLI installed and signed in:</p>
-<pre><code class="language-bash">git add tasks/physics/inverse-problems/my-task/
+<pre><code class="language-bash">git add tasks/physics/my-task/
 git commit -m &quot;Add inverse problems task&quot;
 git push -u origin add-inverse-problems-task
 gh pr create --repo AI4S-Bench/ai4s-benchmark --base main --head YOUR_GITHUB_USERNAME:add-inverse-problems-task --web
