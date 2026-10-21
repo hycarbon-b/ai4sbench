@@ -324,6 +324,30 @@ assets.
 The long-lived deployment target is `main`. Always record the exact `main`
 commit being deployed; do not deploy an unmerged feature branch.
 
+### Backend-hosted Website snapshot
+
+The API serves the committed `backend/src/website_dist/` files at
+`https://dashboard.ai4sbench.org/website/`. The Website is plain HTML, CSS,
+JavaScript, and data files; there is no build step. The API does not serve files
+from the `ai4s-bench-website/` submodule checkout at runtime.
+
+The default way to publish Website changes on this route is:
+
+1. Push the Website source commit to a branch reachable from the submodule URL
+   in `.gitmodules`. Its Website PR may remain open while the backend-hosted
+   snapshot is published.
+2. In a reviewed parent-repository PR, pin `ai4s-bench-website/` to that exact
+   commit and update `backend/src/website_dist/` with the corresponding
+   deployable static files, removing obsolete files. Review the snapshot against
+   the pinned source commit; parent CI does not rebuild or compare these files.
+3. After parent CI succeeds, merge the parent PR into `main` and follow the
+   deployment steps below. The EC2 checkout still deploys only parent `main`.
+
+The separate `https://ai4sbench.org/` GitHub Pages site follows the Website
+repository's own `main` and publishing process. Publishing `/website/` does not
+merge the Website PR or update GitHub Pages. A later Website merge also does not
+refresh the backend snapshot automatically.
+
 ### 1. Run the CI gate
 
 The repository's CI contract is `python scripts/ci.py`. It is the only place
@@ -368,16 +392,21 @@ On the instance:
 
 ```bash
 sudo -u ai4sbench git -C /opt/ai4sbench status --short --branch
+sudo -u ai4sbench git -C /opt/ai4sbench submodule foreach --recursive 'test -z "$(git status --porcelain)"'
 sudo -u ai4sbench git -C /opt/ai4sbench fetch origin main
 sudo -u ai4sbench git -C /opt/ai4sbench switch main
 sudo -u ai4sbench git -C /opt/ai4sbench merge --ff-only origin/main
+sudo -u ai4sbench git -C /opt/ai4sbench submodule update --init --recursive
 sudo -u ai4sbench git -C /opt/ai4sbench rev-parse HEAD
+sudo -u ai4sbench git -C /opt/ai4sbench status --short --branch
 ```
 
 The existing untracked `/opt/ai4sbench/repository/` directory is runtime state.
 Leave it in place. Stop if tracked files are modified or if an unexpected
 untracked path would collide with the deployment; never clean or reset the
-checkout automatically.
+checkout automatically. Check submodules for local changes before updating
+them; the update should leave each checkout at the commit pinned by parent
+`main`.
 
 ### 5. Apply migrations
 
@@ -397,7 +426,9 @@ sudo bash -c '
 
 Review every new migration before running it. Do not use `alembic downgrade`
 as a generic rollback; restore decisions depend on whether the release changed
-data and must use the recorded snapshot when necessary.
+data and must use the recorded snapshot when necessary. Load the production
+environment for read-only `alembic current` checks too: without it, Alembic may
+report the revision of a different local database.
 
 ### 6. Restart services
 
@@ -456,11 +487,16 @@ From the operator machine, verify:
 Invoke-RestMethod https://dashboard.ai4sbench.org/health/ready
 Invoke-RestMethod https://dashboard.ai4sbench.org/openapi.json
 Invoke-RestMethod https://dashboard.ai4sbench.org/api/v1/public/proposals
+Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website/
+Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website/guide/
 ```
 
 Also confirm that the Dashboard HTML references the newly committed hashed
 asset, expected Swagger routes are present, and Proposal counts match the
-pre-deployment snapshot unless the release intentionally changed data.
+pre-deployment snapshot unless the release intentionally changed data. For a
+Website snapshot release, also check a changed page and its JavaScript on
+`/website/` against the committed snapshot; a healthy API alone does not prove
+that the intended Website files were published.
 
 ### Proposal deletion and synchronization
 
