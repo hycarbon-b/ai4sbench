@@ -53,7 +53,7 @@ uv run ai4sbench-jobs
 
 The local API serves the Dashboard at `http://127.0.0.1:8080/`, the Website snapshot at `/website`, API docs at `/docs`, and readiness at `/health/ready`. You can also start the application with `docker compose -f backend/compose.yaml up --build` from the repository root.
 
-When editing the Dashboard, run `npm ci`, `npm run check`, and `npm run build` in `dashboard-frontend/frontend/`. The build writes to `backend/src/static/`; commit the generated assets together with the source change. Website changes belong in its submodule first, followed by an updated submodule pointer and reviewed `backend/src/website_dist/` snapshot.
+When editing the Dashboard, run `npm ci`, `npm run check`, and `npm run build` in `dashboard-frontend/frontend/`. The build writes to `backend/src/static/`; commit the generated assets together with the source change. Website changes belong in its submodule first, followed by an updated submodule pointer and reviewed `backend/src/website_dist/` snapshot. The backend-hosted `/website/` snapshot can be released from a pushed Website branch before its source PR merges; see the [EC2 runbook](EC2_RUNBOOK.md#backend-hosted-website-snapshot).
 
 ## Development and CI
 
