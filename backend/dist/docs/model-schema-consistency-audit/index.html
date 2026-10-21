@@ -90,6 +90,10 @@
 <p><strong>Audit date:</strong> 2026-10-13 (baseline branch audit; latest-main follow-up noted below)
 <strong>Scope:</strong> SQLAlchemy models, Pydantic request/response schemas, API route transformations, website proposal/task lifecycle contract, Alembic migrations, and a read-only snapshot of the deployed SQLite database.
 <strong>Method:</strong> static comparison of model fields, schemas and route payload construction; review of migration chain; read-only production queries (<code>quick_check</code>, enum/value checks, relationship/document checks). No production data was changed.</p>
+<p><strong>Current contract update (2026-10-18):</strong> The proposal PR guide now derives
+<code>tasks/&lt;primary-domain&gt;/&lt;task-slug&gt;/</code> and <code>task/&lt;primary-domain&gt;-&lt;task-slug&gt;</code>.
+<code>field</code> remains proposal metadata and is no longer a task-path segment. The
+findings below describe the dated baseline audit and are retained as history.</p>
 <h2 id="executive-summary">Executive summary</h2>
 <p>The highest-risk inconsistency is in proposal taxonomy: the proposal accepts multiple human-readable domains, but the PR guide interpolates that combined value directly into a repository path. This can yield an invalid <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;slug&gt;</code> path. The proposal form's domain list also does not match the AI review rubric's scientific scope (tracked upstream as Issues <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/44">#44</a> and <a href="https://github.com/AI4S-Bench/ai4s-benchmark/issues/46">#46</a>).</p>
 <p>Proposal, human-review, reviewer-application, and AI-review decision/status enums are shared between ORM and Pydantic where they represent the same vocabulary. Operational run/job/delivery states are less consistently constrained: most are plain strings, while selected schemas use <code>Literal</code>. Outbound delivery type is the clearest model/schema contract gap. The public task lifecycle is a separate derived vocabulary and should remain explicitly documented as a projection of proposal/review/revision evidence.</p>

@@ -33,8 +33,8 @@ def test_primary_domain_path_uses_first_domain(monkeypatch):
             "proposal", request, None, SimpleNamespace(id="author", role="member")
         )
     )
-    assert result["task_path"] == "tasks/ai-ml/scientific-computing/example-task"
-    assert result["branch"] == "task/ai-ml-scientific-computing-example-task"
+    assert result["task_path"] == "tasks/ai-ml/example-task"
+    assert result["branch"] == "task/ai-ml-example-task"
 
 
 def test_normalized_domain_length_fits_storage():

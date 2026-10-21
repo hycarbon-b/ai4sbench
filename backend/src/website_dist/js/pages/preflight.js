@@ -6,10 +6,10 @@
    rules in ../task-check.js on each task found.
    ============================================================ */
 
-import { getTasks } from "../data.js?v=20261012-2";
-import { esc } from "../components.js?v=20261012-2";
-import { displayStatus, isApproved, STATUS_INFO } from "../lifecycle.js?v=20261012-2";
-import { checkTask, findTaskRoots, changedTaskRoots, repoTaskPath, REQUIRED_FILES } from "../task-check.js?v=20261012-2";
+import { getTasks } from "../data.js?v=20261014-release1";
+import { esc } from "../components.js?v=20261014-release1";
+import { displayStatus, isApproved, STATUS_INFO } from "../lifecycle.js?v=20261014-release1";
+import { checkTask, findTaskRoots, changedTaskRoots, repoTaskPath, parseToml, REQUIRED_FILES } from "../task-check.js?v=20261018-path1";
 
 const MAX_BYTES = 512 * 1024; // required files are small; anything bigger is not read
 const MAX_TASKS = 12;
@@ -107,7 +107,7 @@ async function checkFolder(fileList) {
       if (!REQUIRED_FILES.includes(rel)) continue;
       map.set(rel, file.size <= MAX_BYTES ? await file.text() : null);
     }
-    const repoPath = repoTaskPath(root);
+    const repoPath = repoTaskPath(root) ?? (root.includes("tasks/") ? root.slice(root.lastIndexOf("tasks/")) : null);
     reports.push({ name: root.split("/").pop(), path: repoPath ?? root, report: checkTask({ files: map, repoPath }) });
   }
   const more = roots.length > MAX_TASKS ? ` Showing the first ${MAX_TASKS} of ${roots.length}.` : "";
@@ -203,28 +203,56 @@ async function filesFor(repo, ref, root, listing) {
 async function checkPullRequest({ owner, repo, number }) {
   setStatus(`Reading PR #${number} from GitHub…`);
   const pr = await gh(`/repos/${owner}/${repo}/pulls/${number}`);
-  const changed = [];
+  const changed = new Map(); // path → GitHub's status for it: added, modified, removed, renamed…
+  const previousTaskConfigs = new Set();
   for (let page = 1; page <= 3; page++) {
     const batch = await gh(`/repos/${owner}/${repo}/pulls/${number}/files?per_page=100&page=${page}`);
-    changed.push(...batch.map((f) => f.filename));
+    for (const f of batch) {
+      changed.set(f.filename, f.status);
+      if (f.status === "removed" && f.filename.endsWith("/task.toml")) previousTaskConfigs.add(f.filename);
+      if (f.status === "renamed" && f.previous_filename?.endsWith("/task.toml")) previousTaskConfigs.add(f.previous_filename);
+    }
     if (batch.length < 100) break;
   }
-  const roots = changedTaskRoots(changed);
+  const paths = [...changed.keys()];
   const head = pr.head?.repo?.full_name;
   const sha = pr.head?.sha;
+  const listing = changedTaskRoots(paths).length && head && sha ? await treeOf(head, sha).catch(() => null) : null;
+  // Like the CI script, skip the task directories the PR deleted or renamed away.
+  const roots = changedTaskRoots(paths, listing && [...listing.keys()]);
   const source = `<a href="${esc(pr.html_url)}" target="_blank" rel="noopener">PR #${number}</a> in ${esc(`${owner}/${repo}`)} · “${esc(pr.title)}” · ${pr.state === "open" ? "open" : esc(pr.merged_at ? "merged" : "closed")}`;
   if (!roots.length) {
-    renderReports(source, [], "This PR does not change any task directory under <code>tasks/&lt;domain&gt;/&lt;field&gt;/&lt;task-slug&gt;/</code>, so the task checks do not apply to it.");
+    renderReports(source, [], "This PR does not change any task directory under <code>tasks/&lt;domain&gt;/&lt;task-slug&gt;/</code>, so the task checks do not apply to it.");
     setStatus("");
     return;
   }
   if (!head || !sha) throw new GitHubError("The branch behind this PR is no longer available on GitHub.");
-  const listing = await treeOf(head, sha).catch(() => null);
   const proposal = await proposalResolver();
   const reports = [];
   for (const root of roots.slice(0, MAX_TASKS)) {
     const files = await filesFor(head, sha, root, listing);
-    reports.push({ name: root.split("/").pop(), path: root, report: checkTask({ files, repoPath: root, pr: { body: pr.body ?? "" }, proposal }) });
+    // A task is new when its task.toml did not exist before this PR; moving an
+    // existing task from the old domain/field/slug path is maintenance.
+    const status = changed.get(`${root}/task.toml`);
+    const slug = root.split("/").at(-1);
+    const currentName = parseToml(String(files.get("task.toml") ?? "")).data.task?.name;
+    let migrated = false;
+    if (currentName) {
+      for (const oldPath of previousTaskConfigs) {
+        if (oldPath.split("/").at(-2) !== slug || listing?.has(oldPath)) continue;
+        try {
+          const oldName = parseToml(await raw(`${owner}/${repo}`, pr.base.sha, oldPath)).data.task?.name;
+          if (oldName === currentName) {
+            migrated = true;
+            break;
+          }
+        } catch {
+          // An unreadable old task cannot establish that this is maintenance.
+        }
+      }
+    }
+    const newTask = (status ? ["added", "renamed", "copied"].includes(status) : !files.has("task.toml")) && !migrated;
+    reports.push({ name: root.split("/").pop(), path: root, report: checkTask({ files, repoPath: root, pr: { body: pr.body ?? "" }, newTask, proposal }) });
   }
   setStatus("");
   renderReports(source, reports);
@@ -262,7 +290,7 @@ async function checkRepo({ owner, repo }) {
 
 async function checkListing(full, ref, base, listing, sourceHTML) {
   if (!listing) {
-    throw new GitHubError("That repository is too large to scan in one go. Link the task folder itself (…/tree/<branch>/tasks/<domain>/<field>/<task-slug>) instead.");
+    throw new GitHubError("That repository is too large to scan in one go. Link the task folder itself (…/tree/<branch>/tasks/<domain>/<task-slug>) instead.");
   }
   const prefix = base ? `${base.replace(/\/$/, "")}/` : "";
   const roots = findTaskRoots([...listing.keys()].filter((p) => p.startsWith(prefix) || !base));
