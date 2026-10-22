@@ -281,8 +281,8 @@ def render_github(body: AIReviewSubmission, publication: AIReviewPublication) ->
         "> Automated advice only; a human maintainer makes the final decision.",
         "> Text-only review: linked images were not inspected.",
         f"> Model: `{inline(body.model, 200)}` · [Workflow run]({run_url}) · "
-        f"[Rubric](https://github.com/harbor-framework/terminal-bench-science/blob/"
-        f"{body.upstream_sha}/rubrics/task-proposal.md)",
+        f"[Rubric](https://github.com/{body.repository}/blob/"
+        f"{body.workflow_sha}/rubrics/task-proposal.md)",
     ]
     return "\n".join(lines)
 
