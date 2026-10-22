@@ -19,7 +19,7 @@ The control panel and Website backend for the open [AI4S-Bench](https://ai4sbenc
 | --- | --- |
 | [`backend/`](backend/README.md) | FastAPI APIs, GitHub OAuth and Discussion synchronization, proposals and reviews, SQLite migrations, outbound deliveries, jobs, and EC2 execution orchestration. |
 | [`dashboard-frontend/frontend/`](dashboard-frontend/frontend/README.md) | React operator and contribution Dashboard. Its build is served by the backend at `/`. |
-| [`ai4s-bench-website/`](https://github.com/hycarbon-b/ai4s-bench-website) | Public Website submodule. A reviewed static snapshot is served by the backend at `/website`. |
+| [`ai4s-bench-website/`](https://github.com/hycarbon-b/ai4s-bench-website) | Public Website submodule. A reviewed static preview snapshot is served by the backend at `/website-preview`. |
 | [`benchmark-repository/`](https://github.com/AI4S-Bench/ai4s-benchmark) | Public benchmark task definitions, included as a submodule. |
 | [`reference/`](reference/) | Upstream reference material; not the application runtime. |
 
@@ -51,9 +51,9 @@ Start the background job runner in a second terminal from `backend/`:
 uv run ai4sbench-jobs
 ```
 
-The local API serves the Dashboard at `http://127.0.0.1:8080/`, the Website snapshot at `/website`, API docs at `/docs`, and readiness at `/health/ready`. You can also start the application with `docker compose -f backend/compose.yaml up --build` from the repository root.
+The local API serves the Dashboard at `http://127.0.0.1:8080/`, the Website preview snapshot at `/website-preview`, API docs at `/docs`, and readiness at `/health/ready`. You can also start the application with `docker compose -f backend/compose.yaml up --build` from the repository root.
 
-When editing the Dashboard, run `npm ci`, `npm run check`, and `npm run build` in `dashboard-frontend/frontend/`. The build writes to `backend/src/static/`; commit the generated assets together with the source change. Website changes belong in its submodule first, followed by an updated submodule pointer and reviewed `backend/src/website_dist/` snapshot. The backend-hosted `/website/` snapshot can be released from a pushed Website branch before its source PR merges; see the [EC2 runbook](EC2_RUNBOOK.md#backend-hosted-website-snapshot).
+When editing the Dashboard, run `npm ci`, `npm run check`, and `npm run build` in `dashboard-frontend/frontend/`. The build writes to `backend/src/static/`; commit the generated assets together with the source change. For Website changes, update its submodule pointer and synchronize the reviewed `backend/src/website_dist/` snapshot with `python scripts/sync_website_preview.py`. The preview can use the latest commit pushed to the configured Website fork before its source PR merges; see the [EC2 runbook](EC2_RUNBOOK.md#backend-hosted-website-preview).
 
 ## Development and CI
 

@@ -324,29 +324,42 @@ assets.
 The long-lived deployment target is `main`. Always record the exact `main`
 commit being deployed; do not deploy an unmerged feature branch.
 
-### Backend-hosted Website snapshot
+### Backend-hosted Website preview
 
 The API serves the committed `backend/src/website_dist/` files at
-`https://dashboard.ai4sbench.org/website/`. The Website is plain HTML, CSS,
+`https://dashboard.ai4sbench.org/website-preview/`. The Website is plain HTML, CSS,
 JavaScript, and data files; there is no build step. The API does not serve files
 from the `ai4s-bench-website/` submodule checkout at runtime.
 
-The default way to publish Website changes on this route is:
+To prepare a Website preview release:
 
-1. Push the Website source commit to a branch reachable from the submodule URL
-   in `.gitmodules`. Its Website PR may remain open while the backend-hosted
-   snapshot is published.
-2. In a reviewed parent-repository PR, pin `ai4s-bench-website/` to that exact
-   commit and update `backend/src/website_dist/` with the corresponding
-   deployable static files, removing obsolete files. Review the snapshot against
-   the pinned source commit; parent CI does not rebuild or compare these files.
+1. Push the intended Website source commit to the configured fork
+   (`hycarbon-b/ai4s-bench-website`). The source PR can remain open; neither a
+   merge into the official Website repository nor an update to its GitHub Pages
+   site is required for a backend preview release.
+2. In the parent checkout, fetch and check out that pushed commit in the
+   `ai4s-bench-website/` submodule, then stage the submodule pointer:
+
+   ```powershell
+   git -C ai4s-bench-website fetch origin
+   git -C ai4s-bench-website checkout <website-commit>
+   git add ai4s-bench-website
+   python scripts/sync_website_preview.py
+   python scripts/sync_website_preview.py --check
+   git add backend/src/website_dist
+   ```
+
+   The sync script mirrors the submodule's files into
+   `backend/src/website_dist/` and removes stale snapshot files. Review both the
+   staged submodule pointer and snapshot in the parent PR.
 3. After parent CI succeeds, merge the parent PR into `main` and follow the
-   deployment steps below. The EC2 checkout still deploys only parent `main`.
+   deployment steps below. Production deploys the committed preview snapshot
+   from parent `main` at `/website-preview/`.
 
 The separate `https://ai4sbench.org/` GitHub Pages site follows the Website
-repository's own `main` and publishing process. Publishing `/website/` does not
-merge the Website PR or update GitHub Pages. A later Website merge also does not
-refresh the backend snapshot automatically.
+repository's own `main` and publishing process. Publishing `/website-preview/`
+does not merge the Website PR or update GitHub Pages. A later Website merge also
+does not refresh the backend snapshot automatically.
 
 ### 1. Run the CI gate
 
@@ -487,15 +500,15 @@ From the operator machine, verify:
 Invoke-RestMethod https://dashboard.ai4sbench.org/health/ready
 Invoke-RestMethod https://dashboard.ai4sbench.org/openapi.json
 Invoke-RestMethod https://dashboard.ai4sbench.org/api/v1/public/proposals
-Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website/
-Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website/guide/
+Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website-preview/
+Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website-preview/guide/
 ```
 
 Also confirm that the Dashboard HTML references the newly committed hashed
 asset, expected Swagger routes are present, and Proposal counts match the
 pre-deployment snapshot unless the release intentionally changed data. For a
 Website snapshot release, also check a changed page and its JavaScript on
-`/website/` against the committed snapshot; a healthy API alone does not prove
+`/website-preview/` against the committed snapshot; a healthy API alone does not prove
 that the intended Website files were published.
 
 ### Proposal deletion and synchronization

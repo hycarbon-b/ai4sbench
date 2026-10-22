@@ -287,7 +287,7 @@ fetch('/auth/github/authorize', {credentials: 'same-origin'})
 
     @app.get("/auth/invite", include_in_schema=False, name="invite_page")
     async def invite_page() -> HTMLResponse:
-        profile_url = "/website/profile/"
+        profile_url = "/website-preview/profile/"
         return HTMLResponse(
             """<!doctype html><html lang="en"><meta charset="utf-8"><title>AI4S-Bench sign in</title>
 <meta name="referrer" content="no-referrer">
@@ -321,11 +321,17 @@ else fetch('/api/v1/auth/invites/redeem', {method:'POST', credentials:'same-orig
 
     app.mount("/document", StaticFiles(directory=DOCUMENT_DIR, html=True), name="document")
 
-    @app.get("/website", include_in_schema=False)
-    async def website_root() -> RedirectResponse:
-        return RedirectResponse("/website/", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    @app.get("/website-preview", include_in_schema=False)
+    async def website_preview_root() -> RedirectResponse:
+        return RedirectResponse(
+            "/website-preview/", status_code=status.HTTP_307_TEMPORARY_REDIRECT
+        )
 
-    app.mount("/website", StaticFiles(directory=WEBSITE_DIST_DIR, html=True), name="website")
+    app.mount(
+        "/website-preview",
+        StaticFiles(directory=WEBSITE_DIST_DIR, html=True),
+        name="website_preview",
+    )
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="admin")
     return app
 
