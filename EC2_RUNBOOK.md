@@ -1,6 +1,6 @@
 # AI4S-Bench Dashboard EC2 runbook
 
-Last verified: 2026-09-13 (Asia/Shanghai)
+Last verified: 2026-10-23 (Asia/Shanghai)
 
 This document records the current production control-plane deployment. It is
 safe to commit because it intentionally excludes private keys, GitHub OAuth
@@ -102,7 +102,16 @@ After an API restart, verify both the local listener and readiness route:
 
 ```bash
 sudo ss -ltnp | grep ':8080'
-curl -fsS http://127.0.0.1:8080/health/ready
+for attempt in $(seq 1 15); do
+  if curl -fsS http://127.0.0.1:8080/health/ready; then
+    break
+  fi
+  if [ "$attempt" -eq 15 ]; then
+    echo "API readiness check failed after 30 seconds" >&2
+    exit 1
+  fi
+  sleep 2
+done
 ```
 
 ```powershell
