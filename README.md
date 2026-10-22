@@ -83,6 +83,6 @@ Want to contribute? Open an issue or pull request with the problem, proposed cha
 
 ## Deployment and security
 
-Production uses a Git-based systemd deployment. Follow the [EC2 runbook](EC2_RUNBOOK.md) for database snapshots, migrations, service restarts, verification, and rollback. Do not copy application files directly to the server as a deployment shortcut.
+Production uses a Git-based systemd deployment. After parent-main CI passes, SSH to EC2 and run `sudo bash /opt/ai4sbench/deploy/deploy.sh <sha>`. The server-side script snapshots SQLite, updates Git/submodules, migrates, restarts services, and verifies published assets. See the [EC2 runbook](EC2_RUNBOOK.md) for prerequisites and recovery.
 
 Keep `.env` files, OAuth and SMTP credentials, tokens, and SQLite operator data out of commits, generated assets, logs, issues, and pull requests. The checked-in [environment example](backend/.env.example) documents variable names without production values.
