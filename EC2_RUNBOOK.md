@@ -362,41 +362,12 @@ repository's own `main` and publishing process. Publishing `/website-preview/`
 does not merge the Website PR or update GitHub Pages. A later Website merge also
 does not refresh the backend snapshot automatically.
 
-### 1. Run the CI gate
+### Run the deployment script on EC2
 
-The repository's CI contract is `python scripts/ci.py`. It is the only place
-that defines checks: locked dependency installation, backend linting and tests,
-frontend type checking and build, and verification that committed Dashboard
-static assets are current. GitHub Actions only installs the Python, uv, and
-Node runtimes and invokes this script, so the same command can be run from a
-Windows checkout before opening a pull request.
-
-Merge a reviewed pull request into `main` only after its CI run succeeds. From
-a clean checkout of the exact `main` commit that will be deployed, run:
-
-```powershell
-python scripts/ci.py
-```
-
-When Dashboard source changes, CI verifies that `npm run build` has updated and
-committed `backend/src/static/`. EC2 never builds or receives these
-assets separately.
-
-### 2. Record the reviewed `main` commit
-
-```powershell
-git fetch origin
-git rev-parse origin/main
-```
-
-Record this full SHA in the deployment notes before changing the EC2 checkout.
-
-### 3. Create the pre-deployment database snapshot
-
-Use the Dashboard snapshot action described above and record the returned file
-name before changing the checkout or running Alembic.
-
-### 4. Inspect and fast-forward the EC2 checkout
+The fixed routine deployment lives in `deploy/deploy.sh`, with read-only HTTP
+and asset checks in `deploy/verify.py`. Both run on EC2. CI is a release
+prerequisite: merge the reviewed parent PR to `main` after
+`python scripts/ci.py` succeeds, then deploy that main commit over SSH:
 
 ```powershell
 ssh ec2-user@3.237.65.103
@@ -405,54 +376,59 @@ ssh ec2-user@3.237.65.103
 On the instance:
 
 ```bash
-sudo -u ai4sbench git -C /opt/ai4sbench status --short --branch
-sudo -u ai4sbench git -C /opt/ai4sbench submodule foreach --recursive 'test -z "$(git status --porcelain)"'
+sudo bash /opt/ai4sbench/deploy/deploy.sh <main-commit-sha>
+```
+
+Omitting the SHA selects the latest fetched `origin/main`. The script freezes
+that SHA at the start, so a later main update does not change the release in
+progress. The server needs Git, curl, Python 3, sudo/runuser, systemd, flock,
+the existing service virtualenv, and uv when locked dependencies change.
+
+For the first release introducing this script, it is not yet in the old server
+checkout. Fetch the reviewed main commit and read the script from Git so the
+snapshot still precedes the checkout update:
+
+```bash
 sudo -u ai4sbench git -C /opt/ai4sbench fetch origin main
-sudo -u ai4sbench git -C /opt/ai4sbench switch main
-sudo -u ai4sbench git -C /opt/ai4sbench merge --ff-only origin/main
-sudo -u ai4sbench git -C /opt/ai4sbench submodule update --init --recursive
-sudo -u ai4sbench git -C /opt/ai4sbench rev-parse HEAD
-sudo -u ai4sbench git -C /opt/ai4sbench status --short --branch
+sudo -u ai4sbench git -C /opt/ai4sbench show <main-commit-sha>:deploy/deploy.sh | sudo bash -s -- <main-commit-sha>
 ```
 
-The existing untracked `/opt/ai4sbench/repository/` directory is runtime state.
-Leave it in place. Stop if tracked files are modified or if an unexpected
-untracked path would collide with the deployment; never clean or reset the
-checkout automatically. Check submodules for local changes before updating
-them; the update should leave each checkout at the commit pinned by parent
-`main`.
+The script runs these steps in order:
 
-### 5. Apply migrations
+1. Acquire a deployment lock. Require server branch `main`, a clean checkout
+   and clean initialized submodules. Fetch main, verify that the target belongs
+   to main and fast-forwards the current commit, and preserve the runtime
+   `repository/` directory. Reject target files that would collide with it.
+2. Load the protected production environment as the service account. Verify
+   the production database path, create an SQLite online backup using the same
+   helper as the Dashboard snapshot action, check its integrity, and print the
+   snapshot path and current Alembic revision.
+3. Fast-forward to the exact SHA, sync submodule URLs, and update submodules
+   recursively to the parent gitlinks. The Website fork may contain an open
+   source PR; the backend still serves the parent's committed
+   `backend/src/website_dist/` snapshot at `/website-preview/`.
+4. If `backend/uv.lock` or `backend/pyproject.toml` changed, sync frozen
+   dependencies with `dev` and `aws` extras, retaining `harbor-ec2` when the v2
+   runner is enabled or active.
+5. Run Alembic `upgrade head` and `current` with the production environment.
+6. Restart API and jobs, including the Harbor v2 runner when enabled or active.
+7. Wait for readiness. Verify readiness, OpenAPI review/proposal routes and
+   public proposals on loopback and the public HTTPS URL. Compare all Dashboard
+   and Website file hashes on loopback. On the public URL, compare asset hashes
+   and HTML titles/resource references because Cloudflare rewrites HTML for
+   analytics and email protection. Print recent warning-level service logs and
+   the final parent/Website SHAs.
 
-The production environment file is root-readable and must not be printed.
-Load it only for the migration process:
+A log including the target SHA and snapshot path is saved under
+`/var/lib/ai4sbench/deployments/`. Failure stops the sequence and reports the
+failed step, snapshot and log. Inspect these before recovering. Review migrations
+before release; the script does not automatically reset Git, downgrade Alembic
+or restore the database. Read-only Alembic checks also require the production
+environment, otherwise they may inspect a different database.
 
-```bash
-sudo bash -c '
-  set -a
-  . /etc/ai4sbench/control-panel.env
-  set +a
-  cd /opt/ai4sbench/backend
-  sudo -E -u ai4sbench .venv/bin/python -m alembic upgrade head
-  sudo -E -u ai4sbench .venv/bin/python -m alembic current
-'
-```
-
-Review every new migration before running it. Do not use `alembic downgrade`
-as a generic rollback; restore decisions depend on whether the release changed
-data and must use the recorded snapshot when necessary. Load the production
-environment for read-only `alembic current` checks too: without it, Alembic may
-report the revision of a different local database.
-
-### 6. Restart services
-
-```bash
-sudo systemctl restart ai4sbench-api.service ai4sbench-jobs.service
-sudo systemctl is-active ai4sbench-api.service ai4sbench-jobs.service
-```
-
-The API and v1 runner must report `active`. When v2 is configured, also check
-`ai4sbench-harbor-v2-jobs.service`.
+Initial host provisioning, protected environment changes, systemd-unit
+installation and worker AMI rollout remain separate operations. When the routine
+release sequence changes, update `deploy/` and this runbook together.
 
 ### Deploying Harbor EC2 v2
 
@@ -482,35 +458,6 @@ The API, v1 jobs, and v2 jobs systemd units are committed under
 The example operator configuration uses a Docker-ready v1 AMI and a public
 subnet. The security group must allow TCP 22 from the runner host to workers.
 For a private runner, use VPC routing and private addresses instead.
-
-### 7. Verify locally and publicly
-
-```bash
-curl -fsS http://127.0.0.1:8080/health/ready
-sudo -u ai4sbench git -C /opt/ai4sbench rev-parse --short HEAD
-sudo journalctl \
-  -u ai4sbench-api.service \
-  -u ai4sbench-jobs.service \
-  --since '10 minutes ago' \
-  --no-pager -p warning
-```
-
-From the operator machine, verify:
-
-```powershell
-Invoke-RestMethod https://dashboard.ai4sbench.org/health/ready
-Invoke-RestMethod https://dashboard.ai4sbench.org/openapi.json
-Invoke-RestMethod https://dashboard.ai4sbench.org/api/v1/public/proposals
-Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website-preview/
-Invoke-WebRequest -UseBasicParsing https://dashboard.ai4sbench.org/website-preview/guide/
-```
-
-Also confirm that the Dashboard HTML references the newly committed hashed
-asset, expected Swagger routes are present, and Proposal counts match the
-pre-deployment snapshot unless the release intentionally changed data. For a
-Website snapshot release, also check a changed page and its JavaScript on
-`/website-preview/` against the committed snapshot; a healthy API alone does not prove
-that the intended Website files were published.
 
 ### Proposal deletion and synchronization
 

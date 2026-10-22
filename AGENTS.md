@@ -44,6 +44,10 @@
 - Production deploys parent `main`. A feature branch or an unmerged parent PR
   is not a production deployment target.
 - Read `EC2_RUNBOOK.md` before changing or operating the production deployment.
+- After parent-main CI passes, deploy over SSH by running
+  `sudo bash /opt/ai4sbench/deploy/deploy.sh <sha>` on EC2. `deploy/` contains
+  server-side operations only. Update it and the runbook together when the
+  deployment procedure changes.
 
 # Submodule management
 
