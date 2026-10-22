@@ -48,6 +48,15 @@ committed to `src/static/`. The public Website source is the
 `src/website_dist/`. Follow the build and submodule workflow in
 `backend/README.md` when updating either asset set.
 
+The backend serves that committed Website snapshot at `/website-preview/`.
+Push Website changes to the configured fork, stage the parent gitlink, and run
+`python scripts/sync_website_preview.py` before committing the snapshot in the
+parent PR. The Website source PR can remain open; the official GitHub Pages
+site does not need to update before a backend preview release. Production
+deploys the merged parent-main commit with `deploy/deploy.sh` on EC2. See
+[Runtime and Configuration](runtime-configuration.md#production-deployment)
+for that entry point and the deployment sequence.
+
 ## Change checklist
 
 For a behavior change, identify the owning domain, update the route/schema or

@@ -57,6 +57,8 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#configuration-ownership">Configuration ownership</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#production-deployment">Production deployment</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#docs-development">Docs development</a>
     </li>
     </ul>
@@ -141,11 +143,37 @@ in the ignored local <code>.env</code>; never commit them.</p>
 <code>src/</code> module for exact polling, retry, and shutdown behavior.</p>
 <h2 id="configuration-ownership">Configuration ownership</h2>
 <p><code>src/core/config.py</code> defines settings and defaults; <code>.env.example</code> lists the
-operator-facing environment variable names. Deployment Compose files pass
+operator-facing environment variable names. Local Compose setups pass
 environment through <code>env_file</code>. Use the AI review page for its service-specific
 secrets and workflow settings.</p>
 <p><code>data/</code>, <code>.env</code>, credentials, OAuth tokens, and local database files are
 operator state. They must stay out of public submodules and commits.</p>
+<h2 id="production-deployment">Production deployment</h2>
+<p>Production EC2 runs the API and job runners under systemd. After the parent PR
+is merged into <code>main</code> and CI passes, connect to the server and run its deployment
+entry point:</p>
+<pre><code class="language-bash">ssh ec2-user@3.237.65.103
+sudo bash /opt/ai4sbench/deploy/deploy.sh &lt;main-commit-sha&gt;
+</code></pre>
+<p>The script lives in the parent repository's <code>deploy/</code> directory and runs on
+EC2. Omitting the SHA selects the latest fetched <code>origin/main</code>; the script
+freezes the exact commit before changing the checkout. It checks checkout
+cleanliness and main ancestry, creates and validates an online SQLite snapshot,
+fast-forwards Git and pinned submodules, syncs changed locked dependencies,
+applies Alembic migrations, and restarts the API and job runners. The Harbor v2
+runner is included when enabled or active.</p>
+<p><code>deploy/verify.py</code> then checks readiness, proposal/review API routes and published
+Dashboard/Website files through loopback and the public HTTPS URL. Public HTML
+checks allow Cloudflare's analytics and email protection rewriting.</p>
+<p>Production commands load <code>/etc/ai4sbench/control-panel.env</code> as the service
+account. The database is <code>/var/lib/ai4sbench/control-panel.sqlite3</code>; the deployment
+log records the snapshot path and target commit under
+<code>/var/lib/ai4sbench/deployments/</code>. Failure stops the sequence and reports its
+stage. Inspect the log and snapshot before recovery; the script does not
+automatically restore the database or downgrade migrations.</p>
+<p>See the <a href="https://github.com/hycarbon-b/ai4sbench/blob/main/EC2_RUNBOOK.md#run-the-deployment-script-on-ec2">EC2 runbook</a>
+for the first-release bootstrap command, prerequisites and recovery details.
+Update the runbook and <code>deploy/</code> together when the release procedure changes.</p>
 <h2 id="docs-development">Docs development</h2>
 <p>MkDocs uses the same Read the Docs theme as the contributor documentation:</p>
 <pre><code class="language-bash">uv run mkdocs serve

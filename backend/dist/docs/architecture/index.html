@@ -176,6 +176,14 @@ committed to <code>src/static/</code>. The public Website source is the
 <code>ai4s-bench-website/</code> submodule, while its deployable snapshot is
 <code>src/website_dist/</code>. Follow the build and submodule workflow in
 <code>backend/README.md</code> when updating either asset set.</p>
+<p>The backend serves that committed Website snapshot at <code>/website-preview/</code>.
+Push Website changes to the configured fork, stage the parent gitlink, and run
+<code>python scripts/sync_website_preview.py</code> before committing the snapshot in the
+parent PR. The Website source PR can remain open; the official GitHub Pages
+site does not need to update before a backend preview release. Production
+deploys the merged parent-main commit with <code>deploy/deploy.sh</code> on EC2. See
+<a href="../runtime-configuration/#production-deployment">Runtime and Configuration</a>
+for that entry point and the deployment sequence.</p>
 <h2 id="change-checklist">Change checklist</h2>
 <p>For a behavior change, identify the owning domain, update the route/schema or
 service, review persistence and migrations if data changes, and update this
