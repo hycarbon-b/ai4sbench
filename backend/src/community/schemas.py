@@ -499,8 +499,12 @@ class ProposalReviewerCandidateResponse(BaseModel):
     id: str
     name: str
     github: str
+    email: str
+    affiliation: str
+    role: str | None
     domain: str
     field_name: str | None
+    research_background: str
 
 
 class ProposalReviewerCandidateListResponse(BaseModel):
