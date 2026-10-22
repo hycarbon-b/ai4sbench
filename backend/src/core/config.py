@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     ai_review_service_key: SecretStr | None = None
     mailing_service_key: SecretStr | None = None
     ai_review_github_token: SecretStr | None = None
+    ai_review_github_app_id: str = ""
+    ai_review_github_app_installation_id: int | None = Field(default=None, gt=0)
+    ai_review_github_app_private_key_path: Path | None = None
     ai_review_discord_forum: bool = True
     ai_review_sync_labels: bool = False
     # Comma-separated AI4S reviewer logins; empty disables automatic assignment.
@@ -128,6 +131,13 @@ class Settings(BaseSettings):
     harbor_v2_lease_seconds: int = Field(default=120, ge=30, le=3600)
     github_token: SecretStr | None = None
     git_https_proxy: str | None = None
+
+    @field_validator(
+        "ai_review_github_app_installation_id", "ai_review_github_app_private_key_path", mode="before"
+    )
+    @classmethod
+    def empty_ai_review_app_setting(cls, value: object) -> object:
+        return None if value == "" else value
 
     @field_validator(
         "allowed_hosts",
