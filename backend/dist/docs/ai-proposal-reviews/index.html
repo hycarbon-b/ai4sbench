@@ -58,7 +58,7 @@
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#configuration">Configuration</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#register-and-install-the-publishing-app">Register and install the publishing App</a>
+    <li class="toctree-l3"><a class="reference internal" href="#publishing-app-setup">Publishing App setup</a>
     </li>
         </ul>
     </li>
@@ -180,49 +180,20 @@ job publishes the result as <code>&lt;app-slug&gt;[bot]</code>. Changing only th
 change the publishing identity. Do not pass a short-lived installation token in
 the callback or store the App private key in Actions: queued jobs need to mint
 their own tokens after CI exits. Human reviewer OAuth is separate.</p>
-<h3 id="register-and-install-the-publishing-app">Register and install the publishing App</h3>
-<ol>
-<li>An AI4S-Bench organization owner or App manager opens the
-   <a href="https://github.com/organizations/AI4S-Bench/settings/apps/new?name=AI4S%20Bench%20Review&amp;description=Publish%20automated%20AI4S%20proposal%20reviews&amp;url=https%3A%2F%2Fai4sbench.org&amp;public=false&amp;webhook_active=false&amp;request_oauth_on_install=false&amp;discussions=write">pre-filled App registration form</a>.
-   Suggested name: <strong>AI4S Bench Review</strong>. GitHub App names are globally unique;
-   if unavailable, choose another name. The implementation discovers the real
-   slug from GitHub, so the name is not hard-coded.</li>
-<li>Grant repository <strong>Discussions: Read and write</strong>, with the automatic
-   <strong>Metadata: Read-only</strong> permission. Leave other permissions disabled. Disable
-   webhooks, user OAuth authorization and device flow. Register it as private to
-   the organization. No webhook/callback server is needed for this publisher.</li>
-<li>Select <strong>Install App &gt; AI4S-Bench &gt; Only select repositories</strong> and choose
-   <strong>ai4s-benchmark</strong>. Confirm the installation. Record the installation ID from
-   the installation settings URL (<code>.../settings/installations/&lt;id&gt;</code>).</li>
-<li>Record the App ID (or client ID) from the App settings and generate a private
-   key. Transfer the PEM securely to the backend host; do not commit it, paste it
-   into a Discussion, or put it in workflow artifacts. Restrict file access to
-   the service identity, for example <code>/etc/ai4sbench/ai-review-app.pem</code>, mode 0600.</li>
-<li>Configure both the backend API and job runner:</li>
-</ol>
-<p><code>dotenv
-   TBCP_GITHUB_REPOSITORY=AI4S-Bench/ai4s-benchmark
-   TBCP_AI_REVIEW_GITHUB_APP_ID=&lt;APP_ID_OR_CLIENT_ID&gt;
-   TBCP_AI_REVIEW_GITHUB_APP_INSTALLATION_ID=&lt;INSTALLATION_ID&gt;
-   TBCP_AI_REVIEW_GITHUB_APP_PRIVATE_KEY_PATH=/etc/ai4sbench/ai-review-app.pem</code></p>
-<p>Deploy this backend version and restart both services. For containers, mount
-   the PEM read-only at the configured path in both API and job containers. Keep
-   the existing service key, model configuration and Discord settings. Once the
-   App is verified, remove the old PAT from the backend environment.
-6. Dispatch <strong>Proposal Review</strong> on an existing test Discussion such as #31.
-   Confirm <code>result.json</code> has <code>status: completed</code>, then check that the new review
-   comment's author is the App bot. Re-run the same Discussion and confirm that
-   the App comment is updated in place. Check final GitHub and Discord delivery
-   states; Actions success and an initial <code>pending</code> receipt are insufficient.</p>
-<p>When changing from a PAT to an App, the original PAT-owned comment remains
-unchanged. The first App publication creates one new bot-owned sticky comment;
-later publications reuse only that App's comment, including after a lost create
-response. Persisted old comment IDs are not trusted without checking the author
-and AI marker in the correct Discussion. Discord keeps its existing message or
-thread identity. No schema migration is required for this identity change.</p>
-<p>See GitHub's <a href="https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-using-url-parameters">registration URL parameters</a>,
-<a href="https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app">JWT authentication</a>
-and <a href="https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app">installation tokens</a>.</p>
+<h3 id="publishing-app-setup">Publishing App setup</h3>
+<ul>
+<li>Install the App only on <code>AI4S-Bench/ai4s-benchmark</code>, with <strong>Discussions: Read and
+  write</strong> and the automatic <strong>Metadata: Read-only</strong> permission. Webhooks and user
+  OAuth are not needed. See <a href="https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app">GitHub's registration guide</a>.</li>
+<li>Set the three <code>TBCP_AI_REVIEW_GITHUB_APP_*</code> settings above for both the API and
+  job runner, then restart both services. Keep the PEM outside source control and
+  readable only by the service identity; mount it read-only in containers.</li>
+<li>Run <strong>Proposal Review</strong> on a test Discussion. Check completed model output,
+  App bot authorship, and final GitHub/Discord delivery states. Run it again to
+  confirm the same App comment is updated.</li>
+</ul>
+<p>Switching from a PAT preserves the old user's comment and creates one App-owned
+comment for subsequent updates. No schema migration is required.</p>
 <p>The service key is only accepted by the two internal AI review routes. It cannot
 access administrator or human-review APIs. Keys are read at runtime and are not
 stored in AI delivery payloads. Missing service authentication or publishing
