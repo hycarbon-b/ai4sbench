@@ -209,8 +209,12 @@ async def proposal_reviewer_candidates(
                 "id": application.id,
                 "name": application.name,
                 "github": application.github,
+                "email": application.email,
+                "affiliation": application.affiliation,
+                "role": application.role,
                 "domain": application.domain,
                 "field_name": application.field_name,
+                "research_background": application.research_background,
             }
             for application in reviewer_selector(proposal, applications)
         ]

@@ -73,8 +73,12 @@ export type ProposalReviewerCandidate = {
   id: string;
   name: string;
   github: string;
+  email: string;
+  affiliation: string;
+  role: string | null;
   domain: string;
   field_name: string | null;
+  research_background: string;
 };
 
 export type ProposalReviewerAssignment = Pick<

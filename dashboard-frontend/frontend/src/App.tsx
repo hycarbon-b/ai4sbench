@@ -15,6 +15,7 @@ import {
   Play,
   RefreshCw,
   Rocket,
+  Search,
   Send,
   ServerCog,
   SquareStack,
@@ -1781,11 +1782,13 @@ function ProposalPanel({
   const [candidateLoading, setCandidateLoading] = useState(false);
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [assignmentError, setAssignmentError] = useState("");
+  const [reviewerQuery, setReviewerQuery] = useState("");
   const openAssignment = async (item: Proposal) => {
     setAssignmentTarget(item);
     setSelectedReviewerId(item.assigned_reviewer_application_id);
     setCandidates([]);
     setAssignmentError("");
+    setReviewerQuery("");
     setCandidateLoading(true);
     try {
       const response = await getProposalReviewerCandidates(item.id);
@@ -1810,6 +1813,16 @@ function ProposalPanel({
       setAssignmentSaving(false);
     }
   };
+  const selectedCandidate = candidates.find((candidate) => candidate.id === selectedReviewerId);
+  const filteredCandidates = candidates.filter((candidate) =>
+    [candidate.name, candidate.github, candidate.email, candidate.affiliation, candidate.role, candidate.domain, candidate.field_name]
+      .filter(Boolean)
+      .some((value) => value!.toLowerCase().includes(reviewerQuery.trim().toLowerCase())),
+  );
+  const proposalDomainLabels = (assignmentTarget?.domain ?? "")
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
   const selectedDomains = new Set(
     proposal.domain
       .split(",")
@@ -2127,120 +2140,201 @@ function ProposalPanel({
         <div className="mt-4">
           <DataCard
             title="Proposal records"
-            description="Active local proposals. Deleted records keep a tombstone so Discussion sync cannot restore them."
+            description="Review proposals, open their discussions, and assign reviewers."
           >
-            <Table
-              headers={[
-                "Proposal",
-                "Domain and field",
-                "Status",
-                "Reviewer",
-                "Actions",
-              ]}
-              className="min-w-[850px]"
-            >
-              {recent.map((item) => (
-                <Fragment key={item.id}>
-                  <tr className="border-t border-slate-700">
-                    <td className="max-w-sm align-top font-medium text-slate-100">{item.title}</td>
-                    <td className="max-w-xs align-top">
-                      <span className="block text-slate-200">{item.domain}</span>
-                      <span className="block text-xs text-slate-400">{item.field_name}</span>
-                    </td>
-                    <td className="align-top"><Status state={item.status} /></td>
-                    <td className="align-top">
+            <UiTable className="min-w-[1180px] table-fixed">
+              <colgroup>
+                <col className="w-[37%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+                <col className="w-[8%]" />
+                <col className="w-[17%]" />
+              </colgroup>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proposal</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Reviewer</TableHead>
+                  <TableHead>Contributor</TableHead>
+                  <TableHead>Discussion</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.map((item) => (
+                  <TableRow key={item.id} className="border-slate-800/90">
+                    <TableCell className="py-4 pr-5">
+                      <p className="text-sm font-medium leading-snug text-slate-100">{item.title}</p>
+                      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs leading-relaxed text-slate-400">
+                        <span>{item.domain}</span>
+                        {item.field_name && <><span className="text-slate-600">/</span><span>{item.field_name}</span></>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span title="Proposal status"><Status state={item.status} /></span>
+                        <span title="Input validation"><Status state={item.input_valid ? "valid" : "invalid"} /></span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
                       {item.assigned_reviewer_login ? (
-                        <a className="text-sky-300 hover:text-sky-200"
+                        <a className="font-medium text-sky-300 hover:text-sky-200"
                           href={`https://github.com/${encodeURIComponent(item.assigned_reviewer_login)}`}
                           target="_blank" rel="noreferrer">@{item.assigned_reviewer_login}</a>
-                      ) : (
-                        <span className="text-amber-300">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="align-top">
-                      {onReviewerAssigned && (
-                        <Button type="button" variant="outline" size="sm"
-                          onClick={() => void openAssignment(item)}>
-                          {item.assigned_reviewer_login ? "Change reviewer" : "Assign reviewer"}
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                  <tr className="border-b border-slate-800 bg-slate-950/30">
-                    <td colSpan={5} className="!pt-0 text-xs text-slate-400">
-                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                        <span>Task <code>{item.task_slug}</code></span>
-                        <span>Input <Status state={item.input_valid ? "valid" : "invalid"} /></span>
-                        <span>Contributor {item.author_login ? `@${item.author_login}` : "—"}</span>
-                        {item.discussion_url ? (
-                          <a className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
-                            href={item.discussion_url} target="_blank" rel="noreferrer">
-                            Discussion <ExternalLink className="size-3" />
-                          </a>
-                        ) : <span>Discussion pending</span>}
+                      ) : <span className="text-amber-300">Unassigned</span>}
+                    </TableCell>
+                    <TableCell className="py-4 text-slate-400">
+                      {item.author_login ? `@${item.author_login}` : "—"}
+                    </TableCell>
+                    <TableCell className="py-4">
+                      {item.discussion_url ? (
+                        <a className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
+                          href={item.discussion_url} target="_blank" rel="noreferrer">
+                          Open <ExternalLink className="size-3" />
+                        </a>
+                      ) : <span className="text-slate-500">Pending</span>}
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <div className="flex items-center gap-1 whitespace-nowrap">
+                        {onReviewerAssigned && (
+                          <Button type="button" variant="outline" size="sm" className="w-32"
+                            onClick={() => void openAssignment(item)}>
+                            {item.assigned_reviewer_login ? "Change reviewer" : "Assign reviewer"}
+                          </Button>
+                        )}
                         {onDelete && (
-                          <Button type="button" variant="ghost" size="sm" className="ml-auto text-rose-300"
+                          <Button type="button" variant="ghost" size="sm" className="text-rose-300 hover:text-rose-200"
                             onClick={() => onDelete(item)} disabled={deleting}
                             aria-label={`Delete ${item.title}`}>
                             <Trash2 className="size-3" /> Delete
                           </Button>
                         )}
                       </div>
-                    </td>
-                  </tr>
-                </Fragment>
-              ))}
-            </Table>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </UiTable>
           </DataCard>
         </div>
       )}
       <Dialog open={assignmentTarget !== null} onOpenChange={(open) => {
         if (!open && !assignmentSaving) setAssignmentTarget(null);
       }}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{assignmentTarget?.assigned_reviewer_login ? "Change reviewer" : "Assign reviewer"}</DialogTitle>
-            <DialogDescription>
-              {assignmentTarget?.title}. Choose an approved reviewer whose domain overlaps this proposal.
+        <DialogContent className="flex h-[min(88vh,760px)] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-slate-800 px-6 py-5 pr-12">
+            <DialogTitle className="text-lg font-semibold text-slate-100">
+              {assignmentTarget?.assigned_reviewer_login ? "Change reviewer" : "Assign reviewer"}
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-relaxed text-slate-400">
+              {assignmentTarget?.title} · Select an approved reviewer whose domain matches this proposal.
             </DialogDescription>
           </DialogHeader>
-          {assignmentTarget?.assigned_reviewer_login && (
-            <p className="text-sm text-slate-300">Currently assigned: @{assignmentTarget.assigned_reviewer_login}</p>
-          )}
-          {candidateLoading ? (
-            <p className="text-sm text-slate-400">Loading reviewers…</p>
-          ) : (
-            <div className="max-h-72 space-y-2 overflow-y-auto" role="radiogroup" aria-label="Reviewer">
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-800 p-3 text-sm text-slate-300">
-                <input type="radio" name="proposal-reviewer" checked={selectedReviewerId === null}
-                  onChange={() => setSelectedReviewerId(null)} className="accent-sky-400" />
-                Unassigned
-              </label>
-              {candidates.map((candidate) => (
-                <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-800 p-3 text-sm hover:border-sky-400/50">
-                  <input type="radio" name="proposal-reviewer" value={candidate.id}
-                    checked={selectedReviewerId === candidate.id}
-                    onChange={() => setSelectedReviewerId(candidate.id)} className="mt-1 accent-sky-400" />
-                  <span>
-                    <span className="block font-medium text-slate-100">{candidate.name} <span className="font-normal text-sky-300">@{candidate.github}</span></span>
-                    <span className="block text-xs text-slate-400">{candidate.domain}{candidate.field_name ? ` · ${candidate.field_name}` : ""}</span>
-                  </span>
+          <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:grid-rows-1">
+            <section className="flex min-h-0 flex-col border-b border-slate-800 bg-slate-900/30 md:border-b-0 md:border-r" aria-label="Reviewer list">
+              <div className="shrink-0 space-y-3 border-b border-slate-800 px-5 py-4">
+                <div className="flex items-baseline justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-300">Eligible reviewers</h3>
+                  <span className="text-xs text-slate-500">{candidates.length}</span>
+                </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+                  <Input aria-label="Search reviewers" placeholder="Search name, domain, or affiliation"
+                    value={reviewerQuery} onChange={(event) => setReviewerQuery(event.target.value)}
+                    className="h-9 bg-slate-950 pl-9" />
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="radiogroup" aria-label="Reviewer">
+                <label className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-sm transition-colors focus-within:ring-2 focus-within:ring-sky-400 ${selectedReviewerId === null ? "border-sky-400/60 bg-sky-400/10 text-slate-100" : "border-slate-800 text-slate-400 hover:border-slate-600 hover:bg-slate-800/40"}`}>
+                  <input type="radio" name="proposal-reviewer" checked={selectedReviewerId === null}
+                    onChange={() => { setSelectedReviewerId(null); setAssignmentError(""); }} className="accent-sky-400" />
+                  <span className="flex-1">No reviewer</span>
+                  {selectedReviewerId === null && <CheckCircle2 className="size-4 text-sky-300" />}
                 </label>
-              ))}
-              {candidates.length === 0 && !assignmentError && (
-                <p className="text-sm text-amber-300">No approved reviewer matches this proposal's domains.</p>
+                {candidateLoading ? (
+                  <p className="px-3 py-6 text-sm text-slate-400">Loading reviewers…</p>
+                ) : <>
+                  {filteredCandidates.map((candidate) => (
+                    <label key={candidate.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-sky-400 ${selectedReviewerId === candidate.id ? "border-sky-400/60 bg-sky-400/10" : "border-slate-800 hover:border-slate-600 hover:bg-slate-800/40"}`}>
+                      <input type="radio" name="proposal-reviewer" value={candidate.id}
+                        checked={selectedReviewerId === candidate.id}
+                        onChange={() => { setSelectedReviewerId(candidate.id); setAssignmentError(""); }} className="mt-1 accent-sky-400" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-slate-100">{candidate.name}</span>
+                        <span className="mt-0.5 block truncate text-xs text-sky-300">@{candidate.github}</span>
+                        <span className="mt-1 block truncate text-xs text-slate-500">{candidate.affiliation} · {candidate.domain}</span>
+                      </span>
+                      {selectedReviewerId === candidate.id && <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-sky-300" />}
+                    </label>
+                  ))}
+                  {candidates.length === 0 && !assignmentError && (
+                    <p className="px-3 py-6 text-sm leading-relaxed text-slate-400">No approved reviewer matches this proposal's domains.</p>
+                  )}
+                  {candidates.length > 0 && filteredCandidates.length === 0 && (
+                    <p className="px-3 py-6 text-sm text-slate-400">No reviewers match your search.</p>
+                  )}
+                </>}
+              </div>
+            </section>
+            <section className="min-h-0 overflow-y-auto px-6 py-5" aria-label="Reviewer profile">
+              {selectedCandidate ? (
+                <div className="space-y-6">
+                  <div className="flex items-start gap-4">
+                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-sky-400/25 bg-sky-400/10 text-lg font-semibold text-sky-200" aria-hidden="true">
+                      {selectedCandidate.name.trim().charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold leading-tight text-slate-100">{selectedCandidate.name}</h3>
+                      <a href={`https://github.com/${encodeURIComponent(selectedCandidate.github)}`}
+                        target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-sm text-sky-300 hover:text-sky-200">
+                        @{selectedCandidate.github} <ExternalLink className="size-3" />
+                      </a>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 border-y border-slate-800 py-4 sm:grid-cols-2">
+                    <div><p className="text-[11px] uppercase tracking-wider text-slate-500">Affiliation</p><p className="mt-1 text-sm text-slate-200">{selectedCandidate.affiliation}</p></div>
+                    <div><p className="text-[11px] uppercase tracking-wider text-slate-500">Role</p><p className="mt-1 text-sm text-slate-200">{selectedCandidate.role || "Not provided"}</p></div>
+                    <div className="sm:col-span-2"><p className="text-[11px] uppercase tracking-wider text-slate-500">Email</p><a className="mt-1 block break-all text-sm text-sky-300 hover:text-sky-200" href={`mailto:${selectedCandidate.email}`}>{selectedCandidate.email}</a></div>
+                  </div>
+                  <div>
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Domains</h4>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {selectedCandidate.domain.split(",").map((domain) => domain.trim()).filter(Boolean).map((domain) => (
+                        <span key={domain} className={`rounded-md border px-2 py-1 text-xs ${proposalDomainLabels.includes(domain.toLowerCase()) ? "border-sky-400/35 bg-sky-400/10 text-sky-200" : "border-slate-700 bg-slate-900 text-slate-300"}`}>{domain}</span>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedCandidate.field_name && (
+                    <div><h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Field / subfield</h4><p className="mt-2 text-sm text-slate-200">{selectedCandidate.field_name}</p></div>
+                  )}
+                  <div><h4 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Research background</h4><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">{selectedCandidate.research_background}</p></div>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-32 flex-col items-center justify-center text-center">
+                  <p className="text-sm font-medium text-slate-200">{candidateLoading ? "Loading profile…" : selectedReviewerId ? "Reviewer unavailable" : assignmentTarget?.assigned_reviewer_login ? "Remove current reviewer" : "No reviewer selected"}</p>
+                  <p className="mt-2 max-w-xs text-xs leading-relaxed text-slate-500">
+                    {selectedReviewerId ? "Choose another eligible reviewer from the list." : assignmentTarget?.assigned_reviewer_login ? "Save this choice to leave the proposal unassigned." : "Select a reviewer on the left to see their profile."}
+                  </p>
+                </div>
               )}
+            </section>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-800 bg-slate-950 px-6 py-4">
+            <p className="min-w-0 text-xs text-slate-400">
+              {assignmentError ? <span role="alert" className="text-rose-300">{assignmentError}</span>
+                : selectedCandidate ? <>Selected: <span className="text-slate-200">@{selectedCandidate.github}</span></>
+                  : assignmentTarget?.assigned_reviewer_login ? <>Will remove: @{assignmentTarget.assigned_reviewer_login}</> : "No reviewer assigned"}
+            </p>
+            <div className="ml-auto flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setAssignmentTarget(null)} disabled={assignmentSaving}>Cancel</Button>
+              <Button type="button" onClick={() => void saveAssignment()}
+                disabled={candidateLoading || assignmentSaving || Boolean(assignmentError) ||
+                  selectedReviewerId === assignmentTarget?.assigned_reviewer_application_id ||
+                  (selectedReviewerId !== null && !selectedCandidate)}>
+                {assignmentSaving ? "Saving…" : selectedReviewerId === null ? "Clear reviewer" : "Save reviewer"}
+              </Button>
             </div>
-          )}
-          {assignmentError && <p role="alert" className="text-sm text-rose-300">{assignmentError}</p>}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setAssignmentTarget(null)} disabled={assignmentSaving}>Cancel</Button>
-            <Button type="button" onClick={() => void saveAssignment()}
-              disabled={candidateLoading || assignmentSaving || Boolean(assignmentError) ||
-                selectedReviewerId === assignmentTarget?.assigned_reviewer_application_id ||
-                (selectedReviewerId !== null && !candidates.some((item) => item.id === selectedReviewerId))}>
-              {assignmentSaving ? "Saving…" : selectedReviewerId === null ? "Clear reviewer" : "Save reviewer"}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
