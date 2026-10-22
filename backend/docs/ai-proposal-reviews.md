@@ -14,18 +14,78 @@ benchmark workflow. Configure these backend settings in the protected environmen
 | --- | --- |
 | `TBCP_GITHUB_REPOSITORY` | `AI4S-Bench/ai4s-benchmark` |
 | `TBCP_AI_REVIEW_SERVICE_KEY` | Independent random secret, at least 32 characters |
-| `TBCP_AI_REVIEW_GITHUB_TOKEN` | Dedicated bot PAT with repository Discussions write access |
+| `TBCP_AI_REVIEW_GITHUB_APP_ID` | Publishing GitHub App's App ID or client ID |
+| `TBCP_AI_REVIEW_GITHUB_APP_INSTALLATION_ID` | Installation ID for the proposal repository |
+| `TBCP_AI_REVIEW_GITHUB_APP_PRIVATE_KEY_PATH` | RSA PEM file readable by the API and job runner |
+| `TBCP_AI_REVIEW_GITHUB_TOKEN` | Legacy PAT; used only if no App setting is supplied |
 | `TBCP_DISCORD_WEBHOOK_URL` | Discord destination webhook |
 | `TBCP_AI_REVIEW_DISCORD_FORUM` | `true` for a forum, `false` for a text channel |
 | `TBCP_AI_REVIEW_SYNC_LABELS` | Optional, defaults to `false` |
 | `TBCP_AI_REVIEW_REVIEWERS_BY_FIELD` | Optional JSON object, e.g. `{"physics":["your-reviewer"]}` |
 | `TBCP_AI_REVIEW_REVIEWER_LOGINS` | Optional comma-separated backup reviewers |
 
-Use a long-lived dedicated bot PAT for this implementation. A GitHub App
-installation token can be supplied, but automatic token minting/refresh is not
-implemented, so short-lived tokens require external rotation. The token owner
-must be able to edit its own Discussion comments. The OAuth cookie used by human
-reviewers is not involved.
+GitHub App authentication is preferred. The backend signs an RS256 JWT, requests
+an installation token restricted to the configured repository and `discussions:
+write`, and caches it only in process memory. It refreshes two minutes before
+expiry and retries a rejected HTTP 401 once with a fresh token. GitHub currently
+issues installation tokens with a one-hour lifetime. The API and job runner each
+maintain their own cache. Configuring any App setting selects App authentication;
+incomplete configuration and App failures never fall back to the legacy PAT.
+
+The Actions workflow reads proposals with its built-in `GITHUB_TOKEN`, generates
+the AI result and submits it using `AI_REVIEW_SERVICE_KEY`. The durable backend
+job publishes the result as `<app-slug>[bot]`. Changing only the CI token cannot
+change the publishing identity. Do not pass a short-lived installation token in
+the callback or store the App private key in Actions: queued jobs need to mint
+their own tokens after CI exits. Human reviewer OAuth is separate.
+
+### Register and install the publishing App
+
+1. An AI4S-Bench organization owner or App manager opens the
+   [pre-filled App registration form](https://github.com/organizations/AI4S-Bench/settings/apps/new?name=AI4S%20Bench%20Review&description=Publish%20automated%20AI4S%20proposal%20reviews&url=https%3A%2F%2Fai4sbench.org&public=false&webhook_active=false&request_oauth_on_install=false&discussions=write).
+   Suggested name: **AI4S Bench Review**. GitHub App names are globally unique;
+   if unavailable, choose another name. The implementation discovers the real
+   slug from GitHub, so the name is not hard-coded.
+2. Grant repository **Discussions: Read and write**, with the automatic
+   **Metadata: Read-only** permission. Leave other permissions disabled. Disable
+   webhooks, user OAuth authorization and device flow. Register it as private to
+   the organization. No webhook/callback server is needed for this publisher.
+3. Select **Install App > AI4S-Bench > Only select repositories** and choose
+   **ai4s-benchmark**. Confirm the installation. Record the installation ID from
+   the installation settings URL (`.../settings/installations/<id>`).
+4. Record the App ID (or client ID) from the App settings and generate a private
+   key. Transfer the PEM securely to the backend host; do not commit it, paste it
+   into a Discussion, or put it in workflow artifacts. Restrict file access to
+   the service identity, for example `/etc/ai4sbench/ai-review-app.pem`, mode 0600.
+5. Configure both the backend API and job runner:
+
+   ```dotenv
+   TBCP_GITHUB_REPOSITORY=AI4S-Bench/ai4s-benchmark
+   TBCP_AI_REVIEW_GITHUB_APP_ID=<APP_ID_OR_CLIENT_ID>
+   TBCP_AI_REVIEW_GITHUB_APP_INSTALLATION_ID=<INSTALLATION_ID>
+   TBCP_AI_REVIEW_GITHUB_APP_PRIVATE_KEY_PATH=/etc/ai4sbench/ai-review-app.pem
+   ```
+
+   Deploy this backend version and restart both services. For containers, mount
+   the PEM read-only at the configured path in both API and job containers. Keep
+   the existing service key, model configuration and Discord settings. Once the
+   App is verified, remove the old PAT from the backend environment.
+6. Dispatch **Proposal Review** on an existing test Discussion such as #31.
+   Confirm `result.json` has `status: completed`, then check that the new review
+   comment's author is the App bot. Re-run the same Discussion and confirm that
+   the App comment is updated in place. Check final GitHub and Discord delivery
+   states; Actions success and an initial `pending` receipt are insufficient.
+
+When changing from a PAT to an App, the original PAT-owned comment remains
+unchanged. The first App publication creates one new bot-owned sticky comment;
+later publications reuse only that App's comment, including after a lost create
+response. Persisted old comment IDs are not trusted without checking the author
+and AI marker in the correct Discussion. Discord keeps its existing message or
+thread identity. No schema migration is required for this identity change.
+
+See GitHub's [registration URL parameters](https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-using-url-parameters),
+[JWT authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)
+and [installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 
 The service key is only accepted by the two internal AI review routes. It cannot
 access administrator or human-review APIs. Keys are read at runtime and are not
@@ -34,13 +94,15 @@ configuration fails closed. The AI model key is only needed in Actions.
 
 In the benchmark repository, configure:
 
-- Secret `LLM_API_KEY`: selected OpenRouter account key.
+- Secret `LLM_API_KEY`: API key for the provider in `.github/llm-config.json`.
 - Secret `AI_REVIEW_SERVICE_KEY`: same value as the backend service key.
 - Variable `AI_REVIEW_BACKEND_URL`: backend HTTPS origin, e.g. `https://dashboard.ai4sbench.org`.
 
-The current model is `dots-studio/dots-3-note-preview:free` at `https://openrouter.ai/api/v1`.
+The model and endpoint are selected in the benchmark repository's
+`.github/llm-config.json`. The deployed configuration uses `openai/gpt-6-sol` at
+`https://api.commonstack.ai/v1`.
 The script uses the synthetic `openai/` prefix solely to select the upstream SDK;
-OpenRouter receives the exact selected model ID. There is no paid fallback.
+the provider receives the exact configured model ID. There is no provider fallback.
 
 ## API
 
@@ -57,7 +119,7 @@ OpenRouter receives the exact selected model ID. There is no paid fallback.
   "run_attempt": 1,
   "workflow_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "upstream_sha": "f55c14ea065243c8d094e02c0aa156d5fd22fdd4",
-  "model": "dots-studio/dots-3-note-preview:free",
+  "model": "openai/gpt-6-sol",
   "proposal_digest": "<sha256 of title + newline + body>",
   "status": "completed",
   "result": {
@@ -153,12 +215,13 @@ for a completed AI review comment, and verifies the linked Actions run. To resum
 without creating another Discussion, set `AI_REVIEW_E2E_DISCUSSION_NUMBER` to the
 number printed by the first run. This test intentionally writes to production.
 
-The free endpoint is text-only. Image links remain in the proposal but are not
-fetched, and published reviews disclose this limitation. The runner conservatively
-bounds combined rubric/input to 28,000 UTF-8 bytes to reserve output space inside
-the endpoint's 32,768-token context; oversized proposals produce an unavailable
-review. Empty/truncated model output also produces an unavailable review. The
-optional author-fit pass can fail without suppressing a valid primary review.
+The review pipeline sends text only. Image links remain in the proposal but are
+not fetched, and published reviews disclose this limitation. The benchmark runner
+bounds combined rubric/input to 64,000 UTF-8 bytes and completion output to 8,192
+tokens per call. These are local runner limits, not the model's context-window
+size. Oversized proposals and empty/truncated primary review output produce an
+unavailable review. The optional author-fit pass can fail without suppressing a
+valid primary review.
 
 Workflow artifacts retain result, proposal and sanitized diagnostics for seven
 days. A failed backend callback fails Actions and preserves those artifacts.

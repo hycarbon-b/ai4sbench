@@ -65,12 +65,13 @@ class GitHub:
     def __init__(self):
         self.comments = []
         self.queries = []
+        self.login = "review-bot"
 
     async def __call__(self, settings, query, variables):
         self.queries.append(query)
         if "AIReviewSticky" in query:
             return {
-                "viewer": {"login": "review-bot"},
+                "viewer": {"login": self.login},
                 "node": {
                     "comments": {
                         "nodes": self.comments,
@@ -80,16 +81,17 @@ class GitHub:
             }
         if "AIReviewCreate" in query:
             comment = {
-                "id": "DC_1",
+                "id": f"DC_{len(self.comments) + 1}",
                 "url": DISCUSSION["url"] + "#discussioncomment-1",
                 "body": variables["body"],
-                "author": {"login": "review-bot"},
+                "author": {"login": self.login},
             }
             self.comments.append(comment)
             return {"addDiscussionComment": {"comment": comment}}
         if "AIReviewUpdate" in query:
-            self.comments[0]["body"] = variables["body"]
-            return {"updateDiscussionComment": {"comment": self.comments[0]}}
+            comment = next(item for item in self.comments if item["id"] == variables["id"])
+            comment["body"] = variables["body"]
+            return {"updateDiscussionComment": {"comment": comment}}
         return {}
 
 
@@ -378,6 +380,37 @@ def test_reuses_bot_owned_marker_after_crash_but_not_author_spoof(setup):
     post(client)
     pump(client, runner)
     assert any("AIReviewCreate" in query for query in github.queries)
+
+
+def test_switching_to_app_keeps_old_pat_comment_and_updates_only_app_comment(setup, tmp_path):
+    client, app, runner, github, *_ = setup
+    assert post(client).status_code == 202
+    pump(client, runner)
+    pump(client, runner)
+    old = copy.deepcopy(github.comments[0])
+    app_query_start = len(github.queries)
+    settings = app.state.settings
+    settings.ai_review_github_app_id = "12345"
+    settings.ai_review_github_app_installation_id = 678
+    settings.ai_review_github_app_private_key_path = tmp_path / "app.pem"
+    settings.ai_review_github_token = None
+    github.login = "ai4s-review[bot]"
+    auth = AsyncMock()
+    auth.login.return_value = github.login
+    with patch("src.community.ai_reviews.github_app_auth", return_value=auth):
+        assert post(client, payload(102)).status_code == 202
+        pump(client, runner)
+        pump(client, runner)
+        assert len(github.comments) == 2
+        assert github.comments[0] == old
+        assert github.comments[1]["author"]["login"] == "ai4s-review[bot]"
+        assert post(client, payload(103)).status_code == 202
+        pump(client, runner)
+        pump(client, runner)
+        assert len(github.comments) == 2
+        assert github.comments[0] == old
+        assert "runs/103/" in github.comments[1]["body"]
+        assert all("viewer { login }" not in query for query in github.queries[app_query_start:])
 
 
 async def set_lease(factory):

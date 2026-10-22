@@ -20,6 +20,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import complete_delivery, enqueue_delivery, fail_delivery, resend_delivery
+from src.community.github_app import (
+    GitHubAppError,
+    app_configured,
+    app_requested,
+    github_app_auth,
+)
 from src.community.schemas import AIReviewAccepted, AIReviewDiscordRecovery, AIReviewSubmission
 from src.core.auth import get_principal, require_ai_review_service
 from src.core.config import Settings
@@ -57,7 +63,7 @@ def proposal_digest(title: str, body: str) -> str:
 
 def require_publish_config(settings: Settings) -> None:
     if (
-        not settings.ai_review_github_token
+        (not app_configured(settings) if app_requested(settings) else not settings.ai_review_github_token)
         or not settings.discord_webhook_url
         or not settings.github_repository
     ):
@@ -65,22 +71,36 @@ def require_publish_config(settings: Settings) -> None:
 
 
 async def github_request(settings: Settings, query: str, variables: dict[str, Any]) -> dict[str, Any]:
-    token = settings.ai_review_github_token
-    if not token:
-        raise PublicationError("AI review GitHub token is not configured", terminal=True)
     try:
+        app = github_app_auth(settings)
+        token = await app.token() if app else (
+            settings.ai_review_github_token.get_secret_value() if settings.ai_review_github_token else None
+        )
+        if not token:
+            raise PublicationError("AI review GitHub credentials are not configured", terminal=True)
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(
                 "https://api.github.com/graphql",
                 json={"query": query, "variables": variables},
-                headers={"Authorization": f"Bearer {token.get_secret_value()}"},
+                headers={"Authorization": f"Bearer {token}"},
             )
+            if response.status_code == 401 and app:
+                app.invalidate(token)
+                response = await client.post(
+                    "https://api.github.com/graphql",
+                    json={"query": query, "variables": variables},
+                    headers={"Authorization": f"Bearer {await app.token()}"},
+                )
         if response.is_error:
             raise PublicationError("GitHub publication request failed", response_status=response.status_code)
         value = response.json()
         if value.get("errors") or not isinstance(value.get("data"), dict):
             raise PublicationError("GitHub returned GraphQL errors")
         return value["data"]
+    except GitHubAppError as error:
+        raise PublicationError(
+            str(error), terminal=error.terminal, response_status=error.response_status
+        ) from None
     except (httpx.HTTPError, ValueError) as error:
         # Do not include transport URLs/headers or arbitrary remote error text in logs.
         raise PublicationError("GitHub request failed or returned invalid JSON") from error
@@ -333,6 +353,13 @@ def render_discord(body: AIReviewSubmission, publication: AIReviewPublication, t
 
 
 async def find_sticky(settings: Settings, publication: AIReviewPublication) -> dict[str, Any] | None:
+    try:
+        app = github_app_auth(settings)
+        app_login = await app.login() if app else None
+    except GitHubAppError as error:
+        raise PublicationError(
+            str(error), terminal=error.terminal, response_status=error.response_status
+        ) from None
     cursor = None
     while True:
         data = await github_request(
@@ -345,14 +372,14 @@ async def find_sticky(settings: Settings, publication: AIReviewPublication) -> d
                 pageInfo { hasNextPage endCursor }
               } } }
             }
-        """,
+        """.replace("viewer { login }", "" if app else "viewer { login }"),
             {"id": publication.discussion_node_id, "cursor": cursor},
         )
         comments = data["node"]["comments"]
         for comment in comments["nodes"]:
             if (
                 MARKER in comment["body"]
-                and (comment.get("author") or {}).get("login") == data["viewer"]["login"]
+                and (comment.get("author") or {}).get("login") == (app_login or data["viewer"]["login"])
             ):
                 return comment
         if not comments["pageInfo"]["hasNextPage"]:
@@ -363,10 +390,10 @@ async def find_sticky(settings: Settings, publication: AIReviewPublication) -> d
 async def publish_github(
     settings: Settings, body: AIReviewSubmission, publication: AIReviewPublication
 ) -> dict[str, str]:
-    comment_id = publication.github_comment_id
-    if not comment_id:
-        sticky = await find_sticky(settings, publication)
-        comment_id = sticky["id"] if sticky else None
+    # Recheck ownership even for persisted IDs: a PAT -> App change must not
+    # update the old user's comment. Recover an App-owned comment after crashes.
+    sticky = await find_sticky(settings, publication)
+    comment_id = sticky["id"] if sticky else None
     if comment_id:
         data = await github_request(
             settings,
