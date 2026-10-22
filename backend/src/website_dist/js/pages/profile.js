@@ -1,5 +1,5 @@
-/* The profile uses the same cookie session and public proposal board as the rest of the site. */
-import { currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261015-2";
+/* Authored proposals come from the public board; assigned reviews come from the reviewer queue. */
+import { controlPlaneFetch, currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261015-2";
 import { getTasks } from "../data.js?v=20261012-2";
 import { displayStatus } from "../lifecycle.js?v=20261012-2";
 
@@ -23,7 +23,7 @@ function renderList(container, items, emptyText) {
   for (const task of items) {
     const row = document.createElement("li");
     const link = document.createElement("a");
-    link.href = `../tasks/task.html?id=${encodeURIComponent(task.task_slug || task.id)}`;
+    link.href = `../tasks/task.html?id=${encodeURIComponent(task.id)}`;
     link.textContent = task.title;
     const status = document.createElement("span");
     status.textContent = displayStatus(task).replaceAll("_", " ");
@@ -90,17 +90,22 @@ async function showUser(user) {
       tasks.filter((task) => login && String(task.github || "").toLowerCase() === login),
       "You have no published proposals yet.",
     );
-    if (user.can_review) {
-      renderList(
-        document.getElementById("profile-to-review"),
-        tasks.filter((task) => displayStatus(task) === "pending" && String(task.github || "").toLowerCase() !== login),
-        "No proposals currently need a first review.",
-      );
-    }
   } catch (error) {
     const message = `Proposals could not be loaded: ${error.message}`;
     renderList(document.getElementById("profile-proposals"), [], message);
-    if (user.can_review) renderList(document.getElementById("profile-to-review"), [], message);
+  }
+  if (user.can_review) {
+    const container = document.getElementById("profile-to-review");
+    if (!user.github_login) {
+      renderList(container, [], "Connect GitHub to see proposals assigned to you.");
+      return;
+    }
+    try {
+      const queue = await controlPlaneFetch("/api/v1/reviewers/me/proposals");
+      renderList(container, queue.items, "No proposals assigned to you are waiting for review.");
+    } catch (error) {
+      renderList(container, [], `Assigned proposals could not be loaded: ${error.message}`);
+    }
   }
 }
 

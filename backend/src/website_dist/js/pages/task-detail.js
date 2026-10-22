@@ -5,7 +5,7 @@
    ============================================================ */
 
 import { currentUser } from "../app.js?v=20261015-2";
-import { statusBadge, esc, emptyState, ICONS, formatDate } from "../components.js?v=20261012-2";
+import { statusBadge, esc, emptyState, ICONS, formatDate } from "../components.js?v=20261022-reviewer1";
 import { getSite, getTask, invalidateTasks, ROOT } from "../data.js?v=20261012-2";
 import {
   loadReviews,
@@ -317,6 +317,7 @@ async function render() {
   /* ---- Aside ---- */
   const glance = [
     ["Status", statusBadge(displayStatus(task))],
+    ["Assigned reviewer", task.assigned_reviewer_login ? `@${esc(task.assigned_reviewer_login)}` : "Unassigned"],
     ["Created", `<span class="mono">${esc(formatDate(task.created_at))}</span>`],
     ["Updated", `<span class="mono">${esc(formatDate(task.updated_at))}</span>`],
   ];
