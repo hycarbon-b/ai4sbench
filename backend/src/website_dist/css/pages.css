@@ -857,6 +857,8 @@
 }
 
 .form-field { margin-bottom: var(--space-4); }
+/* Holds only a validation message (e.g. the joined affiliations being too long). */
+.form-field--errors-only:empty { display: none; }
 .form-field label {
   display: block;
   font-weight: 600;

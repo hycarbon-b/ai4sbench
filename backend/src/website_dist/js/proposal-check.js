@@ -153,8 +153,8 @@ function computeIssues(value) {
       message: "Give an order-of-magnitude estimate: wall time, CPU cores, GPU and memory.",
     });
   }
-  const gpus = [...v.matchAll(/(\d+)\s*[x×]?\s*(?:nvidia\s+)?(?:gpus?|a100s?|h100s?|v100s?|l40s?|rtx\s*\d+)(?!\s*[·\-*/]?\s*h(?:ours?|rs?)?\b)/gi)].map((m) => Number(m[1]));
-  const cores = [...v.matchAll(/(\d+)\s*(?:cpu\s*)?(?:cores?|vcpus?|cpus?)\b/gi)].map((m) => Number(m[1]));
+  const gpus = [...v.matchAll(/(?<!(?:rtx|gtx)\s*)\b(\d+)\s*[x×]?\s*(?:nvidia\s+)?(?:gpus?|a100s?|h100s?|v100s?|l40s?|rtx\s*\d+)(?!\s*[·\-*/]?\s*h(?:ours?|rs?)?\b)/gi)].map((m) => Number(m[1]));
+  const cores = [...v.matchAll(/(\d+)\s*(?:cpu\s*)?(?:cores?|vcpus?|cpus?)\b(?!\s*[·\-*/]?\s*h(?:ours?|rs?)?\b)/gi)].map((m) => Number(m[1]));
   if (gpus.some((n) => n > 1) || cores.some((n) => n > 16)) {
     found.push({
       id: "compute-limit",

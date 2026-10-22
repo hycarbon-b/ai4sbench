@@ -185,6 +185,12 @@ OpenRouter receives the exact selected model ID. There is no paid fallback.</p>
   }
 }
 </code></pre>
+<p>The GitHub footer links to <code>rubrics/task-proposal.md</code> in the submitted <code>repository</code>
+at <code>workflow_sha</code>, the actual checkout commit recorded by the review runner. Each
+review therefore cites the AI4S rubric version it used; a new run uses the rubric
+in its new checkout. <code>upstream_sha</code> records the source the adapted review tooling
+was based on and is not used for the rubric link. No additional payload fields or
+schema migration are needed for this citation.</p>
 <p><code>unavailable</code> requires <code>result: null</code>; provider errors are never rendered into
 public comments. Completed results must use the original TBS five-level decision
 enum. The backend verifies Discussion identity, category and content digest using

@@ -1,7 +1,7 @@
 /* Authored proposals come from the public board; assigned reviews come from the reviewer queue. */
-import { controlPlaneFetch, currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261015-2";
-import { getTasks } from "../data.js?v=20261012-2";
-import { displayStatus } from "../lifecycle.js?v=20261012-2";
+import { controlPlaneFetch, currentUser, linkGitHub, signInWithGitHub } from "../app.js?v=20261014-release1";
+import { getTasks } from "../data.js?v=20261014-release1";
+import { displayStatus } from "../lifecycle.js?v=20261014-release1";
 
 const state = document.getElementById("profile-state");
 const identity = document.getElementById("profile-identity");

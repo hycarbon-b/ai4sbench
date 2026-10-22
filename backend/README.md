@@ -46,7 +46,7 @@ Useful routes after startup:
 | `/health/live` | Process liveness |
 | `/health/ready` | Database readiness |
 | `/` | Committed Dashboard build |
-| `/website` | Committed Website build |
+| `/website-preview` | Committed Website preview snapshot |
 
 ## Source layout
 
@@ -93,13 +93,14 @@ source, `static/index.html`, and hashed assets in the same parent-repository
 commit.
 
 The public Website is maintained in the `ai4s-bench-website` submodule. Prepare
-and push its own branch first, update the parent submodule pointer, then sync
-`src/website_dist/` with the reviewed deployable static files. The Website has
-no build step. The parent repository can publish this snapshot at `/website/`
-after its own PR is merged even while the Website source PR remains open; this
-does not publish the separate GitHub Pages site. Commit the snapshot instead of
-copying application files directly to EC2. See the
-[EC2 runbook](../EC2_RUNBOOK.md#backend-hosted-website-snapshot).
+and push its own branch first, update the parent submodule pointer, then run
+`python scripts/sync_website_preview.py` to mirror the checked-out source into
+`src/website_dist/`. The Website has no build step. The parent repository can
+publish this snapshot at `/website-preview/` after its own PR is merged even
+while the Website source PR remains open; this does not publish the separate
+GitHub Pages site. Commit the snapshot instead of copying application files
+directly to EC2. See the
+[EC2 runbook](../EC2_RUNBOOK.md#backend-hosted-website-preview).
 
 ## Proposal, review, and synchronization APIs
 

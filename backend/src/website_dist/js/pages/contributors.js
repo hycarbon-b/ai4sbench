@@ -2,8 +2,8 @@
    AI4S-Benchmark · Contributors: credit policy + leaderboard
    ============================================================ */
 
-import { getContributors, getSite, ROOT } from "../data.js?v=20261012-2";
-import { esc, emptyState, chip, ICONS } from "../components.js?v=20261012-2";
+import { getContributors, getSite, ROOT } from "../data.js?v=20261014-release1";
+import { esc, emptyState, chip, ICONS } from "../components.js?v=20261014-release1";
 
 /* ---- Contribution categories ----------------------------------
    The points table in site.json has seven lines; the board folds them into
@@ -244,6 +244,7 @@ function renderLeaderboard(all, demo) {
   const catButtons = [...host.querySelectorAll("[data-category]")];
   const pointsHeader = host.querySelector("th.num:last-child");
 
+  let rankOf = new Map();
   function visible() {
     const q = state.query.trim().toLowerCase();
     let list = all;
@@ -253,6 +254,8 @@ function renderLeaderboard(all, demo) {
         .filter((c) => c.breakdown[state.category] > 0)
         .map((c) => ({ ...c, points: c.breakdown[state.category], breakdown: { [state.category]: c.breakdown[state.category] } }));
     }
+    // "#" is the points rank, whatever the display sort or search.
+    rankOf = new Map([...list].sort(SORTS.points.cmp).map((c, i) => [c, i + 1]));
     if (q) {
       list = list.filter((c) =>
         [c.name, c.institution, c.github ?? "", c.role, ...c.areas].some((s) => s.toLowerCase().includes(q))
@@ -276,7 +279,7 @@ function renderLeaderboard(all, demo) {
     podiumHost.innerHTML = state.sort === "points" && !state.query.trim() ? podium(list, max) : "";
 
     body.innerHTML = list.length
-      ? list.map((c, i) => row(c, i + 1, max)).join("")
+      ? list.map((c) => row(c, rankOf.get(c), max)).join("")
       : `<tr><td colspan="8" class="lb-empty-row">No contributors match. Try another name or field.</td></tr>`;
   }
 

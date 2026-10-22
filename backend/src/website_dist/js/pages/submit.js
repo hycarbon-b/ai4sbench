@@ -1,4 +1,4 @@
-import { mountPrimaryDomain } from "../domains.js";
+import { mountPrimaryDomain } from "../domains.js?v=20261014-release1";
 /* ============================================================
    AI4S-Benchmark · Task proposal form
    Four sections + review. On submit, the proposal is sent to the
@@ -6,8 +6,8 @@ import { mountPrimaryDomain } from "../domains.js";
    Field → schema mapping lives in ../proposal.js (DOM-free).
    ============================================================ */
 
-import { esc, ICONS } from "../components.js?v=20261012-2";
-import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20261015-2";
+import { esc, ICONS } from "../components.js?v=20261014-release1";
+import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20261014-release1";
 import {
   LIMITS,
   STEP_FIELDS,
@@ -16,10 +16,10 @@ import {
   buildProposalSubmission,
   buildMarkdown,
   slugify,
-} from "../proposal.js?v=20261012-2";
-import { renderRich, mountMath } from "../richtext.js?v=20261012-2";
-import { mountContributorRows } from "../contributor-fields.js?v=20261012-2";
-import { mountFieldAdvice, checklistHTML } from "../proposal-advice.js?v=20261012-2";
+} from "../proposal.js?v=20261014-release1";
+import { renderRich, mountMath } from "../richtext.js?v=20261014-release1";
+import { mountContributorRows } from "../contributor-fields.js?v=20261014-release1";
+import { mountFieldAdvice, checklistHTML } from "../proposal-advice.js?v=20261014-release1";
 
 const STEPS = ["Scientific problem", "Environment", "Evaluation", "Contributor", "Review & submit"];
 const REVIEW_STEP = STEPS.length - 1;
@@ -117,15 +117,21 @@ controlPlaneFetch("/api/v1/proposal-domains")
           `<label class="choice"><input type="checkbox" name="domain" value="${esc(domain)}" id="f-domain-${index}"> ${esc(domain)}</label>`
       )
       .join("");
-    domainSelection = mountPrimaryDomain(document.getElementById("f-domain"));
-    restoreDraft();
+    // The draft was restored at load; tick its domains now that the chips exist.
+    const chosen = new Set(draftDomains);
+    form.querySelectorAll('input[name="domain"]').forEach((cb) => { cb.checked = chosen.has(cb.value); });
+    domainSelection = mountPrimaryDomain(document.getElementById("f-domain"), draftDomains[0]);
   })
   .catch((err) => console.error("Proposal domain options failed to load:", err));
 
 /* ---- Draft persistence (this browser only) ---- */
+let draftDomains = []; // the draft's domains, held until the chips exist
 function saveDraft() {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(answers()));
+    const draft = answers();
+    // No chips yet (still loading, or the list failed): keep the draft's domains.
+    if (!form.querySelector('input[name="domain"]')) draft.domain = draftDomains;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   } catch {
     /* storage unavailable — fine */
   }
@@ -144,9 +150,7 @@ function restoreDraft() {
         continue;
       }
       if (key === "domain") {
-        const chosen = new Set(Array.isArray(value) ? value : [value]);
-        form.querySelectorAll('input[name="domain"]').forEach((cb) => { cb.checked = chosen.has(cb.value); });
-        domainSelection?.setPrimary(Array.isArray(value) ? value[0] : String(value).split(",")[0].trim());
+        draftDomains = Array.isArray(value) ? value : String(value).split(",").map((d) => d.trim()).filter(Boolean);
         continue;
       }
       const el = form.elements[key];
@@ -226,6 +230,8 @@ function validateStep(i) {
   const bad = keys.find((k) => errors[k]);
   if (bad === "name") {
     contributors.focusFirst();
+  } else if (bad === "affiliation") {
+    form.querySelector('input[name="contributor_affiliation"]')?.focus();
   } else if (bad) {
     const el = form.elements[bad];
     // A checkbox group comes back as a RadioNodeList; focus its first box.
@@ -235,6 +241,9 @@ function validateStep(i) {
 }
 
 /* ---- Live updates ---- */
+form.addEventListener("change", (event) => {
+  if (event.target.closest("[data-primary-domain]")) saveDraft();
+});
 form.addEventListener("input", (e) => {
   const key = e.target.name;
   if (!key) return;
@@ -426,6 +435,8 @@ function showSuccess(proposal) {
 
 document.getElementById("success-another").addEventListener("click", () => {
   form.reset();
+  draftDomains = [];
+  domainSelection?.setPrimary("");
   contributors.set([{ name: "", affiliation: "" }]);
   updateSlug();
   updateCounters();
@@ -455,6 +466,7 @@ document.getElementById("copy-markdown").addEventListener("click", async () => {
 /* ---- Init ---- */
 steps.forEach((s, i) => (s.hidden = i !== 0));
 prevBtn.disabled = true;
+restoreDraft();
 updateSlug();
 updateCounters();
 renderNav();

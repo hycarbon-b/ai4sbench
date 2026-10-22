@@ -2,8 +2,8 @@
    AI4S-Benchmark · Releases
    ============================================================ */
 
-import { getReleases, ROOT } from "../data.js?v=20261012-2";
-import { esc, emptyState, formatDate } from "../components.js?v=20261012-2";
+import { getReleases, ROOT } from "../data.js?v=20261014-release1";
+import { esc, emptyState, formatDate } from "../components.js?v=20261014-release1";
 
 const STATUS_BADGE = {
   preparing: '<span class="badge badge--preparing">Preparing</span>',

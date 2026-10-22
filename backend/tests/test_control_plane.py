@@ -261,22 +261,23 @@ class ControlPanelIntegrationTests(unittest.TestCase):
                 self.assertEqual(response.headers["access-control-allow-origin"], origin)
                 self.assertEqual(response.headers["access-control-allow-credentials"], "true")
 
-    def test_website_dist_is_served_beneath_dashboard(self) -> None:
-        redirect = self.client.get("/website", follow_redirects=False)
+    def test_website_preview_is_served_beneath_dashboard(self) -> None:
+        redirect = self.client.get("/website-preview", follow_redirects=False)
         self.assertEqual(redirect.status_code, 307)
-        self.assertEqual(redirect.headers["location"], "/website/")
+        self.assertEqual(redirect.headers["location"], "/website-preview/")
 
-        index = self.client.get("/website/")
+        index = self.client.get("/website-preview/")
         self.assertEqual(index.status_code, 200)
         self.assertIn("AI4S-Benchmark", index.text)
 
-        site_config = self.client.get("/website/data/site.json")
+        site_config = self.client.get("/website-preview/data/site.json")
         self.assertEqual(site_config.status_code, 200)
         self.assertEqual(site_config.json()["control_plane_url"], "https://dashboard.ai4sbench.org")
 
-        reviewer_form = self.client.get("/website/reviewers/")
+        reviewer_form = self.client.get("/website-preview/reviewers/")
         self.assertEqual(reviewer_form.status_code, 200)
-        self.assertIn("20261012-2", reviewer_form.text)
+        self.assertIn("Become a Reviewer", reviewer_form.text)
+        self.assertIn("Domains you can review", reviewer_form.text)
 
     def test_document_site_and_swagger_routes(self) -> None:
         redirect = self.client.get("/document", follow_redirects=False)

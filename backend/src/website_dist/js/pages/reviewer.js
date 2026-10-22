@@ -5,16 +5,16 @@
    signed-in identity and, when enabled, checks email verification.
    ============================================================ */
 
-import { getSite } from "../data.js?v=20261012-2";
-import { esc } from "../components.js?v=20261012-2";
-import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20261015-2";
+import { getSite } from "../data.js?v=20261014-release1";
+import { esc } from "../components.js?v=20261014-release1";
+import { controlPlaneFetch, currentUser, signInWithGitHub } from "../app.js?v=20261014-release1";
 import {
   LIMITS,
   REVIEWER_ENDPOINT,
   buildMarkdown,
   buildReviewerDocument,
   validateApplication,
-} from "../reviewer.js?v=20261018-1";
+} from "../reviewer.js?v=20261014-release1";
 
 const form = document.getElementById("reviewer-form");
 const statusEl = document.getElementById("reviewer-status");
