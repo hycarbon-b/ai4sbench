@@ -3,6 +3,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
   CheckCircle2,
+  ChevronDown,
   CloudCog,
   Database,
   Download,
@@ -28,6 +29,7 @@ import { FormEvent, Fragment, ReactNode, useEffect, useMemo, useState } from "re
 
 import {
   api,
+  assignProposalReviewer,
   createDatabaseSnapshot,
   createProposal,
   databaseSnapshotDownloadUrl,
@@ -35,6 +37,7 @@ import {
   getCurrentUser,
   getGithubAuthorizeUrl,
   getProposalDomains,
+  getProposalReviewerCandidates,
   resendOutboundDelivery,
   signOut,
   syncProposalDiscussions,
@@ -48,6 +51,7 @@ import {
   type Plan,
   type Proposal,
   type ProposalInput,
+  type ProposalReviewerCandidate,
   type ReviewerApplication,
   type ReviewerApplicationUpdate,
   type Run,
@@ -290,7 +294,7 @@ export default function App() {
         snapshots,
       ] = await Promise.allSettled([
           api<Dashboard>("/api/v1/dashboard"),
-          api<{ items: Proposal[] }>("/api/v1/proposals"),
+          api<{ items: Proposal[] }>("/api/v1/admin/proposals"),
           api<{ items: ReviewerApplication[] }>("/api/v1/reviewer-applications"),
           api<{ items: ManagedUser[] }>("/api/v1/users"),
           api<{ items: TaskRevision[] }>("/api/v1/task-revisions"),
@@ -780,6 +784,10 @@ export default function App() {
               onProposal={submitProposal}
               onSyncDiscussions={syncDiscussions}
               onDeleteProposal={removeProposal}
+              onReviewerAssigned={(item, login) => {
+                setMessage(login ? `Assigned @${login} to "${item.title}".` : `Cleared reviewer for "${item.title}".`);
+                void loadOps();
+              }}
               onResendDelivery={resendDelivery}
               onMailQueued={() => void loadOps()}
               onManageReviewer={manageReviewer}
@@ -864,6 +872,7 @@ function AdminPanel({
   onProposal,
   onSyncDiscussions,
   onDeleteProposal,
+  onReviewerAssigned,
   onResendDelivery,
   onMailQueued,
   onManageReviewer,
@@ -905,6 +914,7 @@ function AdminPanel({
   onProposal: (event: FormEvent<HTMLFormElement>) => void;
   onSyncDiscussions: () => void;
   onDeleteProposal: (proposal: Proposal) => void;
+  onReviewerAssigned: (proposal: Proposal, login: string | null) => void;
   onResendDelivery: (delivery: OutboundDelivery) => void;
   onMailQueued: () => void;
   onManageReviewer: (
@@ -1002,6 +1012,7 @@ function AdminPanel({
           ready={proposalReady}
           onSubmit={onProposal}
           onDelete={onDeleteProposal}
+          onReviewerAssigned={onReviewerAssigned}
           deleting={loading}
         />
       </>
@@ -1750,6 +1761,7 @@ function ProposalPanel({
   ready,
   onSubmit,
   onDelete,
+  onReviewerAssigned,
   deleting = false,
 }: {
   proposal: ProposalInput;
@@ -1760,8 +1772,44 @@ function ProposalPanel({
   ready: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onDelete?: (proposal: Proposal) => void;
+  onReviewerAssigned?: (proposal: Proposal, login: string | null) => void;
   deleting?: boolean;
 }) {
+  const [assignmentTarget, setAssignmentTarget] = useState<Proposal | null>(null);
+  const [candidates, setCandidates] = useState<ProposalReviewerCandidate[]>([]);
+  const [selectedReviewerId, setSelectedReviewerId] = useState<string | null>(null);
+  const [candidateLoading, setCandidateLoading] = useState(false);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentError, setAssignmentError] = useState("");
+  const openAssignment = async (item: Proposal) => {
+    setAssignmentTarget(item);
+    setSelectedReviewerId(item.assigned_reviewer_application_id);
+    setCandidates([]);
+    setAssignmentError("");
+    setCandidateLoading(true);
+    try {
+      const response = await getProposalReviewerCandidates(item.id);
+      setCandidates(response.items);
+    } catch (caught) {
+      setAssignmentError(caught instanceof Error ? caught.message : "Could not load reviewer candidates.");
+    } finally {
+      setCandidateLoading(false);
+    }
+  };
+  const saveAssignment = async () => {
+    if (!assignmentTarget) return;
+    setAssignmentSaving(true);
+    setAssignmentError("");
+    try {
+      const updated = await assignProposalReviewer(assignmentTarget.id, selectedReviewerId);
+      setAssignmentTarget(null);
+      onReviewerAssigned?.(assignmentTarget, updated.assigned_reviewer_login);
+    } catch (caught) {
+      setAssignmentError(caught instanceof Error ? caught.message : "Could not save the reviewer assignment.");
+    } finally {
+      setAssignmentSaving(false);
+    }
+  };
   const selectedDomains = new Set(
     proposal.domain
       .split(",")
@@ -1782,7 +1830,12 @@ function ProposalPanel({
         title="Task proposals"
         description="This form uses the same scientist-facing fields as the public Website and opens a GitHub Discussion for review."
       />
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <details className="group rounded-xl border border-slate-800 bg-slate-950/30">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-slate-100">
+          <span>New proposal</span>
+          <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="grid items-start gap-4 border-t border-slate-800 p-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
         <Card>
           <CardHeader className="border-b border-slate-800">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2068,7 +2121,8 @@ function ProposalPanel({
             <Step number="04" text="CI, Oracle and Nop validation" />
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </details>
       {recent.length > 0 && (
         <div className="mt-4">
           <DataCard
@@ -2078,70 +2132,118 @@ function ProposalPanel({
             <Table
               headers={[
                 "Proposal",
-                "Classification",
-                "Input",
+                "Domain and field",
                 "Status",
-                "Contributor",
-                "Discussion",
-                "",
+                "Reviewer",
+                "Actions",
               ]}
+              className="min-w-[850px]"
             >
               {recent.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <span className="font-medium text-slate-100">
-                      {item.title}
-                    </span>
-                    <p>
-                      <code>{item.task_slug}</code>
-                    </p>
-                  </td>
-                  <td>
-                    <code>{item.domain}</code>
-                    <p>{item.field}</p>
-                  </td>
-                  <td>
-                    <Status state={item.input_valid ? "valid" : "invalid"} />
-                  </td>
-                  <td>
-                    <Status state={item.status} />
-                  </td>
-                  <td>{item.author_login ? `@${item.author_login}` : "—"}</td>
-                  <td>
-                    {item.discussion_url ? (
-                      <a
-                        className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
-                        href={item.discussion_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open <ExternalLink className="size-3" />
-                      </a>
-                    ) : (
-                      "Pending"
-                    )}
-                  </td>
-                  <td className="text-right">
-                    {onDelete && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => onDelete(item)}
-                        disabled={deleting}
-                        aria-label={`Delete ${item.title}`}
-                      >
-                        <Trash2 className="size-3" />
-                        Delete
-                      </Button>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={item.id}>
+                  <tr className="border-t border-slate-700">
+                    <td className="max-w-sm align-top font-medium text-slate-100">{item.title}</td>
+                    <td className="max-w-xs align-top">
+                      <span className="block text-slate-200">{item.domain}</span>
+                      <span className="block text-xs text-slate-400">{item.field_name}</span>
+                    </td>
+                    <td className="align-top"><Status state={item.status} /></td>
+                    <td className="align-top">
+                      {item.assigned_reviewer_login ? (
+                        <a className="text-sky-300 hover:text-sky-200"
+                          href={`https://github.com/${encodeURIComponent(item.assigned_reviewer_login)}`}
+                          target="_blank" rel="noreferrer">@{item.assigned_reviewer_login}</a>
+                      ) : (
+                        <span className="text-amber-300">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="align-top">
+                      {onReviewerAssigned && (
+                        <Button type="button" variant="outline" size="sm"
+                          onClick={() => void openAssignment(item)}>
+                          {item.assigned_reviewer_login ? "Change reviewer" : "Assign reviewer"}
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-slate-800 bg-slate-950/30">
+                    <td colSpan={5} className="!pt-0 text-xs text-slate-400">
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                        <span>Task <code>{item.task_slug}</code></span>
+                        <span>Input <Status state={item.input_valid ? "valid" : "invalid"} /></span>
+                        <span>Contributor {item.author_login ? `@${item.author_login}` : "—"}</span>
+                        {item.discussion_url ? (
+                          <a className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200"
+                            href={item.discussion_url} target="_blank" rel="noreferrer">
+                            Discussion <ExternalLink className="size-3" />
+                          </a>
+                        ) : <span>Discussion pending</span>}
+                        {onDelete && (
+                          <Button type="button" variant="ghost" size="sm" className="ml-auto text-rose-300"
+                            onClick={() => onDelete(item)} disabled={deleting}
+                            aria-label={`Delete ${item.title}`}>
+                            <Trash2 className="size-3" /> Delete
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                </Fragment>
               ))}
             </Table>
           </DataCard>
         </div>
       )}
+      <Dialog open={assignmentTarget !== null} onOpenChange={(open) => {
+        if (!open && !assignmentSaving) setAssignmentTarget(null);
+      }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{assignmentTarget?.assigned_reviewer_login ? "Change reviewer" : "Assign reviewer"}</DialogTitle>
+            <DialogDescription>
+              {assignmentTarget?.title}. Choose an approved reviewer whose domain overlaps this proposal.
+            </DialogDescription>
+          </DialogHeader>
+          {assignmentTarget?.assigned_reviewer_login && (
+            <p className="text-sm text-slate-300">Currently assigned: @{assignmentTarget.assigned_reviewer_login}</p>
+          )}
+          {candidateLoading ? (
+            <p className="text-sm text-slate-400">Loading reviewers…</p>
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-y-auto" role="radiogroup" aria-label="Reviewer">
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-800 p-3 text-sm text-slate-300">
+                <input type="radio" name="proposal-reviewer" checked={selectedReviewerId === null}
+                  onChange={() => setSelectedReviewerId(null)} className="accent-sky-400" />
+                Unassigned
+              </label>
+              {candidates.map((candidate) => (
+                <label key={candidate.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-800 p-3 text-sm hover:border-sky-400/50">
+                  <input type="radio" name="proposal-reviewer" value={candidate.id}
+                    checked={selectedReviewerId === candidate.id}
+                    onChange={() => setSelectedReviewerId(candidate.id)} className="mt-1 accent-sky-400" />
+                  <span>
+                    <span className="block font-medium text-slate-100">{candidate.name} <span className="font-normal text-sky-300">@{candidate.github}</span></span>
+                    <span className="block text-xs text-slate-400">{candidate.domain}{candidate.field_name ? ` · ${candidate.field_name}` : ""}</span>
+                  </span>
+                </label>
+              ))}
+              {candidates.length === 0 && !assignmentError && (
+                <p className="text-sm text-amber-300">No approved reviewer matches this proposal's domains.</p>
+              )}
+            </div>
+          )}
+          {assignmentError && <p role="alert" className="text-sm text-rose-300">{assignmentError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setAssignmentTarget(null)} disabled={assignmentSaving}>Cancel</Button>
+            <Button type="button" onClick={() => void saveAssignment()}
+              disabled={candidateLoading || assignmentSaving || Boolean(assignmentError) ||
+                selectedReviewerId === assignmentTarget?.assigned_reviewer_application_id ||
+                (selectedReviewerId !== null && !candidates.some((item) => item.id === selectedReviewerId))}>
+              {assignmentSaving ? "Saving…" : selectedReviewerId === null ? "Clear reviewer" : "Save reviewer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

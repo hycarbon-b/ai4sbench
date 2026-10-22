@@ -56,13 +56,31 @@ export type Proposal = {
   title: string;
   domain: string;
   field: string;
+  field_name: string;
   task_slug: string;
   status: string;
   discussion_url: string;
   author_login: string;
   discussion_number?: number | null;
   input_valid: boolean;
+  assigned_reviewer_application_id: string | null;
+  assigned_reviewer_login: string | null;
+  reviewer_assigned_at: string | null;
+  reviewer_assigned_by: string | null;
 };
+
+export type ProposalReviewerCandidate = {
+  id: string;
+  name: string;
+  github: string;
+  domain: string;
+  field_name: string | null;
+};
+
+export type ProposalReviewerAssignment = Pick<
+  Proposal,
+  "assigned_reviewer_application_id" | "assigned_reviewer_login" | "reviewer_assigned_at" | "reviewer_assigned_by"
+> & { proposal_id: string };
 
 export type ReviewerApplicationStatus = "pending" | "approved" | "rejected";
 
@@ -239,6 +257,15 @@ export const createProposal = (input: ProposalInput) =>
 export const deleteProposal = (id: string) =>
   api<void>(`/api/v1/proposals/${encodeURIComponent(id)}`, {
     method: "DELETE",
+  });
+export const getProposalReviewerCandidates = (id: string) =>
+  api<{ items: ProposalReviewerCandidate[] }>(
+    `/api/v1/proposals/${encodeURIComponent(id)}/reviewer-candidates`,
+  );
+export const assignProposalReviewer = (id: string, reviewerApplicationId: string | null) =>
+  api<ProposalReviewerAssignment>(`/api/v1/proposals/${encodeURIComponent(id)}/reviewer`, {
+    method: "PATCH",
+    body: JSON.stringify({ reviewer_application_id: reviewerApplicationId }),
   });
 export const updateReviewerApplication = (
   id: string,

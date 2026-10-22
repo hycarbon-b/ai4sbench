@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import enqueue_proposal_notification, enqueue_review_notification
+from src.community.reviewer_assignment import reconcile_proposal_reviewer
 from src.community.reviewer_otp import (
     ReviewerEmailOtpIssuedResponse,
     ReviewerEmailOtpRequest,
@@ -218,6 +219,14 @@ async def create_reviewer_application(
         user_id=user.id,
     )
     session.add(item)
+    await session.flush()
+    previous_assignments = await session.scalars(
+        select(Proposal)
+        .join(ReviewerApplication, Proposal.assigned_reviewer_application_id == ReviewerApplication.id)
+        .where(ReviewerApplication.user_id == user.id)
+    )
+    for proposal in previous_assignments:
+        await reconcile_proposal_reviewer(session, proposal)
     await session.commit()
     return ReviewerApplicationCreatedResponse.model_validate(item, from_attributes=True)
 
@@ -1260,6 +1269,7 @@ async def update_proposal(
     proposal.github_updated_at = parse_github_time(str(discussion.get("updatedAt") or "")) or datetime.now(
         UTC
     )
+    await reconcile_proposal_reviewer(session, proposal)
     await session.commit()
     return {
         "id": proposal.id,
@@ -1426,6 +1436,8 @@ async def sync_proposal_discussions(
             for key, value in values.items():
                 setattr(existing, key, value)
             updated_count += 1
+        if existing.assigned_reviewer_application_id:
+            await reconcile_proposal_reviewer(session, existing)
         for comment in human_review_comments(node, reviewer_logins):
             comment_values, _, _ = review_values_from_discussion(
                 {"comments": {"nodes": [comment]}}, reviewer_logins

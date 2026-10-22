@@ -150,6 +150,19 @@ class Proposal(Base):
     author_login: Mapped[str | None] = mapped_column(
         String(100), comment="GitHub login of the proposal author."
     )
+    assigned_reviewer_application_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("reviewer_applications.id", ondelete="SET NULL"), index=True,
+        comment="Approved reviewer application selected for this proposal.",
+    )
+    assigned_reviewer_login: Mapped[str | None] = mapped_column(
+        String(100), comment="GitHub login of the assigned reviewer."
+    )
+    reviewer_assigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Time of the most recent reviewer assignment."
+    )
+    reviewer_assigned_by: Mapped[str | None] = mapped_column(
+        String(100), comment="Administrator who made the reviewer assignment."
+    )
     title: Mapped[str] = mapped_column(String(160), comment="Proposal title.")
     abstract: Mapped[str] = mapped_column(Text, comment="Short summary of the proposed task.")
     domain: Mapped[str] = mapped_column(
@@ -372,6 +385,7 @@ class ReviewerApplication(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
 
 class EmailVerificationChallenge(Base):
     """Short-lived email proof scoped to one purpose and optional account."""

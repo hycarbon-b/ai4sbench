@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -41,9 +40,6 @@ class Settings(BaseSettings):
     ai_review_github_token: SecretStr | None = None
     ai_review_discord_forum: bool = True
     ai_review_sync_labels: bool = False
-    # Comma-separated AI4S reviewer logins; empty disables automatic assignment.
-    ai_review_reviewer_logins: tuple[str, ...] = ()
-    ai_review_reviewers_by_field: dict[str, list[str]] = Field(default_factory=dict)
     discord_webhook_url: SecretStr | None = None
     smtp_enabled: bool = False
     smtp_server: str = ""
@@ -139,7 +135,6 @@ class Settings(BaseSettings):
         "contributor_github_logins",
         "contributor_github_emails",
         "reviewer_github_logins",
-        "ai_review_reviewer_logins",
         mode="before",
     )
     @classmethod
@@ -147,11 +142,6 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return tuple(item.strip() for item in value.split(",") if item.strip())
         return value
-
-    @field_validator("ai_review_reviewers_by_field", mode="before")
-    @classmethod
-    def parse_ai_reviewer_pool(cls, value: object) -> object:
-        return json.loads(value) if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def validate_production(self) -> Settings:

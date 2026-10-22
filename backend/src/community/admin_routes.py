@@ -8,19 +8,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import resend_delivery
+from src.community.reviewer_assignment import reconcile_proposal_reviewer, sync_ai_reviewer_comment
+from src.community.reviewer_selector import reviewer_selector
 from src.community.schemas import (
+    AdminProposalListResponse,
     AdminUserListResponse,
     AdminUserResponse,
     OutboundDeliveryListResponse,
     OutboundDeliveryResponse,
+    ProposalReviewerAssignmentResponse,
+    ProposalReviewerAssignmentUpdate,
+    ProposalReviewerCandidateListResponse,
     ReviewerApplicationListResponse,
     ReviewerApplicationResponse,
     ReviewerApplicationUpdate,
 )
 from src.core.auth import Principal, get_principal
 from src.core.identity import User
-from src.db.database import get_session
-from src.db.models import OutboundDelivery, ReviewerApplication
+from src.db.database import begin_immediate, get_session
+from src.db.models import OutboundDelivery, Proposal, ReviewerApplication
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 AdminDep = Annotated[Principal, Depends(get_principal)]
@@ -127,9 +133,147 @@ async def update_reviewer_application(
         else:
             item.reviewed_by = principal.subject
             item.reviewed_at = datetime.now(UTC)
+    assigned_proposals = await session.scalars(
+        select(Proposal).where(Proposal.assigned_reviewer_application_id == item.id)
+    )
+    for proposal in assigned_proposals:
+        await reconcile_proposal_reviewer(session, proposal)
     await session.commit()
     await session.refresh(item)
     return item
+
+
+async def active_assignment_proposal(session: AsyncSession, proposal_id: str) -> Proposal:
+    proposal = await session.get(Proposal, proposal_id)
+    if proposal is None or proposal.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return proposal
+
+
+@admin_router.get(
+    "/admin/proposals",
+    tags=["proposals"],
+    response_model=AdminProposalListResponse,
+    summary="List active proposals with reviewer assignments",
+)
+async def list_admin_proposals(session: SessionDep) -> AdminProposalListResponse:
+    proposals = await session.scalars(
+        select(Proposal).where(Proposal.deleted_at.is_(None)).order_by(Proposal.created_at.desc())
+    )
+    def field_name(proposal: Proposal) -> str:
+        document = proposal.document if isinstance(proposal.document, dict) else {}
+        form = document.get("form_payload", document)
+        return str(form.get("field_name") or proposal.field) if isinstance(form, dict) else proposal.field
+
+    return {
+        "items": [
+            {
+                "id": proposal.id,
+                "title": proposal.title,
+                "domain": proposal.domain,
+                "field": proposal.field,
+                "field_name": field_name(proposal),
+                "task_slug": proposal.task_slug,
+                "status": proposal.status,
+                "discussion_url": proposal.discussion_url,
+                "discussion_number": proposal.discussion_number,
+                "discord_message_url": proposal.discord_message_url,
+                "author_login": proposal.author_login,
+                "input_valid": proposal.input_valid,
+                "assigned_reviewer_application_id": proposal.assigned_reviewer_application_id,
+                "assigned_reviewer_login": proposal.assigned_reviewer_login,
+                "reviewer_assigned_at": proposal.reviewer_assigned_at,
+                "reviewer_assigned_by": proposal.reviewer_assigned_by,
+            }
+            for proposal in proposals
+        ]
+    }
+
+
+@admin_router.get(
+    "/proposals/{proposal_id}/reviewer-candidates",
+    tags=["proposals"],
+    response_model=ProposalReviewerCandidateListResponse,
+    summary="List eligible reviewers for a proposal",
+)
+async def proposal_reviewer_candidates(
+    proposal_id: str, session: SessionDep
+) -> ProposalReviewerCandidateListResponse:
+    proposal = await active_assignment_proposal(session, proposal_id)
+    applications = await session.scalars(
+        select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc())
+    )
+    return {
+        "items": [
+            {
+                "id": application.id,
+                "name": application.name,
+                "github": application.github,
+                "domain": application.domain,
+                "field_name": application.field_name,
+            }
+            for application in reviewer_selector(proposal, applications)
+        ]
+    }
+
+
+@admin_router.patch(
+    "/proposals/{proposal_id}/reviewer",
+    tags=["proposals"],
+    response_model=ProposalReviewerAssignmentResponse,
+    summary="Assign, change, or clear a proposal reviewer",
+    responses={
+        404: {"description": "Proposal not found."},
+        422: {"description": "Reviewer is not approved or is incompatible with the proposal."},
+    },
+)
+async def assign_proposal_reviewer(
+    proposal_id: str,
+    body: ProposalReviewerAssignmentUpdate,
+    session: SessionDep,
+    principal: AdminDep,
+) -> ProposalReviewerAssignmentResponse:
+    await begin_immediate(session)
+    proposal = await active_assignment_proposal(session, proposal_id)
+    if body.reviewer_application_id is None:
+        proposal.assigned_reviewer_application_id = None
+        proposal.assigned_reviewer_login = None
+        proposal.reviewer_assigned_at = None
+        proposal.reviewer_assigned_by = None
+    else:
+        applications = await session.scalars(
+            select(ReviewerApplication).order_by(ReviewerApplication.created_at.desc())
+        )
+        candidate = next(
+            (
+                application
+                for application in reviewer_selector(proposal, applications)
+                if application.id == body.reviewer_application_id
+            ),
+            None,
+        )
+        if candidate is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Choose an approved reviewer whose domain matches this proposal "
+                    "and who is not its author"
+                ),
+            )
+        if proposal.assigned_reviewer_application_id != candidate.id:
+            proposal.assigned_reviewer_application_id = candidate.id
+            proposal.assigned_reviewer_login = candidate.github
+            proposal.reviewer_assigned_at = datetime.now(UTC)
+            proposal.reviewer_assigned_by = principal.subject
+    await sync_ai_reviewer_comment(session, proposal)
+    await session.commit()
+    return {
+        "proposal_id": proposal.id,
+        "assigned_reviewer_application_id": proposal.assigned_reviewer_application_id,
+        "assigned_reviewer_login": proposal.assigned_reviewer_login,
+        "reviewer_assigned_at": proposal.reviewer_assigned_at,
+        "reviewer_assigned_by": proposal.reviewer_assigned_by,
+    }
 
 
 def outbound_delivery_dict(item: OutboundDelivery) -> dict[str, object]:

@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -194,19 +193,13 @@ async def submit_ai_review(body: AIReviewSubmission, request: Request, session: 
         )
         session.add(publication)
         await session.flush()
-    domain_match = re.search(r"##\s*Scientific Domain[^\n]*\n+([^\n]+)", discussion["body"], re.I)
-    domain_parts = domain_match[1].split(">") if domain_match else []
-    field = domain_parts[1] if len(domain_parts) > 1 else domain_parts[0] if domain_parts else ""
-    field = field.strip().lower().replace(" ", "-")
-    pool = settings.ai_review_reviewers_by_field.get(field) or settings.ai_review_reviewer_logins
-    if not publication.assigned_reviewer and pool:
-        # Stable least-loaded domain pool, then the configured backup pool.
-        assignments = list(await session.scalars(select(AIReviewPublication.assigned_reviewer)))
-        candidates = [login for login in pool if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", login)]
-        if candidates:
-            publication.assigned_reviewer = min(
-                candidates, key=lambda login: (assignments.count(login), login)
-            )
+    proposal = await session.scalar(
+        select(Proposal).where(
+            Proposal.discussion_node_id == body.discussion_node_id,
+            Proposal.deleted_at.is_(None),
+        )
+    )
+    publication.assigned_reviewer = proposal.assigned_reviewer_login if proposal else None
     review = ProposalAIReview(
         publication_id=publication.id,
         repository=body.repository,
