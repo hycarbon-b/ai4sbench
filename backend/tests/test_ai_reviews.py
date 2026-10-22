@@ -449,21 +449,6 @@ def test_ai_migration_matches_models_and_can_be_rolled_back(tmp_path):
             engine.dispose()
 
 
-def test_domain_reviewer_assignment_is_stable(setup):
-    client, app, runner, github, fetch, discord = setup
-    fetch.return_value["body"] = "## Scientific Domain\nNatural Sciences > Physics > Astrophysics"
-    app.state.settings.ai_review_reviewers_by_field = {"physics": ["physics-reviewer"]}
-    app.state.settings.ai_review_reviewer_logins = ("backup-reviewer",)
-    body = payload()
-    body["proposal_digest"] = proposal_digest(fetch.return_value["title"], fetch.return_value["body"])
-    assert post(client, body).status_code == 202
-    assert records(client, app, AIReviewPublication)[0].assigned_reviewer == "physics-reviewer"
-    app.state.settings.ai_review_reviewers_by_field = {"physics": ["different-reviewer"]}
-    body["run_id"] += 1
-    assert post(client, body).status_code == 202
-    assert records(client, app, AIReviewPublication)[0].assigned_reviewer == "physics-reviewer"
-
-
 def test_github_create_response_loss_recovers_the_existing_comment(setup):
     client, app, runner, github, fetch, discord = setup
     post(client)

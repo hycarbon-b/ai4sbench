@@ -141,14 +141,6 @@ benchmark workflow. Configure these backend settings in the protected environmen
 <td><code>TBCP_AI_REVIEW_SYNC_LABELS</code></td>
 <td>Optional, defaults to <code>false</code></td>
 </tr>
-<tr>
-<td><code>TBCP_AI_REVIEW_REVIEWERS_BY_FIELD</code></td>
-<td>Optional JSON object, e.g. <code>{"physics":["your-reviewer"]}</code></td>
-</tr>
-<tr>
-<td><code>TBCP_AI_REVIEW_REVIEWER_LOGINS</code></td>
-<td>Optional comma-separated backup reviewers</td>
-</tr>
 </tbody>
 </table>
 <p>Use a long-lived dedicated bot PAT for this implementation. A GitHub App
@@ -234,10 +226,15 @@ Only after inspecting Discord and confirming no message was created, submit:</p>
 <p>This clears the uncertainty flag and requeues the latest Discord job. Ordinary
 Resend cannot bypass the uncertainty guard. Do not rotate to a different webhook
 channel while pending deliveries exist; old message IDs belong to the old webhook.</p>
-<p>Optional reviewer assignment selects the least-loaded reviewer in the configured
-field pool, then backup pool, and preserves that reviewer on reruns. Optional
-labels reflect current author-fit; COI disclosure is add-only. No AI label changes
-human approval status. Missing optional labels are skipped.</p>
+<p>Administrators assign a proposal reviewer from the dashboard. Eligible reviewers
+have an approved application, a GitHub login, and at least one domain in common
+with the proposal; the author is excluded. The free-text field is displayed to
+help the administrator decide, but is not an exact-match filter. Assignments are
+stored on the proposal separately from submitted human reviews. A change to an
+existing AI review publication queues an update to its GitHub sticky comment;
+later AI review reruns read the same manual assignment. Optional labels reflect
+current author-fit; COI disclosure is add-only. No AI label changes human
+approval status. Missing optional labels are skipped.</p>
 <h2 id="verification-and-operational-limits">Verification and operational limits</h2>
 <ul>
 <li>Backend: <code>uv run pytest</code> and <code>uv run ruff check control_panel tests</code>.</li>

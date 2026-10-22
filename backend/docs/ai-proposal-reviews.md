@@ -18,8 +18,6 @@ benchmark workflow. Configure these backend settings in the protected environmen
 | `TBCP_DISCORD_WEBHOOK_URL` | Discord destination webhook |
 | `TBCP_AI_REVIEW_DISCORD_FORUM` | `true` for a forum, `false` for a text channel |
 | `TBCP_AI_REVIEW_SYNC_LABELS` | Optional, defaults to `false` |
-| `TBCP_AI_REVIEW_REVIEWERS_BY_FIELD` | Optional JSON object, e.g. `{"physics":["your-reviewer"]}` |
-| `TBCP_AI_REVIEW_REVIEWER_LOGINS` | Optional comma-separated backup reviewers |
 
 Use a long-lived dedicated bot PAT for this implementation. A GitHub App
 installation token can be supplied, but automatic token minting/refresh is not
@@ -126,10 +124,15 @@ This clears the uncertainty flag and requeues the latest Discord job. Ordinary
 Resend cannot bypass the uncertainty guard. Do not rotate to a different webhook
 channel while pending deliveries exist; old message IDs belong to the old webhook.
 
-Optional reviewer assignment selects the least-loaded reviewer in the configured
-field pool, then backup pool, and preserves that reviewer on reruns. Optional
-labels reflect current author-fit; COI disclosure is add-only. No AI label changes
-human approval status. Missing optional labels are skipped.
+Administrators assign a proposal reviewer from the dashboard. Eligible reviewers
+have an approved application, a GitHub login, and at least one domain in common
+with the proposal; the author is excluded. The free-text field is displayed to
+help the administrator decide, but is not an exact-match filter. Assignments are
+stored on the proposal separately from submitted human reviews. A change to an
+existing AI review publication queues an update to its GitHub sticky comment;
+later AI review reruns read the same manual assignment. Optional labels reflect
+current author-fit; COI disclosure is add-only. No AI label changes human
+approval status. Missing optional labels are skipped.
 
 ## Verification and operational limits
 

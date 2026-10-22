@@ -483,6 +483,46 @@ class ProposalListResponse(BaseModel):
     items: list[ProposalListItemResponse]
 
 
+class AdminProposalListItemResponse(ProposalListItemResponse):
+    field_name: str
+    assigned_reviewer_application_id: str | None
+    assigned_reviewer_login: str | None
+    reviewer_assigned_at: datetime | None
+    reviewer_assigned_by: str | None
+
+
+class AdminProposalListResponse(BaseModel):
+    items: list[AdminProposalListItemResponse]
+
+
+class ProposalReviewerCandidateResponse(BaseModel):
+    id: str
+    name: str
+    github: str
+    domain: str
+    field_name: str | None
+
+
+class ProposalReviewerCandidateListResponse(BaseModel):
+    items: list[ProposalReviewerCandidateResponse]
+
+
+class ProposalReviewerAssignmentUpdate(BaseModel):
+    """An application ID assigns a reviewer; null removes the assignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_application_id: str | None = Field(max_length=36)
+
+
+class ProposalReviewerAssignmentResponse(BaseModel):
+    proposal_id: str
+    assigned_reviewer_application_id: str | None
+    assigned_reviewer_login: str | None
+    reviewer_assigned_at: datetime | None
+    reviewer_assigned_by: str | None
+
+
 class ProposalEditValuesResponse(BaseModel):
     """Unvalidated stored values used to prefill the administrator editor."""
 
