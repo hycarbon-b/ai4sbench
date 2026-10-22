@@ -1,4 +1,4 @@
-import { mountPrimaryDomain } from "../domains.js";
+import { mountPrimaryDomain } from "../domains.js?v=20261014-release1";
 /* ============================================================
    AI4S-Benchmark · On-site proposal editor
    The supported way for an author to revise a proposal: on the
@@ -24,8 +24,8 @@ import { mountPrimaryDomain } from "../domains.js";
    authors keep the "Edit on GitHub" link instead.
    ============================================================ */
 
-import { controlPlaneFetch } from "../app.js?v=20261015-2";
-import { esc } from "../components.js?v=20261012-2";
+import { controlPlaneFetch } from "../app.js?v=20261014-release1";
+import { esc } from "../components.js?v=20261014-release1";
 import {
   LIMITS,
   FIELD_LABELS,
@@ -33,12 +33,12 @@ import {
   validateAnswers,
   buildProposalSubmission,
   buildMarkdown,
-} from "../proposal.js?v=20261012-2";
-import { renderRich, mountMath } from "../richtext.js?v=20261012-2";
-import { mountContributorRows } from "../contributor-fields.js?v=20261012-2";
-import { splitContributors } from "../people.js?v=20261012-2";
-import { getSite, getTask, invalidateTasks } from "../data.js?v=20261012-2";
-import { mountFieldAdvice } from "../proposal-advice.js?v=20261012-2";
+} from "../proposal.js?v=20261014-release1";
+import { renderRich, mountMath } from "../richtext.js?v=20261014-release1";
+import { mountContributorRows } from "../contributor-fields.js?v=20261014-release1";
+import { splitContributors } from "../people.js?v=20261014-release1";
+import { getSite, getTask, invalidateTasks } from "../data.js?v=20261014-release1";
+import { mountFieldAdvice } from "../proposal-advice.js?v=20261014-release1";
 
 /* ---- Feature detection --------------------------------------
    The control plane publishes its OpenAPI document. The editor is
@@ -161,7 +161,7 @@ function editorHTML(task) {
         ${field("field_name", FIELD_LABELS.field_name, `<input type="text" id="edit-field_name" name="field_name" maxlength="160" value="${esc(task.field_name)}">`)}
         ${TEXT_FIELDS.map(([key, rows, ph]) => field(key, FIELD_LABELS[key], textarea(key, rows, task[key] ?? "", ph))).join("")}
         <div class="form-field" data-field="name" id="edit-contributors"></div>
-        <div class="form-field" data-field="affiliation" hidden></div>
+        <div class="form-field form-field--errors-only" data-field="affiliation"></div>
         <div class="form-field" data-field="github">
           <label for="edit-github">GitHub username</label>
           <input type="text" id="edit-github" name="github" value="${esc(task.github)}" readonly>
@@ -211,7 +211,7 @@ export function mountEditor({ task, user, root, onSaved, onCancel }) {
   const contributors = mountContributorRows(
     root.querySelector("#edit-contributors"),
     splitContributors(task.name, task.affiliation),
-    { onChange: () => schedulePreview() }
+    { onChange: () => { markDirty(); schedulePreview(); } }
   );
 
   /* ---- Domains: shared list from the control plane, current ones checked ---- */
@@ -315,7 +315,7 @@ export function mountEditor({ task, user, root, onSaved, onCancel }) {
   }
   form.addEventListener("input", (e) => {
     const key = e.target?.name;
-    const wrap = key && form.querySelector(`[data-field="${key}"]`);
+    const wrap = key ? form.querySelector(`[data-field="${key}"]`) : null;
     if (wrap?.classList.contains("is-invalid")) {
       const errors = validateAnswers(answers());
       wrap.querySelector(":scope > .field-error")?.remove();

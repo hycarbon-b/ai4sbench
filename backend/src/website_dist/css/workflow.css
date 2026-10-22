@@ -334,7 +334,7 @@
   background: var(--surface);
 }
 @media (max-width: 900px) {
-  .guide-layout { grid-template-columns: 1fr; gap: var(--space-5); }
+  .guide-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
   .guide-toc { position: static; }
   .guide-outcomes { grid-template-columns: 1fr; }
   .guide-files > div { grid-template-columns: 1fr; gap: var(--space-1); }

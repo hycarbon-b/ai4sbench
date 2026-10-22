@@ -13,6 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "ai4s-bench-website"
 DESTINATION = ROOT / "backend" / "src" / "website_dist"
+EXCLUDED_ROOTS = {".github", "tests"}
+EXCLUDED_FILES = {".gitignore", "README.md"}
 
 
 def source_files() -> dict[Path, Path]:
@@ -24,7 +26,9 @@ def source_files() -> dict[Path, Path]:
     files: dict[Path, Path] = {}
     for path in SOURCE.rglob("*"):
         relative = path.relative_to(SOURCE)
-        if ".git" in relative.parts:
+        if ".git" in relative.parts or relative.parts[0] in EXCLUDED_ROOTS:
+            continue
+        if len(relative.parts) == 1 and relative.name in EXCLUDED_FILES:
             continue
         if path.is_symlink():
             raise RuntimeError(f"Website preview source contains a symlink: {path}")

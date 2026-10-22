@@ -66,7 +66,9 @@ function restoreMath(html, slots) {
 
 /* ---- Inline markup ----------------------------------------- */
 
-const URL_PATTERN = /\bhttps?:\/\/[^\s<>()]+[^\s<>().,;:!?'"\]]/g;
+// One level of balanced parentheses belongs to the URL (…/Hamiltonian_(quantum_mechanics));
+// an unmatched ")" and trailing punctuation do not ("(see https://a.com/x).").
+const URL_PATTERN = /\bhttps?:\/\/(?:[^\s<>()]|\([^\s<>()]*\))+(?:[^\s<>().,;:!?'"\]]|\([^\s<>()]*\))/g;
 
 function inline(escaped) {
   let out = escaped;
@@ -74,8 +76,8 @@ function inline(escaped) {
   // `code`
   out = out.replace(/`([^`\n]+)`/g, (_, code) => `<code>${code}</code>`);
 
-  // [text](url) — only http(s) targets
-  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => link(url, label));
+  // [text](url) — only http(s) targets; the target may contain balanced parentheses
+  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/(?:\([^\s()]*\)|[^\s)])+)\)/g, (_, label, url) => link(url, label));
 
   // bare URLs (skip ones already inside an href/anchor from the step above)
   out = out.replace(URL_PATTERN, (url, offset, whole) => {
@@ -86,14 +88,21 @@ function inline(escaped) {
 
   // **bold** and *emphasis*. Underscore emphasis is deliberately not
   // supported: subscripts like n_i and file_names are common in science.
+  // Emphasis needs a non-space just inside each "*", so 64 * 64 * 64 stays.
   out = out.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
-  out = out.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+  out = out.replace(/(^|[\s(])\*(?=\S)([^*\n]+)(?<=\S)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
 
   return out;
 }
 
 function link(url, label) {
-  const safe = url.replaceAll("&amp;", "&"); // the URL was escaped once already
+  // The URL was escaped once already; undo all of it ("&amp;" last) before escaping for the attribute.
+  const safe = url
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&amp;", "&");
   return `<a href="${escapeHTML(safe)}" target="_blank" rel="noopener">${label}</a>`;
 }
 
@@ -194,7 +203,8 @@ function isLabel(line, next) {
    lost in transit ("[" alone on a line, "(\omega)-limit"). When a
    text clearly contains TeX commands, rebuild those delimiters so
    the formulas typeset instead of showing as fragments. Text without
-   any TeX command is never touched. */
+   any TeX command is never touched, and neither is code (fenced
+   blocks and `inline code`). */
 const TEX_COMMAND = /\\[a-zA-Z]+/;
 const MATHY_LINE = /[\\_^{}=]/;
 
@@ -207,8 +217,12 @@ function recoverTeX(text) {
   const lines = text.split("\n");
   const out = [];
   let i = 0;
+  let inFence = false;
   while (i < lines.length) {
     const line = lines[i].trim();
+    const fence = FENCE.test(line);
+    if (fence) inFence = !inFence;
+    if (fence || inFence) { out.push(lines[i++]); continue; } // a JSON array in a fence is not a formula
     if (line === "[") {
       let j = i + 1;
       const body = [];
@@ -240,10 +254,11 @@ function recoverTeX(text) {
 
 // (\omega), (F_l^{s,a}), (m^*/m), (N\to\infty), (l=1), (P_1(\cos\theta)) → inline math.
 // Runs on text whose display blocks are already lifted, so it never reaches inside them.
+// Fenced blocks and `inline code` match first and come back unchanged.
 function recoverInlineTeX(text) {
   if (!TEX_COMMAND.test(text)) return text;
-  return text.replace(/(?<![\\$\w])\(((?:[^()\s]|\([^()\s]*\)){1,48})\)(?![\w(])/g, (m, inner) => {
-    if (/^https?:/.test(inner)) return m;
+  return text.replace(/^[ \t]*```[\s\S]*?(?:^[ \t]*```.*|(?![\s\S]))|`[^`\n]+`|(?<![\\$\w])\(((?:[^()\s]|\([^()\s]*\)){1,48})\)(?![\w(])/gm, (m, inner) => {
+    if (inner === undefined || /^https?:/.test(inner)) return m;
     if (/[\\_^]/.test(inner) || /^[a-zA-Z]\w*=[^=]+$/.test(inner)) return "\\(" + inner + "\\)";
     return m;
   });
@@ -296,10 +311,10 @@ export function excerptHTML(text, max = 260) {
   }
   const plain = kept
     .join(" ")
-    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1")
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/(?:\([^\s()]*\)|[^\s)])+)\)/g, "$1")
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
     .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/(^|[\s(])\*([^*\n]+)\*/g, "$1$2")
+    .replace(/(^|[\s(])\*(?=\S)([^*\n]+)(?<=\S)\*/g, "$1$2")
     .replace(/\s+/g, " ")
     .trim();
 

@@ -2,23 +2,25 @@
    AI4S-Benchmark · Reviewer application model
    Pure functions (no DOM) that turn the reviewer form's answers
    into (a) the control plane's ReviewerApplication document and
-   (b) a Markdown copy. Kept DOM-free so it can be unit-tested
+   (b) a Markdown fallback. Kept DOM-free so it can be unit-tested
    with Node and reused by other pages — same shape as proposal.js.
 
    Backend contract:
      POST {control_plane_url}/api/v1/reviewers
-     body: ReviewerApplication, schema tb-reviewer-application/v2
-     expected: 201 with the created record, 401 without GitHub sign-in,
-     422 on validation error.
+     body: ReviewerApplication, schema tb-reviewer-application/v1
+     expected: 201 with the created record, 422 on validation error.
 
    The reviewer endpoint is independent from task-proposal submission;
-   its `role` field is the person's position.
+   its `role` field is the person's position and its slugs are
+   lowercase-hyphen identifiers.
    ============================================================ */
 
-/** GitHub-authenticated intake path on the control plane. */
+import { slugAlpha } from "./proposal.js?v=20261014-release1";
+
+/** Public intake path on the control plane. */
 export const REVIEWER_ENDPOINT = "/api/v1/reviewers";
 
-export const SCHEMA_VERSION = "tb-reviewer-application/v2";
+export const SCHEMA_VERSION = "tb-reviewer-application/v1";
 
 /** Minimum / maximum lengths. Keep in sync with the backend schema. */
 export const LIMITS = {
@@ -27,7 +29,7 @@ export const LIMITS = {
   email: { min: 5, max: 200 },
   github: { min: 0, max: 100 },
   position: { min: 0, max: 200 },
-  field_name: { min: 0, max: 160 },
+  field_name: { min: 0, max: 200 },
   background: { min: 60, max: 4000 },
 };
 
@@ -95,13 +97,15 @@ export function buildReviewerDocument(raw) {
     email: a.email,
     github: a.github || null,
     role: a.position || null,
-    domain: a.domains.join(", "),
-    field_name: a.field_name || null,
+    domains: a.domains.map(slugAlpha),
+    domains_display: a.domains,
+    field: a.field_name ? slugAlpha(a.field_name) : null,
+    subfield: a.field_name || null,
     research_background: a.background,
   };
 }
 
-/** Markdown rendering of the same answers for the copy action. */
+/** Markdown rendering of the same answers (GitHub issue / email fallback). */
 export function buildMarkdown(raw) {
   const a = normalizeAnswers(raw);
   const line = (label, value) => `**${label}:** ${value || "—"}\n`;

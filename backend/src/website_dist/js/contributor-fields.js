@@ -5,7 +5,7 @@
    is the submitter. Serialisation lives in people.js.
    ============================================================ */
 
-import { splitContributors, joinContributors } from "./people.js?v=20261012-2";
+import { splitContributors, joinContributors } from "./people.js?v=20261014-release1";
 
 function esc(value) {
   return String(value ?? "")

@@ -9,7 +9,7 @@
    immediately, so it shows without waiting for GitHub's 60 s cache.
    ============================================================ */
 
-import { parseReviewComment } from "./reviews.js?v=20261012-2";
+import { parseReviewComment } from "./reviews.js?v=20261014-release1";
 
 const TTL_MS = 2 * 60 * 1000;
 const KEY = (repo, number) => `ai4sbench:discussion:${repo}#${number}`;

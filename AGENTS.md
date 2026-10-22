@@ -101,7 +101,8 @@ To prepare a preview update:
    ```
 
    The sync script checks that the staged gitlink matches the checked-out
-   Website commit, copies its files, and removes stale snapshot files.
+   Website commit, copies site files and assets (excluding repository-only
+   content such as tests and `.github/`), and removes stale snapshot files.
 4. Review both the submodule pointer and snapshot in the parent PR. Merge that
    PR to `main` after CI passes; the production runbook then deploys the
    committed snapshot.

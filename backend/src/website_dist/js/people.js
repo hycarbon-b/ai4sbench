@@ -17,8 +17,10 @@ const NAME_SEPARATORS = /\s*(?:;|&|、|\+|\/|\band\b|\s+with\s+)\s*|\s*,\s*/;
 
 /** Split a free-form list of people into trimmed names. */
 export function parseNames(text) {
-  return String(text ?? "")
-    .split(NAME_SEPARATORS)
+  const s = String(text ?? "");
+  // A list the form joined uses ";" only, so a comma, "&" or "and" inside a name stays put.
+  return s
+    .split(s.includes(";") ? ";" : NAME_SEPARATORS)
     .map((n) => n.trim())
     .filter(Boolean);
 }

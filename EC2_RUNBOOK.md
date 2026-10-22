@@ -349,9 +349,10 @@ To prepare a Website preview release:
    git add backend/src/website_dist
    ```
 
-   The sync script mirrors the submodule's files into
-   `backend/src/website_dist/` and removes stale snapshot files. Review both the
-   staged submodule pointer and snapshot in the parent PR.
+   The sync script mirrors Website pages and assets into
+   `backend/src/website_dist/`, excludes repository-only files such as tests
+   and `.github/`, and removes stale snapshot files. Review both the staged
+   submodule pointer and snapshot in the parent PR.
 3. After parent CI succeeds, merge the parent PR into `main` and follow the
    deployment steps below. Production deploys the committed preview snapshot
    from parent `main` at `/website-preview/`.

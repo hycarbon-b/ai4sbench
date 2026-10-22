@@ -119,6 +119,7 @@ export async function reviewAccount(user, { fetchAccount, connectGitHub, reloadU
       input.addEventListener("input", () => {
         challenge = null;
         code.value = "";
+        code.required = false;
         code.hidden = true;
         codeLabel.hidden = true;
         resend.hidden = true;
