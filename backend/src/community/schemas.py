@@ -578,6 +578,7 @@ class ProposalBoardItemResponse(BaseModel):
     github: str
     task_slug: str
     status: ProposalStatus
+    assigned_reviewer_login: str | None
     discussion_url: str | None
     discussion_number: int | None
     discord_message_url: str | None

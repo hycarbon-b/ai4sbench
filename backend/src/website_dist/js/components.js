@@ -170,7 +170,10 @@ export function peopleLine(people, fallback) {
  */
 export function taskCard(task) {
   const chips = task.field_name ? chip(task.field_name) : "";
-  const facts = [task.revision_release ? esc(task.revision_release) : ""].filter(Boolean);
+  const reviewer = task.assigned_reviewer_login
+    ? `Reviewer @${esc(task.assigned_reviewer_login)}`
+    : "Reviewer unassigned";
+  const facts = [reviewer, task.revision_release ? esc(task.revision_release) : ""].filter(Boolean);
 
   const identifier = task.discussion_number ? `Proposal #${task.discussion_number}` : task.task_slug;
 

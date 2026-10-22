@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.community.deliveries import enqueue_proposal_notification, enqueue_review_notification
@@ -283,6 +283,44 @@ async def list_proposals(session: SessionDep) -> ProposalListResponse:
     }
 
 
+@community_router.get(
+    "/reviewers/me/proposals",
+    response_model=ProposalListResponse,
+    tags=["reviewers"],
+    summary="List proposals assigned to the signed-in reviewer and awaiting a decision",
+)
+async def reviewer_pending_proposals(session: SessionDep, user: ReviewerDep) -> ProposalListResponse:
+    login = require_github_login(user)
+    items = await session.scalars(
+        select(Proposal)
+        .where(
+            Proposal.deleted_at.is_(None),
+            Proposal.input_valid.is_(True),
+            Proposal.status == "pending",
+            func.lower(Proposal.assigned_reviewer_login) == login,
+        )
+        .order_by(Proposal.reviewer_assigned_at.desc(), Proposal.created_at.desc())
+    )
+    return {
+        "items": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "domain": item.domain,
+                "field": item.field,
+                "task_slug": item.task_slug,
+                "status": item.status,
+                "discussion_url": item.discussion_url,
+                "discussion_number": item.discussion_number,
+                "discord_message_url": item.discord_message_url,
+                "author_login": item.author_login,
+                "input_valid": item.input_valid,
+            }
+            for item in items
+        ]
+    }
+
+
 async def active_proposal(session: AsyncSession, proposal_id: str) -> Proposal:
     proposal = await session.scalar(
         select(Proposal).where(Proposal.id == proposal_id, Proposal.deleted_at.is_(None))
@@ -428,6 +466,7 @@ async def proposal_board_item(
         "github": str(form.get("github") or item.author_login or ""),
         "task_slug": item.task_slug,
         "status": item.status,
+        "assigned_reviewer_login": item.assigned_reviewer_login,
         "discussion_url": item.discussion_url,
         "discussion_number": item.discussion_number,
         "discord_message_url": item.discord_message_url,
